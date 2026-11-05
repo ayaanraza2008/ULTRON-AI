@@ -53,7 +53,7 @@ function clean(value, max = 300) {
 
 function isShellSafePath(value) {
   return typeof value === "string" && [...value].every(character =>
-    /[A-Za-z0-9._:~-]/.test(character) || character === "/" || character === "\\" || character === " "
+/[A-Za-z0-9._:~-]/.test(character) || character === "/" || character === "\\" || character === " "
   );
 }
 

@@ -31,25 +31,27 @@ async function withJarvis(userId, run) {
 
 test("JARVIS control routes reject anonymous and non-owner users", async () => {
   const routes = [
-    ["/api/jarvis/capabilities", "GET"],
-    ["/api/jarvis/tools", "GET"],
-    ["/api/jarvis/permissions/pending", "GET"],
-    ["/api/jarvis/autonomy/state", "GET"],
-    ["/api/jarvis/autonomy/workflows", "GET"],
-    ["/api/jarvis/autonomy/events", "GET"],
-    ["/api/jarvis/orchestrate", "POST"],
-    ["/api/jarvis/tools/windows_lock_workstation/execute", "POST"],
-    ["/api/jarvis/permissions/approve", "POST"],
-    ["/api/jarvis/permissions/reject", "POST"],
-    ["/api/jarvis/autonomy/workflow/submit", "POST"],
-    ["/api/jarvis/autonomy/workflow/pause", "POST"],
-    ["/api/jarvis/autonomy/workflow/resume", "POST"],
-    ["/api/jarvis/autonomy/workflow/cancel", "POST"]
+    ["/jarvis/capabilities", "GET"],
+    ["/jarvis/tools", "GET"],
+    ["/jarvis/permissions/pending", "GET"],
+    ["/jarvis/autonomy/state", "GET"],
+    ["/jarvis/autonomy/emergency-stop", "POST"],
+    ["/jarvis/autonomy/emergency-reset", "POST"],
+    ["/jarvis/autonomy/workflows", "GET"],
+    ["/jarvis/autonomy/events", "GET"],
+    ["/jarvis/orchestrate", "POST"],
+    ["/jarvis/tools/windows_lock_workstation/execute", "POST"],
+    ["/jarvis/permissions/approve", "POST"],
+    ["/jarvis/permissions/reject", "POST"],
+    ["/jarvis/autonomy/workflow/submit", "POST"],
+    ["/jarvis/autonomy/workflow/pause", "POST"],
+    ["/jarvis/autonomy/workflow/resume", "POST"],
+    ["/jarvis/autonomy/workflow/cancel", "POST"]
   ];
   for (const userId of [null, "attacker-user"]) {
     await withJarvis(userId, async base => {
       for (const [route, method] of routes) {
-        const response = await fetch(base + route, {
+        const response = await fetch(base + "/api" + route, {
           method,
           headers: { "Content-Type": "application/json" },
           body: method === "POST" ? JSON.stringify({

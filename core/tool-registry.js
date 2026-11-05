@@ -38,6 +38,8 @@ import { edgeTtsAdapter as defaultEdgeTtsAdapter } from "../voice/edge-tts-adapt
 import { browserAutomationHelper as defaultBrowserAutomationHelper } from "../integrations/browser-automation-helper.js";
 import { AgentOrchestrator } from "../agents/orchestrator.js";
 import { egoBrowserAdapter as defaultEgoBrowserAdapter } from "../integrations/browser/ego-lite/ego-adapter.js";
+import { consumeToolApprovalProof } from "../security/tool-approval-authority.js";
+import { getHexStrikeReadiness, runHexStrikeScan } from "../integrations/hexstrike-ai.js";
 
 export const PERMISSION_LEVELS = {
   LEVEL_1_READ: 1,      // Read-only, inspection, telemetry, search
@@ -85,10 +87,13 @@ export class ToolRegistry {
       edgeTtsAdapter: defaultEdgeTtsAdapter,
       browserAutomationHelper: defaultBrowserAutomationHelper,
       agentOrchestrator: new AgentOrchestrator(),
-      egoBrowserAdapter: defaultEgoBrowserAdapter
+      egoBrowserAdapter: defaultEgoBrowserAdapter,
+      hexStrike: { getReadiness: getHexStrikeReadiness, runScan: runHexStrikeScan }
     };
 
-    this.adapters = { ...defaultAdapters, ...adapters };
+    const { approvalVerifier = null, ...runtimeAdapters } = adapters || {};
+    this.approvalVerifier = typeof approvalVerifier === "function" ? approvalVerifier : null;
+    this.adapters = { ...defaultAdapters, ...runtimeAdapters };
     if (this.adapters.edgeTtsAdapter && !this.adapters.edgeTtsAdapter.fallbackEngine && this.adapters.kokoroEngine) {
       this.adapters.edgeTtsAdapter.fallbackEngine = this.adapters.kokoroEngine;
     }
@@ -147,6 +152,17 @@ export class ToolRegistry {
       }
     }
 
+    // Optional per-tool semantic validation runs before approval is requested.
+    if (typeof tool.validate === "function") {
+      const validationResult = tool.validate(params);
+      if (validationResult === false) {
+        throw new Error(`Custom validation failed for tool '${tool.id}'.`);
+      }
+      if (typeof validationResult === "string" && validationResult.trim()) {
+        throw new Error(validationResult);
+      }
+    }
+
     return true;
   }
 
@@ -166,14 +182,95 @@ export class ToolRegistry {
       capabilities: Array.isArray(toolMeta.capabilities) ? toolMeta.capabilities : [],
       permissionLevel: toolMeta.permissionLevel || PERMISSION_LEVELS.LEVEL_2_NORMAL,
       requiresConfirmation: toolMeta.requiresConfirmation ?? (toolMeta.permissionLevel >= PERMISSION_LEVELS.LEVEL_3_SENSITIVE),
-      timeoutMs: toolMeta.timeoutMs || 30000,
+      timeoutMs: Number.isFinite(Number(toolMeta.timeoutMs))
+        ? Math.max(1, Math.min(120000, Math.trunc(Number(toolMeta.timeoutMs))))
+        : 30000,
       inputSchema: toolMeta.inputSchema || { type: "object" },
       outputSchema: toolMeta.outputSchema || { type: "object" },
+      validate: typeof toolMeta.validate === "function" ? toolMeta.validate : null,
       safeAlternatives: Array.isArray(toolMeta.safeAlternatives) ? toolMeta.safeAlternatives : [],
       checkHealth: typeof toolMeta.checkHealth === "function" ? toolMeta.checkHealth : () => TOOL_STATUS.OPERATIONAL,
-      execute: async (params, context) => {
+      execute: async (params, context = {}) => {
         this.validateParams(tool, params);
-        return await toolMeta.execute(params, context);
+
+        // Enforce privilege at the actual tool boundary, including callers that
+        // obtain a tool via getTool() and invoke tool.execute() directly.
+        const requiresApproval =
+          tool.requiresConfirmation === true ||
+          Number(tool.permissionLevel) >= PERMISSION_LEVELS.LEVEL_3_SENSITIVE;
+        if (requiresApproval) {
+          const actorId = typeof context?.actorId === "string" ? context.actorId.trim() : "";
+          let verified = consumeToolApprovalProof(context?.toolApprovalProof, {
+            actorId,
+            toolId: tool.id,
+            permissionLevel: tool.permissionLevel
+          });
+
+          // Optional host verifiers can support API-issued approvals. They must
+          // validate and atomically consume an action-bound token; plain booleans
+          // and caller-provided approval IDs are never accepted as proof.
+          if (!verified) {
+            const confirmationToken =
+              typeof context?.confirmationToken === "string" ? context.confirmationToken : "";
+            if (!actorId || !confirmationToken || !this.approvalVerifier) {
+              throw Object.assign(
+                new Error("TOOL_APPROVAL_REQUIRED: This action requires an authenticated owner and a verified one-time approval token."),
+                { code: "TOOL_APPROVAL_REQUIRED" }
+              );
+            }
+            try {
+              const result = await this.approvalVerifier({
+                actorId,
+                toolId: tool.id,
+                permissionLevel: tool.permissionLevel,
+                confirmationToken,
+                requestId: typeof context.requestId === "string" ? context.requestId : null
+              });
+              verified = result === true || result?.approved === true;
+            } catch {
+              verified = false;
+            }
+          }
+
+          if (!verified) {
+            throw Object.assign(
+              new Error("TOOL_APPROVAL_INVALID: Approval proof is invalid, expired, already used, or not authorized for this action."),
+              { code: "TOOL_APPROVAL_INVALID" }
+            );
+          }
+        }
+
+        const controller = new AbortController();
+        const suppliedContext = context && typeof context === "object" && !Array.isArray(context)
+          ? context
+          : {};
+        const callerSignal = suppliedContext.signal &&
+          typeof suppliedContext.signal === "object" &&
+          typeof suppliedContext.signal.addEventListener === "function" &&
+          typeof suppliedContext.signal.aborted === "boolean"
+          ? suppliedContext.signal
+          : null;
+        const signal = callerSignal
+          ? AbortSignal.any([callerSignal, controller.signal])
+          : controller.signal;
+        let timer;
+        const timeoutPromise = new Promise((_, reject) => {
+          timer = setTimeout(() => {
+            controller.abort(new Error("Tool execution exceeded its configured timeout."));
+            reject(Object.assign(
+              new Error(`TOOL_TIMEOUT: Tool '${tool.id}' exceeded ${tool.timeoutMs}ms.`),
+              { code: "TOOL_TIMEOUT", toolId: tool.id, timeoutMs: tool.timeoutMs }
+            ));
+          }, tool.timeoutMs);
+        });
+        try {
+          const execution = Promise.resolve().then(() =>
+            toolMeta.execute(params, { ...suppliedContext, signal })
+          );
+          return await Promise.race([execution, timeoutPromise]);
+        } finally {
+          clearTimeout(timer);
+        }
       }
     };
 
@@ -435,6 +532,16 @@ export class ToolRegistry {
       requiresConfirmation: true,
       timeoutMs: 15000,
       inputSchema: { type: "object", required: ["app"], properties: { app: { type: "string" }, args: { type: "array" }, dryRun: { type: "boolean" } } },
+      validate: (params = {}) => {
+        const rawApp = String(params.app ?? "").trim();
+        if (!rawApp) throw new Error("Missing required parameter 'app' for tool 'windows_app_launch'.");
+        const app = rawApp.toLowerCase().replace(/[^a-z0-9_-]/g, "");
+        const allowlist = ["browser", "chrome", "firefox", "notepad", "calculator", "explorer", "terminal", "cmd", "code", "vlc", "obs", "premiere", "editing"];
+        if (!allowlist.includes(app)) {
+          throw new Error(`APPLICATION_NOT_ALLOWLISTED: '${app}' is not in the safe launch allowlist.`);
+        }
+        return true;
+      },
       checkHealth: () => process.platform === "win32" ? TOOL_STATUS.OPERATIONAL : TOOL_STATUS.LIMITED,
       execute: async (params) => {
         const app = String(params.app || "").toLowerCase().replace(/[^a-z0-9_-]/g, "");
@@ -774,8 +881,8 @@ export class ToolRegistry {
       category: TOOL_CATEGORIES.EXTERNAL_INTEGRATIONS,
       description: "Performs authorized dependency audits, secret scanning, and network vulnerability checks.",
       capabilities: ["vulnerability_scan", "cve_analysis", "secret_detection"],
-      permissionLevel: PERMISSION_LEVELS.LEVEL_2_NORMAL,
-      requiresConfirmation: false,
+      permissionLevel: PERMISSION_LEVELS.LEVEL_3_SENSITIVE,
+      requiresConfirmation: true,
       timeoutMs: 20000,
       inputSchema: { type: "object", properties: { scope: { type: "string" }, target: { type: "string" } } },
       checkHealth: () => TOOL_STATUS.OPERATIONAL,
@@ -788,6 +895,39 @@ export class ToolRegistry {
           return { success: true, assessment };
         }
         return { success: true, status: "CLEAN", findingsCount: 0, checkedItems: 14 };
+      }
+    });
+
+    this.registerTool({
+      id: "hexstrike_defensive_scan",
+      name: "HexStrike Defensive Static Scan",
+      category: TOOL_CATEGORIES.EXTERNAL_INTEGRATIONS,
+      description: "Runs owner-authorized, bounded Trivy filesystem/configuration and Checkov IaC scans inside the configured shared workspace.",
+      capabilities: ["trivy_fs", "trivy_config", "checkov_iac"],
+      permissionLevel: PERMISSION_LEVELS.LEVEL_3_SENSITIVE,
+      requiresConfirmation: true,
+      timeoutMs: 120000,
+      inputSchema: {
+        type: "object",
+        required: ["tool", "target"],
+        properties: {
+          tool: { type: "string", enum: ["trivy-fs", "trivy-config", "checkov"] },
+          target: { type: "string", maxLength: 240 }
+        }
+      },
+      checkHealth: () => this.adapters.hexStrike?.getReadiness?.().scanReady
+        ? TOOL_STATUS.OPERATIONAL
+        : TOOL_STATUS.REQUIRES_CONFIG,
+      execute: async (params = {}, context = {}) => {
+        if (!this.adapters.hexStrike?.runScan) {
+          throw Object.assign(new Error("HexStrike adapter is unavailable."), { code: "HEXSTRIKE_UNAVAILABLE" });
+        }
+        return this.adapters.hexStrike.runScan({
+          env: process.env,
+          userId: context.userId || context.actorId,
+          tool: params.tool,
+          target: params.target
+        });
       }
     });
 
@@ -861,8 +1001,8 @@ export class ToolRegistry {
       category: TOOL_CATEGORIES.EXTERNAL_INTEGRATIONS,
       description: "Dispatches touch gestures (tap, swipe), hardware keys, and text input to connected Android devices.",
       capabilities: ["touch_dispatch", "keyboard_input", "gesture_automation"],
-      permissionLevel: PERMISSION_LEVELS.LEVEL_2_NORMAL,
-      requiresConfirmation: false,
+      permissionLevel: PERMISSION_LEVELS.LEVEL_3_SENSITIVE,
+      requiresConfirmation: true,
       timeoutMs: 15000,
       inputSchema: {
         type: "object",

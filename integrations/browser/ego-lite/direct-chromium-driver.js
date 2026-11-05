@@ -171,25 +171,43 @@ export class DirectChromiumCdpDriver {
       "--disable-gpu",
       `--user-data-dir=${this.userDataDir}`
     ];
+    // GitHub-hosted CI runners may not provide the user-namespace sandbox
+    // required by Chromium. Disable the sandbox only inside ephemeral CI jobs;
+    // normal ULTRON hosts retain Chromium's default sandbox protections.
+    if (process.env.CI === "true") {
+      args.push("--no-sandbox", "--disable-dev-shm-usage");
+    }
 
     let stderrBuffer = "";
-    this.process = spawn(detection.path, args, { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
-    this.process.stderr.setEncoding?.("utf8");
-    const procRef = this.process;
-    const stderrRef = procRef ? procRef.stderr : null;
+    const child = spawn(detection.path, args, { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+    this.process = child;
+    child.stderr.setEncoding?.("utf8");
     const devtoolsLine = await new Promise((resolve) => {
-      const timer = setTimeout(() => resolve(null), 12000);
+      let settled = false;
+      const childRef = child;
+      const cleanup = () => {
+        clearTimeout(timer);
+        childRef?.stderr.removeListener("data", onData);
+        childRef?.removeListener("error", onError);
+      };
+      const finish = (value) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(value);
+      };
+      const timer = setTimeout(() => finish(null), 12000);
       const onData = (chunk) => {
-        if (!procRef || !stderrRef) return;
         stderrBuffer += chunk;
         const match = stderrBuffer.match(/DevTools listening on (ws:\/\/[^\s]+)/);
-        if (match) {
-          clearTimeout(timer);
-          stderrRef.removeListener("data", onData);
-          resolve(match[1]);
-        }
+        if (match) finish(match[1]);
       };
-      stderrRef?.on?.("data", onData);
+      const onError = (error) => {
+        stderrBuffer += String(error?.message || error).slice(0, 300);
+        finish(null);
+      };
+      child.stderr.on("data", onData);
+      child.once("error", onError);
     });
 
     if (!devtoolsLine || !this.process?.pid) {
@@ -911,7 +929,7 @@ export class DirectChromiumCdpDriver {
       this.process = null;
       await new Promise((resolve) => {
         const timer = setTimeout(resolve, 6000);
-        if (proc.exitCode !== null || proc.killed) {
+        if (proc.exitCode !== null) {
           clearTimeout(timer);
           resolve();
           return;

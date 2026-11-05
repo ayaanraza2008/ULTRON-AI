@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import logging
+import os
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -48,19 +51,38 @@ def configure_browser_logging() -> None:
     logging.getLogger("bubus").setLevel(logging.WARNING)
 
 def browser_runtime_status() -> dict[str, Any]:
-    """Launch Chromium once to prove the actual browser runtime is usable."""
+    """Ensure Chromium is present, then launch it once to verify the runtime."""
     try:
         from playwright.sync_api import sync_playwright
 
         with sync_playwright() as playwright:
             executable = Path(playwright.chromium.executable_path)
             if not executable.is_file():
-                return {"ready": False, "reason": "CHROMIUM_EXECUTABLE_MISSING"}
+                if os.getenv("ULTRON_BROWSER_AUTO_INSTALL", "YES").strip().upper() != "YES":
+                    return {"ready": False, "reason": "CHROMIUM_EXECUTABLE_MISSING"}
+                try:
+                    install = subprocess.run(
+                        [sys.executable, "-m", "playwright", "install", "chromium"],
+                        capture_output=True,
+                        text=True,
+                        timeout=240,
+                        check=False,
+                    )
+                except subprocess.TimeoutExpired:
+                    return {"ready": False, "reason": "CHROMIUM_INSTALL_TIMEOUT"}
+                if install.returncode != 0:
+                    return {"ready": False, "reason": "CHROMIUM_INSTALL_FAILED"}
+                if not executable.is_file():
+                    return {"ready": False, "reason": "CHROMIUM_EXECUTABLE_MISSING_AFTER_INSTALL"}
+
             browser = playwright.chromium.launch(
                 headless=True,
-                args=["--no-sandbox", "--disable-dev-shm-usage"],
+                args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
             )
-            browser.close()
+            try:
+                browser.close()
+            finally:
+                browser = None
         return {"ready": True, "engine": "chromium"}
     except Exception as exc:
         return {"ready": False, "reason": type(exc).__name__[:80]}

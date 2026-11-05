@@ -295,6 +295,8 @@ export function createJarvisRouter({
       const requestedContext = req.body?.context && typeof req.body.context === "object" && !Array.isArray(req.body.context)
         ? req.body.context
         : {};
+      // Trust identity only from the authenticated Supabase middleware. Never
+      // accept body-supplied user IDs, admin flags, or pre-approval booleans.
       const context = {
         ...requestedContext,
         userId: req.supabaseUser.id,
@@ -401,13 +403,19 @@ export function createJarvisRouter({
 
   router.post("/jarvis/autonomy/workflow/submit", ...requireOwner, express.json(), (req, res) => {
     try {
-      const { prompt, context = {} } = req.body || {};
-      if (req.user?.id && !context.userId) {
-        context.userId = req.user.id;
-      }
-      if (req.user?.isAdmin && context.isAdmin === undefined) {
-        context.isAdmin = true;
-      }
+      const { prompt } = req.body || {};
+      const requestedContext = req.body?.context && typeof req.body.context === "object" && !Array.isArray(req.body.context)
+        ? req.body.context
+        : {};
+      // Trust identity only from the authenticated Supabase middleware. Never
+      // accept body-supplied user IDs, admin flags, or pre-approval booleans.
+      const context = {
+        ...requestedContext,
+        userId: req.supabaseUser.id,
+        isAdmin: false,
+        trustedInternalAdmin: false,
+        preApproved: false
+      };
       const result = autonomousOrchestrator.submitBackgroundTask(prompt, context);
       res.json(result);
     } catch (err) {
@@ -964,11 +972,11 @@ export function createJarvisRouter({
     res.json({ success: true, count: tasks.length, tasks });
   });
 
-  router.get("/jarvis/network/connectivity", (_req, res) => {
+  router.get("/jarvis/network/connectivity", ...requireOwner, (_req, res) => {
     res.json(deviceNetworkingManager.getConnectivityStatus());
   });
 
-  router.get("/jarvis/network/discovery", (_req, res) => {
+  router.get("/jarvis/network/discovery", ...requireOwner, (_req, res) => {
     res.json(deviceNetworkingManager.getLocalDiscoveryBeacon());
   });
 

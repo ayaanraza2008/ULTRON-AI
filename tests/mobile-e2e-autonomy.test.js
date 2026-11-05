@@ -248,18 +248,23 @@ test("MobileE2E: Multilingual voice response synthesis (English, Hinglish, Hindi
   await controlEngine.initialize();
 
   // English
+  // English: require a real, actor-bound approval rather than caller flags.
+  const pendingEn = await orchestrator.processUserRequest("open youtube on my phone", { userId: "operator-ayaan" });
+  assert.equal(pendingEn.status, "APPROVAL_REQUIRED");
+  assert.equal(orchestrator.approveRequest(pendingEn.approvalRequest.id, { userId: "operator-ayaan" }).success, true);
   const resEn = await orchestrator.processUserRequest("open youtube on my phone", {
     userId: "operator-ayaan",
-    preApproved: true,
-    trustedInternalAdmin: true
+    approvalId: pendingEn.approvalRequest.id
   });
   assert.ok(resEn.textResponse.includes("com.google.android.youtube has been launched on your phone"));
 
-  // Hinglish
+  // Hinglish: the same explicit approval lifecycle applies across languages.
+  const pendingHinglish = await orchestrator.processUserRequest("phone par youtube open karo", { userId: "operator-ayaan" });
+  assert.equal(pendingHinglish.status, "APPROVAL_REQUIRED");
+  assert.equal(orchestrator.approveRequest(pendingHinglish.approvalRequest.id, { userId: "operator-ayaan" }).success, true);
   const resHinglish = await orchestrator.processUserRequest("phone par youtube open karo", {
     userId: "operator-ayaan",
-    preApproved: true,
-    trustedInternalAdmin: true
+    approvalId: pendingHinglish.approvalRequest.id
   });
   assert.ok(resHinglish.textResponse.includes("Ji Ayaan, aapke phone par"));
   assert.ok(resHinglish.textResponse.includes("launch kar diya gaya hai"));

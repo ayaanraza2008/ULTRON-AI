@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { toolRegistry, PERMISSION_LEVELS } from "../core/tool-registry.js";
+import { toolRegistry, PERMISSION_LEVELS, TOOL_STATUS } from "../core/tool-registry.js";
 import { AutonomousOrchestrator, AGENT_ROLES } from "../core/autonomous-orchestrator.js";
 
 // ==========================================
@@ -87,13 +87,13 @@ test("Adversarial Security: Replay attack with already-consumed approval token i
   assert.equal(approveRes.request.status, "APPROVED");
 
   // 3. First execution consumes the single-use token
-  const firstExec = await orchestrator.processUserRequest("Organize my downloads folder", { approvalId });
+  const firstExec = await orchestrator.processUserRequest("Organize my downloads folder", { approvalId, userId: "operator" });
   assert.equal(firstExec.verified, true);
   assert.equal(approveRes.request.status, "CONSUMED");
   assert.equal(approveRes.request.consumed, true);
 
   // 4. Adversary attempts replay attack with same approval token
-  const replayExec = await orchestrator.processUserRequest("Organize my downloads folder", { approvalId });
+  const replayExec = await orchestrator.processUserRequest("Organize my downloads folder", { approvalId, userId: "operator" });
   assert.equal(replayExec.status, "REPLAY_ATTACK_DETECTED");
   assert.equal(replayExec.success, false);
   assert.ok(replayExec.error.includes("Approval token has already been consumed (replay attack rejected)"));
@@ -105,10 +105,10 @@ test("Adversarial Security: Tool mismatch on approval token is rejected", async 
   // 1. Request file organization
   const init = await orchestrator.processUserRequest("Organize my downloads folder");
   const approvalId = init.approvalRequest.id;
-  orchestrator.approveRequest(approvalId);
+  orchestrator.approveRequest(approvalId, { userId: "operator" });
 
   // 2. Attacker attempts to use file organization approval to lock workstation
-  const attackOutcome = await orchestrator.processUserRequest("Lock workstation immediately", { approvalId });
+  const attackOutcome = await orchestrator.processUserRequest("Lock workstation immediately", { approvalId, userId: "operator" });
   assert.equal(attackOutcome.status, "UNAUTHORIZED");
   assert.ok(attackOutcome.error.includes("Tool mismatch"));
 });
@@ -125,7 +125,7 @@ test("Emergency Stop Audit: Halts new commands, cancels active workflows, and pe
     const orchestrator1 = new AutonomousOrchestrator({ registry: toolRegistry, persistenceDir: testDir });
 
     // 1. Enqueue background workflow
-    const sub = orchestrator1.submitBackgroundTask("Assemble multi-agent team for GTM review");
+    const sub = orchestrator1.submitBackgroundTask("Check system vitals");
     assert.equal(sub.status, "RUNNING");
 
     // 2. Engage Emergency Stop
@@ -188,10 +188,10 @@ test("Autonomous Planning Audit: Executes independent DAG steps in parallel wave
       {
         id: "step-2",
         dependsOn: ["step-1"],
-        toolId: "cybersecurity_defensive_scan",
+        toolId: "system_hardware_monitor",
         agent: AGENT_ROLES.SECURITY_SENTINEL,
-        description: "Security scan",
-        params: { target: "localhost" }
+        description: "Security telemetry snapshot",
+        params: { forceRefresh: false }
       },
       {
         id: "step-3",
@@ -312,7 +312,7 @@ test("Background Reliability: Enforces idempotency to prevent duplicate task exe
 
     const key = "idem-order-sync-998811";
 
-    const sub1 = orchestrator.submitBackgroundTask("Assemble multi-agent team for sync", { idempotencyKey: key });
+    const sub1 = orchestrator.submitBackgroundTask("Check system vitals", { idempotencyKey: key });
     assert.equal(sub1.success, true);
     assert.equal(sub1.duplicatePrevented, undefined);
 
@@ -334,7 +334,7 @@ test("Adversarial Security: Rejects cross-user background task access and cancel
   const orchestrator = new AutonomousOrchestrator({ registry: toolRegistry });
 
   // User A creates a workflow
-  const subA = orchestrator.submitBackgroundTask("Assemble multi-agent team for User A", { userId: "user-alpha" });
+  const subA = orchestrator.submitBackgroundTask("Check system vitals", { userId: "user-alpha" });
   assert.equal(subA.success, true);
 
   // User B attempts to pause User A's workflow
@@ -482,9 +482,9 @@ test("Adversarial Security: Sanitizes malicious external tool output and prevent
 // 10. REAL TOOL EXECUTION INVENTORY VERIFICATION
 // ==========================================
 
-test("Real Tool Execution Audit: All 44 tools execute real paths with schema validation", async () => {
+test("Real Tool Execution Audit: all 45 tool schemas validate and privileged tools fail closed", async () => {
   const allTools = toolRegistry.listTools();
-  assert.equal(allTools.length, 44);
+  assert.equal(allTools.length, 45);
 
   const testPayloads = {
     ai_chat_inference: { prompt: "Health check" },
@@ -505,6 +505,7 @@ test("Real Tool Execution Audit: All 44 tools execute real paths with schema val
     knowledge_vault_query: { query: "cybersecurity" },
     multidevice_remote_dispatch: { targetPlatform: "windows", action: "get_system_vitals", dryRun: true },
     cybersecurity_defensive_scan: {},
+    hexstrike_defensive_scan: { tool: "trivy-fs", target: "." },
     mobile_device_discovery: { dryRun: true },
     mobile_screen_inspection: { dryRun: true },
     mobile_interaction_dispatch: { action: "press_key", keycode: 4, dryRun: true },
@@ -536,19 +537,34 @@ test("Real Tool Execution Audit: All 44 tools execute real paths with schema val
   for (const tool of allTools) {
     const payload = testPayloads[tool.id];
     assert.ok(payload !== undefined, `Missing test payload for tool: ${tool.id}`);
-
-    // Input schema validation test
-    assert.doesNotThrow(() => {
-      toolRegistry.validateParams(tool, payload);
-    }, `Schema validation failed for tool: ${tool.id}`);
-
-    // Execution path test
-    const outcome = await toolRegistry.execute(tool.id, payload);
-    assert.ok(outcome, `Tool '${tool.id}' returned null or undefined`);
-    assert.equal(outcome.success, true, `Tool '${tool.id}' did not return success: true (received: ${JSON.stringify(outcome)})`);
+    assert.doesNotThrow(() => toolRegistry.validateParams(tool, payload), `Schema validation failed for tool: ${tool.id}`);
+    if (tool.id === "hexstrike_defensive_scan") {
+      assert.equal(tool.checkHealth(), TOOL_STATUS.REQUIRES_CONFIG);
+      continue;
+    }
+    if (tool.requiresConfirmation === true || Number(tool.permissionLevel) >= PERMISSION_LEVELS.LEVEL_3_SENSITIVE) {
+      await assert.rejects(
+        () => toolRegistry.execute(tool.id, payload),
+        error => error?.code === "TOOL_APPROVAL_REQUIRED" || /approval|required/i.test(error?.message || ""),
+        `Privileged tool did not fail closed: ${tool.id}`
+      );
+    } else {
+      const outcome = await toolRegistry.execute(tool.id, payload);
+      assert.ok(outcome, `Tool '${tool.id}' returned null or undefined`);
+      assert.equal(outcome.success, true, `Tool '${tool.id}' did not return success: ${JSON.stringify(outcome)}`);
+    }
   }
 });
 
+test("Sensitive background workflows cannot be queued without foreground approval", () => {
+  const orchestrator = new AutonomousOrchestrator({ registry: toolRegistry });
+  const prompt = "Launch chrome on my computer for a security approval gate regression";
+  const outcome = orchestrator.submitBackgroundTask(prompt);
+  assert.equal(outcome.success, false);
+  assert.equal(outcome.status, "APPROVAL_REQUIRED");
+  assert.equal(outcome.code, "BACKGROUND_APPROVAL_UNSUPPORTED");
+  assert.equal(orchestrator.getActiveWorkflows().some(workflow => workflow.prompt === prompt), false);
+});
 // ==========================================
 // 11. BACKGROUND RESTART RECOVERY & INTERRUPTED TASK MARKING
 // ==========================================

@@ -18,8 +18,7 @@ const telephonyFetch = (url, init = {}) => fetch(url, {
 
 async function withRouter({ env = {
   ULTRON_INTEGRATION_OWNER_USER_ID: "owner-user",
-  ULTRON_TELEPHONY_WEBHOOK_SECRET: WEBHOOK_SECRET,
-  ULTRON_TELEPHONY_PIN: "1001"
+  ULTRON_TELEPHONY_WEBHOOK_SECRET: WEBHOOK_SECRET
 }, userId = "owner-user" } = {}, run) {
   const app = express();
   const requireSupabaseUser = (req, _res, next) => {
@@ -162,7 +161,8 @@ test("E2E Test 10 & 11: Unauthorized caller cannot control computer and high-ris
       })
     });
     const twiml = await callRes.text();
-    assert.ok(twiml.includes("Security authorization required"));
+    assert.ok(twiml.includes("Access denied"));
+    assert.ok(twiml.includes("<Hangup/>"));
 
     // Attempting to unlock screen without passing PIN challenge is rejected
     const hackSpeechRes = await telephonyFetch(base + "/api/telephony/process-speech?callId=CA_unauth_hacker", {

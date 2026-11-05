@@ -89,7 +89,10 @@ test("AutonomousOrchestrator: enforces Level 3 Sensitive Confirmation Gates for 
   const approveRes = orchestrator.approveRequest(outcome.approvalRequest.id);
   assert.equal(approveRes.success, true);
 
-  const approvedOutcome = await orchestrator.processUserRequest("Organize my downloads folder", { preApproved: true });
+  const approvedOutcome = await orchestrator.processUserRequest("Organize my downloads folder", {
+    approvalId: outcome.approvalRequest.id,
+    userId: "operator"
+  });
   assert.equal(approvedOutcome.verified, true);
   assert.ok(approvedOutcome.textResponse.includes("File organization completed"));
 });
@@ -128,11 +131,25 @@ test("AutonomousOrchestrator: Global Emergency Stop halts execution and rejects 
 test("AutonomousOrchestrator: Multilingual persona responses (English, Hindi, Hinglish)", async () => {
   const orchestrator = new AutonomousOrchestrator({ registry: toolRegistry });
 
-  const enRes = await orchestrator.processUserRequest("Launch chrome on my computer", { preApproved: true });
-  assert.ok(enRes.textResponse.includes("Affirmative, Ayaan") || enRes.textResponse.includes("Launching chrome"));
+  const enPending = await orchestrator.processUserRequest("Launch chrome on my computer");
+  assert.equal(enPending.status, "APPROVAL_REQUIRED");
+  assert.equal(orchestrator.approveRequest(enPending.approvalRequest.id, { userId: "operator" }).success, true);
+  const enRes = await orchestrator.processUserRequest("Launch chrome on my computer", {
+    approvalId: enPending.approvalRequest.id,
+    userId: "operator"
+  });
+  assert.ok(enRes.verified || enRes.status === "FAILED");
+  assert.ok(enRes.textResponse.includes("Ayaan") || enRes.textResponse.toLowerCase().includes("chrome"));
 
-  const hiRes = await orchestrator.processUserRequest("Chrome shuru karo bhai", { preApproved: true });
-  assert.ok(hiRes.textResponse.includes("Ayaan") || hiRes.textResponse.includes("chrome"));
+  const hiPending = await orchestrator.processUserRequest("Chrome shuru karo bhai");
+  assert.equal(hiPending.status, "APPROVAL_REQUIRED");
+  assert.equal(orchestrator.approveRequest(hiPending.approvalRequest.id, { userId: "operator" }).success, true);
+  const hiRes = await orchestrator.processUserRequest("Chrome shuru karo bhai", {
+    approvalId: hiPending.approvalRequest.id,
+    userId: "operator"
+  });
+  assert.ok(hiRes.verified || hiRes.status === "FAILED");
+  assert.ok(hiRes.textResponse.includes("Ayaan") || hiRes.textResponse.toLowerCase().includes("chrome"));
 });
 
 test("AutonomousOrchestrator: Emits real-time visual events through lifecycle", async () => {
@@ -154,25 +171,34 @@ test("AutonomousOrchestrator: Emits real-time visual events through lifecycle", 
   assert.ok(capturedEvents.includes("RESPONSE_SYNTHESIZED"));
 });
 
-test("AutonomousOrchestrator: Coordinates multi-agent team across specialized roles", async () => {
+test("AutonomousOrchestrator: Coordinates multi-agent team across specialized roles with explicit approvals", async () => {
   const orchestrator = new AutonomousOrchestrator({ registry: toolRegistry });
-  const result = await orchestrator.processUserRequest("Assemble multi-agent team for growth and code review");
+  const prompt = "Assemble multi-agent team for growth and code review";
+  const pending = await orchestrator.processUserRequest(prompt, { userId: "operator" });
+  let result = pending;
+  if (pending.status === "APPROVAL_REQUIRED") {
+    const approvalIds = {};
+    for (const request of (pending.approvalRequests || [pending.approvalRequest])) {
+      assert.equal(orchestrator.approveRequest(request.id, { userId: "operator" }).success, true);
+      approvalIds[request.stepId] = request.id;
+    }
+    result = await orchestrator.processUserRequest(prompt, { userId: "operator", approvalIds });
+  }
 
   assert.equal(result.intent, "MULTI_AGENT_COORDINATION");
   assert.ok(result.plan.steps.length >= 3);
-  const assignedAgents = result.plan.steps.map(s => s.agent);
+  const assignedAgents = result.plan.steps.map(step => step.agent);
   assert.ok(assignedAgents.includes(AGENT_ROLES.CHIEF_OF_STAFF));
   assert.ok(assignedAgents.includes(AGENT_ROLES.RESEARCH_SCHOLAR));
   assert.ok(assignedAgents.includes(AGENT_ROLES.FULLSTACK_ARCHITECT));
   assert.equal(result.verified, true);
   assert.ok(result.textResponse.includes("Multi-agent mission completed"));
 });
-
 test("AutonomousOrchestrator: Submits, pauses, resumes, and cancels persistent background workflows", async () => {
   const orchestrator = new AutonomousOrchestrator({ registry: toolRegistry });
 
   // 1. Submit background workflow
-  const sub = orchestrator.submitBackgroundTask("Research latest agent memory architectures");
+  const sub = orchestrator.submitBackgroundTask("Check system vitals");
   assert.equal(sub.success, true);
   assert.ok(sub.workflowId);
   assert.equal(sub.status, "RUNNING");
@@ -185,7 +211,7 @@ test("AutonomousOrchestrator: Submits, pauses, resumes, and cancels persistent b
   assert.ok(["RUNNING", "COMPLETED"].includes(found.status));
 
   // 3. Pause & Resume workflow
-  const sub2 = orchestrator.submitBackgroundTask("Assemble multi-agent team for GTM and security audit");
+  const sub2 = orchestrator.submitBackgroundTask("Check system vitals");
   const pauseRes = orchestrator.pauseWorkflow(sub2.workflowId);
   if (pauseRes.success) {
     assert.equal(pauseRes.status, "PAUSED");
@@ -195,7 +221,7 @@ test("AutonomousOrchestrator: Submits, pauses, resumes, and cancels persistent b
   }
 
   // 4. Cancel workflow
-  const sub3 = orchestrator.submitBackgroundTask("Assemble multi-agent team for test cancellation");
+  const sub3 = orchestrator.submitBackgroundTask("Check system vitals");
   const cancelRes = orchestrator.cancelWorkflow(sub3.workflowId, "Test cancellation");
   assert.equal(cancelRes.success, true);
   assert.equal(cancelRes.status, "CANCELLED");

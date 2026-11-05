@@ -41,6 +41,7 @@ export class MobileMcpClient extends EventEmitter {
     this.authToken = options.authToken || crypto.randomBytes(24).toString("hex");
     this.requestTimeoutMs = options.requestTimeoutMs || 30000;
     this.enableFallbackToAdb = options.enableFallbackToAdb !== false;
+    this.adbBridge = options.adbBridge || adbBridge;
 
     this.process = null;
     this.status = MCP_CLIENT_STATUS.DISCONNECTED;
@@ -508,7 +509,7 @@ export class MobileMcpClient extends EventEmitter {
 
     switch (name) {
       case "mobile_list_available_devices": {
-        const listRes = await adbBridge.listDevices();
+        const listRes = await this.adbBridge.listDevices();
         return {
           success: listRes.success,
           text: JSON.stringify({ devices: listRes.devices }),
@@ -517,7 +518,7 @@ export class MobileMcpClient extends EventEmitter {
       }
 
       case "mobile_get_screen_size": {
-        const det = await adbBridge.getDeviceDetails(deviceId);
+        const det = await this.adbBridge.getDeviceDetails(deviceId);
         return {
           success: true,
           text: JSON.stringify(det.screenSize),
@@ -526,7 +527,7 @@ export class MobileMcpClient extends EventEmitter {
       }
 
       case "mobile_take_screenshot": {
-        const buf = await adbBridge.takeScreenshot(deviceId);
+        const buf = await this.adbBridge.takeScreenshot(deviceId);
         return {
           success: true,
           text: "Screenshot captured via direct ADB",
@@ -537,7 +538,7 @@ export class MobileMcpClient extends EventEmitter {
 
       case "mobile_list_elements_on_screen": {
         try {
-          const xml = await adbBridge.dumpHierarchy(deviceId);
+          const xml = await this.adbBridge.dumpHierarchy(deviceId);
           return {
             success: true,
             text: typeof xml === "string" ? xml : JSON.stringify(xml),
@@ -555,7 +556,7 @@ export class MobileMcpClient extends EventEmitter {
       case "mobile_click_on_screen_at_coordinates": {
         const x = args.x || args.coordinate?.[0] || 0;
         const y = args.y || args.coordinate?.[1] || 0;
-        const tapRes = await adbBridge.tap(deviceId, x, y);
+        const tapRes = await this.adbBridge.tap(deviceId, x, y);
         return {
           success: tapRes.success,
           text: tapRes.success ? `Tapped at (${x}, ${y})` : tapRes.error,
@@ -569,7 +570,7 @@ export class MobileMcpClient extends EventEmitter {
         const x2 = args.endX || args.end_coordinate?.[0] || 500;
         const y2 = args.endY || args.end_coordinate?.[1] || 500;
         const dur = args.durationMs || 300;
-        const swipeRes = await adbBridge.swipe(deviceId, x1, y1, x2, y2, dur);
+        const swipeRes = await this.adbBridge.swipe(deviceId, x1, y1, x2, y2, dur);
         return {
           success: swipeRes.success,
           text: swipeRes.success ? `Swiped from (${x1}, ${y1}) to (${x2}, ${y2})` : swipeRes.error,
@@ -578,7 +579,7 @@ export class MobileMcpClient extends EventEmitter {
       }
 
       case "mobile_type_keys": {
-        const typeRes = await adbBridge.typeText(deviceId, args.text || args.keys || "");
+        const typeRes = await this.adbBridge.typeText(deviceId, args.text || args.keys || "");
         return {
           success: typeRes.success,
           text: typeRes.success ? `Typed: ${args.text}` : typeRes.error,
@@ -595,7 +596,7 @@ export class MobileMcpClient extends EventEmitter {
           VOLUME_DOWN: "KEYCODE_VOLUME_DOWN"
         };
         const keycode = keyMap[args.button] || args.button || "KEYCODE_HOME";
-        const pressRes = await adbBridge.pressKey(deviceId, keycode);
+        const pressRes = await this.adbBridge.pressKey(deviceId, keycode);
         return {
           success: pressRes.success,
           text: pressRes.success ? `Pressed button ${args.button}` : pressRes.error,
@@ -605,7 +606,7 @@ export class MobileMcpClient extends EventEmitter {
 
       case "mobile_launch_app": {
         const pkg = args.package || args.app || args.bundleId;
-        const launchRes = await adbBridge.launchApp(deviceId, pkg);
+        const launchRes = await this.adbBridge.launchApp(deviceId, pkg);
         return {
           success: launchRes.success,
           text: launchRes.success ? `Launched app ${pkg}` : launchRes.error,
@@ -615,7 +616,7 @@ export class MobileMcpClient extends EventEmitter {
 
       case "mobile_terminate_app": {
         const pkg = args.package || args.app || args.bundleId;
-        const termRes = await adbBridge.terminateApp(deviceId, pkg);
+        const termRes = await this.adbBridge.terminateApp(deviceId, pkg);
         return {
           success: termRes.success,
           text: termRes.success ? `Terminated app ${pkg}` : termRes.error,
@@ -624,7 +625,7 @@ export class MobileMcpClient extends EventEmitter {
       }
 
       case "mobile_open_url": {
-        const openRes = await adbBridge.openUrl(deviceId, args.url);
+        const openRes = await this.adbBridge.openUrl(deviceId, args.url);
         return {
           success: openRes.success,
           text: openRes.success ? `Opened URL: ${args.url}` : openRes.error,

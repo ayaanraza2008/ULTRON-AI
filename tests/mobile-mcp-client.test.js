@@ -76,12 +76,14 @@ test("MobileMcpClient: switches between STDIO and Streamable HTTP transports", (
 });
 
 test("MobileMcpClient: graceful fallback to AdbBridge when MCP subprocess is inactive", async () => {
+  const fakeAdbBridge = {
+    listDevices: async () => ({ success: true, devices: [{ id: "mock-android-device", state: "device" }] })
+  };
   const client = new MobileMcpClient({
-    useProcessSubprocess: false, // Inactive external MCP server
-    enableAdbFallback: true
+    adbBridge: fakeAdbBridge,
+    enableFallbackToAdb: true
   });
 
-  // Calling device discovery should smoothly fall back to native AdbBridge
   const res = await client.listDevices();
   assert.ok(res, "Result must not be null");
   assert.equal(res.success, true);
