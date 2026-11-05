@@ -152,7 +152,10 @@ export class DirectChromiumCdpDriver {
         cleanup();
         resolve(value);
       };
-      const timer = setTimeout(() => finish(null), 12000);
+      // Hosted CI runners can be heavily contended while real browser tests run in parallel.
+      // Keep local startup bounded at 12s; allow a slightly longer CI readiness window.
+      const launchTimeoutMs = process.env.CI === "true" ? 20000 : 12000;
+      const timer = setTimeout(() => finish(null), launchTimeoutMs);
       const onData = (chunk) => {
         stderrBuffer += String(chunk);
         const match = stderrBuffer.match(/DevTools listening on (ws:\/\/[^\s]+)/);
