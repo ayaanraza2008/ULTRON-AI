@@ -143,7 +143,9 @@ export async function appflowyListWorkspaces({ env = process.env, userId = null,
     headers: {
       "Authorization": `Bearer ${settings.token}`,
       "Accept": "application/json"
-    }
+    },
+    redirect: "error",
+    signal: AbortSignal.timeout(8000)
   });
 
   if (!response.ok) {
