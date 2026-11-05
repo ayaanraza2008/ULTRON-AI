@@ -815,8 +815,24 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
     return Boolean(env.APP_ACCESS_PASSWORD && secret && verifySession(parseCookies(req.headers.cookie)[SESSION_COOKIE], secret));
   }
   async function requireSession(req, res, next) {
+    // A valid local access-password session is the explicit single-owner
+    // access path. Supabase sessions must additionally pass owner identity
+    // enforcement here; do not let requireSession routes bypass the owner gate.
     if (hasValidSession(req)) return next();
-    if (await getSupabaseUser(req, res)) return next();
+
+    const user = await getSupabaseUser(req, res);
+    if (user) {
+      if (env.ULTRON_OWNER_USER_ID) {
+        if (user.id !== env.ULTRON_OWNER_USER_ID) {
+          return res.status(403).json({ error: { code: "ULTRON_OWNER_ONLY", message: "Access restricted: this ULTRON instance belongs exclusively to its registered owner." } });
+        }
+      } else if (env.ULTRON_PERSONAL_AI_MODE === "true" || env.ULTRON_SINGLE_OWNER === "true") {
+        return res.status(503).json({ error: { code: "OWNER_NOT_CONFIGURED", message: "Personal AI mode is active but owner user ID is not configured." } });
+      }
+      req.supabaseUser = user;
+      return next();
+    }
+
     if (!env.APP_ACCESS_PASSWORD && !supabaseConfig()) {
       return res.status(503).json({ error: { code: "ACCESS_NOT_CONFIGURED", message: "Configure Supabase URL and publishable key, or set APP_ACCESS_PASSWORD and SESSION_SECRET." } });
     }
