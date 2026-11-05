@@ -30,3 +30,10 @@ test("Render Blueprint installs Chromium and gates Browser Use readiness on its 
   assert.match(browser, /healthCheckPath:\s*\/health\b/);
   assert.match(browser, /startCommand:[^\n]*uvicorn main:app/);
 });
+
+test("Render Blueprint declares the existing health endpoint for every live service", () => {
+  assert.match(serviceBlock("ultron-ai-core"), /healthCheckPath:\\s*\\/api\\/health/);
+  assert.match(serviceBlock("ultron-core-interface"), /healthCheckPath:\\s*\\/healthz/);
+  assert.match(serviceBlock("ultron-browser-use-core"), /healthCheckPath:\\s*\\/health\\b/);
+  assert.match(serviceBlock("ultron-rea-gateway"), /healthCheckPath:\\s*\\/healthz/);
+});
