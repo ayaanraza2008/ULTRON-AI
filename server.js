@@ -556,6 +556,14 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
           signal: AbortSignal.timeout(timeoutMs)
         });
       } catch (error) {
+        const errorName = typeof error?.name === "string" ? error.name.slice(0, 40) : "Error";
+        logger.warn?.("Browser Use model gateway provider transport failed", {
+          provider: String(provider.name || "unknown").slice(0, 40),
+          model: String(model || "").slice(0, 120),
+          attempt: index + 1,
+          attempts: attempts.length,
+          errorName
+        });
         if (error?.name === "AbortError" || error?.name === "TimeoutError" || error instanceof TypeError) {
           lastStatus = 502;
           if (index + 1 < attempts.length) continue;
@@ -566,6 +574,13 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
       let raw;
       try { raw = await readResponseTextLimited(upstream, 2_000_000); }
       catch {
+        logger.warn?.("Browser Use model gateway provider response rejected", {
+          provider: String(provider.name || "unknown").slice(0, 40),
+          model: String(model || "").slice(0, 120),
+          attempt: index + 1,
+          attempts: attempts.length,
+          reason: "response_too_large_or_unreadable"
+        });
         return res.status(502).json({ error: { message: "Model provider response exceeded the size limit or was not safely streamable", type: "provider_response_too_large" } });
       }
       if (upstream.ok) {
@@ -595,11 +610,25 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
           return res.status(200).type("application/json").send(raw);
         }
         lastStatus = 502;
+        logger.warn?.("Browser Use model gateway provider returned an unusable completion", {
+          provider: String(provider.name || "unknown").slice(0, 40),
+          model: String(model || "").slice(0, 120),
+          attempt: index + 1,
+          attempts: attempts.length,
+          reason: "empty_or_invalid_completion"
+        });
         if (index + 1 < attempts.length) continue;
         break;
       }
 
       lastStatus = upstream.status;
+      logger.warn?.("Browser Use model gateway provider returned non-success status", {
+        provider: String(provider.name || "unknown").slice(0, 40),
+        model: String(model || "").slice(0, 120),
+        status: upstream.status,
+        attempt: index + 1,
+        attempts: attempts.length
+      });
       const fallbackEligible = [401, 402, 403, 404, 408, 429].includes(upstream.status) || upstream.status >= 500;
       if (!fallbackEligible || index + 1 >= attempts.length) break;
     }
@@ -700,7 +729,8 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
         apikey: config.key,
         Authorization: "Bearer " + token,
         Accept: "application/json",
-        ...(body === undefined ? {} : { "Content-Type": "application/json", Prefer: prefer })
+        ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+        ...(body !== undefined || method === "DELETE" ? { Prefer: prefer } : {})
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       redirect: "error", signal: AbortSignal.timeout(15_000)
@@ -1190,7 +1220,17 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
   app.delete("/api/memory/:id", requireSupabaseUser, async (req, res) => {
     if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) return res.status(400).json({ error: { code: "INVALID_MEMORY_ID", message: "Memory item ID is invalid." } });
     try {
-      await supabaseRest(req, "memory_items", "DELETE", "?id=eq." + encodeURIComponent(req.params.id) + "&user_id=eq." + encodeURIComponent(req.supabaseUser.id));
+      const rows = await supabaseRest(
+        req,
+        "memory_items",
+        "DELETE",
+        "?id=eq." + encodeURIComponent(req.params.id) + "&user_id=eq." + encodeURIComponent(req.supabaseUser.id) + "&select=id",
+        undefined,
+        "return=representation"
+      );
+      if (!Array.isArray(rows) || !rows.length) {
+        return res.status(404).json({ error: { code: "MEMORY_NOT_FOUND", message: "Memory item was not found or is not accessible." } });
+      }
       res.json({ ok: true });
     } catch (error) { res.status(error.status || 502).json({ error: { code: "MEMORY_DELETE_FAILED", message: error.message } }); }
   });
