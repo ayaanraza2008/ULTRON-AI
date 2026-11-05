@@ -599,7 +599,11 @@ export function parsePrivateDataReadApproval(value, integration) {
 function containsExactPrivateTarget(text, target) {
   const value = bounded(target, 128).toLowerCase();
   if (!value) return false;
-  const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, "\\  const escaped = value.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\export function privateDataReadApprovalMatchesAction(value, toolName, args = {}) {").replace(/\\s+/g, "\\\\s+");").replace(/\s+/g, "\\s+");
+  const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
+  const boundary = /^[a-zA-Z0-9_-]+$/.test(value) ? "[^a-zA-Z0-9_-]" : "[^a-zA-Z0-9]";
+  return new RegExp("(?:^|" + boundary + ")" + escaped + "(?:$|" + boundary + ")", "i").test(text);
+}
+export function privateDataReadApprovalMatchesAction(value, toolName, args = {}) {").replace(/\\s+/g, "\\\\s+");").replace(/\s+/g, "\\s+");
   const boundary = /^[a-zA-Z0-9_-]+$/.test(value) ? "[^a-zA-Z0-9_-]" : "[^a-zA-Z0-9]";
   return new RegExp("(?:^|" + boundary + ")" + escaped + "(?:$|" + boundary + ")", "i").test(text);
 }
