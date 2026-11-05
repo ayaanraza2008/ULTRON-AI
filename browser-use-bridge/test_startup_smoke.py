@@ -1,7 +1,7 @@
 """Pure policy tests for opt-in browser smoke logging."""
 import unittest
 
-from startup_smoke import SMOKE_ENV, SMOKE_TASK, browser_smoke_enabled, browser_runtime_status, configure_browser_logging, summarize_browser_smoke
+from startup_smoke import SMOKE_ENV, SMOKE_TASK, browser_smoke_enabled, browser_runtime_status, browser_readiness_status, configure_browser_logging, summarize_browser_smoke
 
 
 class BrowserStartupSmokeTests(unittest.TestCase):
@@ -65,6 +65,20 @@ class BrowserStartupSmokeTests(unittest.TestCase):
             "TARGET_NOT_ATTESTED",
         )
 
+
+
+    def test_readiness_requires_opted_in_startup_smoke_to_pass(self):
+        runtime = {"ready": True, "engine": "chromium"}
+        self.assertTrue(browser_readiness_status(True, runtime, {"enabled": False, "status": "disabled"})["ready"])
+        self.assertFalse(browser_readiness_status(True, runtime, {"enabled": True, "status": "pending"})["ready"])
+        failed = browser_readiness_status(True, runtime, {"enabled": True, "status": "failed", "reason": "BRIDGE_HTTP_502"})
+        self.assertFalse(failed["ready"])
+        self.assertEqual(failed["reason"], "STARTUP_SMOKE_FAILED")
+        self.assertEqual(failed["startupSmokeReason"], "BRIDGE_HTTP_502")
+        passed = browser_readiness_status(True, runtime, {"enabled": True, "status": "passed"})
+        self.assertTrue(passed["ready"])
+        self.assertFalse(browser_readiness_status(False, runtime, {"enabled": False, "status": "disabled"})["ready"])
+        self.assertFalse(browser_readiness_status(True, {"ready": False, "reason": "CHROMIUM_MISSING"}, {"enabled": False, "status": "disabled"})["ready"])
 
 if __name__ == "__main__":
     unittest.main()
