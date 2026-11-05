@@ -21,7 +21,7 @@ Physical robotics, humanoid robots, robotic arms, simulation, actuation and loco
 - Owner-scoped shared-state API, pending event queues, local state persistence, WebSocket dispatch and authenticated event polling/ACK routes.
 - Android periodic state pull, monotonic local state storage and ACK-after-write.
 - Windows companion state polling, atomic local state storage and ACK-after-write.
-- Windows companion process tracking for allowlisted applications launched by the companion, with inspect/stop/emergency-stop operations scoped to those tracked processes.
+- Windows native companion process tracking for allowlisted applications launched by that companion, with inspect/stop/emergency-stop operations scoped to tracked processes. This does not provide arbitrary process control or prove cancellation of unrelated tasks.
 - Fail-closed Android bridge operations; absent Android transport no longer fabricates successful lock/unlock/media execution.
 - Owner authorization checks and signup bootstrap gating in the candidate server.
 - Remote task orchestration reports explicit unavailable/unsupported errors rather than fabricated success.
@@ -35,7 +35,7 @@ An earlier exact PR-head run on commit `6bbb11076b2ce870b43fc297fc718b2bae9f1a97
 - Syntax check: passed.
 - Security quality gate: 0 confirmed findings and 0 potential risks.
 
-Later commits added state-sync routes, WebSocket ACK support, Android/Windows client integration, task tracking, and documentation corrections. Those changes must pass the **current exact-head** CI checks before merge. Do not reuse an older green result as proof for a newer commit.
+On PR head `171b7abb1422fbbae2b2220576ab0cf39fd85663`, the GitHub Actions workflows `ULTRON Windows Companion`, `ULTRON Android Companion`, and `ULTRON CI` were all observed completed with conclusion `success`. This verifies those workflow runs for that exact head; a documentation commit made after that head still requires its own fresh CI run. Do not reuse an older green result as proof for a newer commit.
 
 ### Remaining operational acceptance
 
@@ -43,7 +43,7 @@ Later commits added state-sync routes, WebSocket ACK support, Android/Windows cl
 2. **Client protocol:** Android and Windows candidate clients now poll and ACK shared state, but they require actual paired-device acceptance and reconnection tests. Browser-client sync is not yet certified.
 3. **Owner configuration:** Render lists the owner integration user ID as dashboard-managed; the actual configured value and personal-mode flags have not been independently verified. Test the legitimate owner and a non-owner before production release.
 4. **AI inference:** authenticated live generative inference has not been demonstrated by public provider-list or DNS checks. At least one provider must complete a real authorized inference.
-5. **Windows task control:** the native companion tracks processes it launched. This does not prove cancellation of arbitrary tasks or processes outside that tracked allowlist. Exercise the actual paired Windows client.
+5. **Windows task control:** the native companion contains process tracking for allowlisted applications it launches, with stop/emergency-stop scoped to those tracked processes. The separate server-side task orchestration/AbortController path must not be interpreted as universal OS-process cancellation. Exercise the actual paired Windows client and verify the returned process exit outcomes.
 6. **Android:** build success is not physical-device acceptance. Test pairing, polling, local persistence, ACK and permission behavior on an actual personal Android device when available.
 7. **Voice/vision:** tests and modules exist, but end-to-end microphone, speaker and camera acceptance on the chosen clients remains to be demonstrated.
 
