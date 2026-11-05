@@ -133,7 +133,7 @@ export async function appflowyListWorkspaces({ env = process.env, userId = null,
   if (!settings.ownerId) {
     throw Object.assign(new Error("AppFlowy requires a configured ULTRON_INTEGRATION_OWNER_USER_ID."), { code: "APPFLOWY_OWNER_REQUIRED" });
   }
-  if (userId && !ownerAllowed(settings, userId)) {
+  if (!ownerAllowed(settings, userId)) {
     throw Object.assign(new Error("AppFlowy workspace access is restricted to the configured owner."), { code: "APPFLOWY_OWNER_MISMATCH" });
   }
 
@@ -177,7 +177,7 @@ export async function appflowyGetDocument({ documentId, env = process.env, userI
   if (!settings.ownerId) {
     throw Object.assign(new Error("AppFlowy requires a configured ULTRON_INTEGRATION_OWNER_USER_ID."), { code: "APPFLOWY_OWNER_REQUIRED" });
   }
-  if (userId && !ownerAllowed(settings, userId)) {
+  if (!ownerAllowed(settings, userId)) {
     throw Object.assign(new Error("AppFlowy document access is restricted to the configured owner."), { code: "APPFLOWY_OWNER_MISMATCH" });
   }
 
