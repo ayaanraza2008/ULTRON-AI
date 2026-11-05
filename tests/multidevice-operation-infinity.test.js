@@ -28,7 +28,6 @@ import { DeviceHub, APPROVED_REMOTE_ACTIONS } from "../integrations/device-hub.j
 import { WindowsDesktopAgent, DESKTOP_SCREEN_STATE } from "../system/windows-desktop-agent.js";
 import { RemoteTaskOrchestrator } from "../system/remote-task-orchestrator.js";
 import { DeviceWebSocketGateway } from "../integrations/device-websocket-gateway.js";
-import { DeviceWebSocketGateway } from "../integrations/device-websocket-gateway.js";
 import { createApp } from "../server.js";
 
 async function withServer({ env = {}, fetchImpl = async () => new Response("{}", { status: 200 }) } = {}, run) {
