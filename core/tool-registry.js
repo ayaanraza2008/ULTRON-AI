@@ -40,7 +40,7 @@ import { AgentOrchestrator } from "../agents/orchestrator.js";
 import { egoBrowserAdapter as defaultEgoBrowserAdapter } from "../integrations/browser/ego-lite/ego-adapter.js";
 import { consumeToolApprovalProof } from "../security/tool-approval-authority.js";
 import { getHexStrikeReadiness, runHexStrikeScan } from "../integrations/hexstrike-ai.js";
-import { captureAgentMemory as defaultAgentMemoryCapture, agentMemoryReadiness as defaultAgentMemoryReadiness } from "../agentmemory-integration.js";
+import { captureAgentMemory as defaultAgentMemoryCapture, recallAgentMemory as defaultAgentMemoryRecall, agentMemoryReadiness as defaultAgentMemoryReadiness } from "../agentmemory-integration.js";
 
 export const PERMISSION_LEVELS = {
   LEVEL_1_READ: 1,      // Read-only, inspection, telemetry, search
@@ -90,7 +90,7 @@ export class ToolRegistry {
       agentOrchestrator: new AgentOrchestrator(),
       egoBrowserAdapter: defaultEgoBrowserAdapter,
       hexStrike: { getReadiness: getHexStrikeReadiness, runScan: runHexStrikeScan },
-      agentMemoryStore: { capture: defaultAgentMemoryCapture, readiness: defaultAgentMemoryReadiness }
+      agentMemoryStore: { capture: defaultAgentMemoryCapture, recall: defaultAgentMemoryRecall, readiness: defaultAgentMemoryReadiness }
     };
 
     const { approvalVerifier = null, ...runtimeAdapters } = adapters || {};
@@ -421,17 +421,37 @@ export class ToolRegistry {
       id: "memory_recall",
       name: "Associative Memory Recall",
       category: TOOL_CATEGORIES.INTELLIGENCE,
-      description: "Recalls user preferences, historical decisions, and semantic memory tags.",
-      capabilities: ["semantic_search", "preference_lookup", "context_injection"],
+      description: "Recalls owner-scoped durable preferences, historical decisions, and semantic memory tags.",
+      capabilities: ["semantic_search", "preference_lookup", "context_injection", "owner_isolation"],
       permissionLevel: PERMISSION_LEVELS.LEVEL_1_READ,
       requiresConfirmation: false,
-      timeoutMs: 5000,
+      timeoutMs: 8000,
       inputSchema: { type: "object", required: ["query"], properties: { query: { type: "string" }, limit: { type: "number" } } },
-      checkHealth: () => TOOL_STATUS.OPERATIONAL,
-      execute: async (params) => {
-        const query = String(params.query || "");
-        const memories = ultronCore?.recallMemories ? ultronCore.recallMemories(query, { limit: params.limit || 5 }) : [];
-        return { success: true, memoriesCount: memories.length, memories };
+      checkHealth: () => {
+        try {
+          return this.adapters.agentMemoryStore?.readiness?.().configured === true
+            ? TOOL_STATUS.OPERATIONAL
+            : TOOL_STATUS.REQUIRES_CONFIG;
+        } catch {
+          return TOOL_STATUS.ERROR;
+        }
+      },
+      execute: async (params, context = {}) => {
+        const ownerId = String(context.userId || context.actorId || "").trim();
+        if (!ownerId) {
+          return { success: false, status: "UNAUTHORIZED", error: { code: "MEMORY_OWNER_REQUIRED", message: "An authenticated owner identity is required for memory recall." } };
+        }
+        if (typeof this.adapters.agentMemoryStore?.recall !== "function") {
+          return { success: false, status: "UNAVAILABLE", error: { code: "MEMORY_RECALL_UNAVAILABLE", message: "Owner-scoped durable memory recall is not configured." } };
+        }
+        const result = await this.adapters.agentMemoryStore.recall(
+          "Recall memory: " + String(params.query || ""),
+          { userId: ownerId, limit: params.limit }
+        );
+        if (result?.state !== "completed") {
+          return { success: false, status: "UNAVAILABLE", error: { code: "MEMORY_RECALL_UNAVAILABLE", message: "Owner-scoped durable memory recall did not complete." } };
+        }
+        return { success: true, durable: true, storage: "agentmemory", memoriesCount: result.memories.length, memories: result.memories };
       }
     });
 
@@ -439,11 +459,11 @@ export class ToolRegistry {
       id: "memory_store",
       name: "Long-Term Memory Storage",
       category: TOOL_CATEGORIES.INTELLIGENCE,
-      description: "Stores important facts, user preferences, and instructions in long-term memory.",
-      capabilities: ["persistence", "tagging", "knowledge_synthesis"],
+      description: "Stores important facts and preferences in the authenticated owner's durable memory.",
+      capabilities: ["persistence", "tagging", "knowledge_synthesis", "owner_isolation"],
       permissionLevel: PERMISSION_LEVELS.LEVEL_2_NORMAL,
       requiresConfirmation: false,
-      timeoutMs: 5000,
+      timeoutMs: 8000,
       inputSchema: { type: "object", required: ["content"], properties: { content: { type: "string" }, tags: { type: "array" } } },
       checkHealth: () => {
         try {
@@ -456,38 +476,30 @@ export class ToolRegistry {
       },
       execute: async (params, context = {}) => {
         const ownerId = String(context.userId || context.actorId || "").trim();
-        if (ownerId && typeof this.adapters.agentMemoryStore?.capture === "function") {
+        if (!ownerId) {
+          return { success: false, status: "UNAUTHORIZED", error: { code: "MEMORY_OWNER_REQUIRED", message: "An authenticated owner identity is required for memory storage." } };
+        }
+        if (typeof this.adapters.agentMemoryStore?.capture === "function") {
           const durableResult = await this.adapters.agentMemoryStore.capture(
             "Remember this: " + String(params.content || ""),
-            { userId: ownerId }
+            { userId: ownerId, tags: params.tags }
           );
           if (durableResult?.state === "captured") {
             return { success: true, durable: true, storage: "agentmemory", content: params.content };
           }
         }
-        if (typeof ultronCore?.storeMemory !== "function") {
-          return { success: false, status: "UNAVAILABLE", error: { code: "MEMORY_STORE_UNAVAILABLE", message: "Persistent memory storage is not configured; no memory was saved." } };
-        }
-        const record = await ultronCore.storeMemory(params.content, params.tags || ["user_noted"]);
-        if (!record || typeof record !== "object" || !(record.id || record.memoryId)) {
-          return { success: false, status: "FAILED", error: { code: "MEMORY_STORE_NOT_CONFIRMED", message: "Memory adapter did not confirm a persisted record." } };
-        }
-        // The default UltronCore implementation is process-local. An ID alone
-        // proves only that an in-memory object was created, not durable storage.
-        if (record.durable !== true && record.persisted !== true &&
-            !["supabase", "agentmemory", "persistent"].includes(String(record.storage || "").toLowerCase())) {
+        if (typeof ultronCore?.storeMemory === "function") {
           return {
             success: false,
             status: "NON_DURABLE",
             durable: false,
-            memoryId: record.id || record.memoryId,
             error: {
               code: "MEMORY_STORE_NOT_DURABLE",
-              message: "The memory adapter only confirmed a process-local record; it may be lost on restart."
+              message: "Only process-local memory is available. Nothing was saved because it is not durable or owner-isolated."
             }
           };
         }
-        return { success: true, durable: true, memoryId: record.id || record.memoryId, content: params.content };
+        return { success: false, status: "UNAVAILABLE", error: { code: "MEMORY_STORE_UNAVAILABLE", message: "Owner-scoped durable memory storage is not configured; no memory was saved." } };
       }
     });
 
