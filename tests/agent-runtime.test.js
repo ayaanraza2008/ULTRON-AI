@@ -2266,7 +2266,7 @@ test("task router narrows one clear domain and retains the full allowlist for co
     assert.ok(compoundTools.includes("create_youtube_production_plan"));
     assert.ok(compoundTools.includes("appflowy_get_document"));
     assert.ok(compoundTools.includes("immich_search_assets"));
-    assert.equal(compoundTools.length, 65, "the compound route should expose the current complete allowlist, including AppFlowy and Immich");
+    assert.equal(compoundTools.length, 66, "the compound route should expose the current complete allowlist, including AppFlowy and Immich");
   });
 });
 
