@@ -50,3 +50,28 @@ test("memory store does not claim durability for process-local memory records", 
   assert.equal(result.error.code, "MEMORY_STORE_NOT_DURABLE");
   assert.equal(result.memoryId, "mem-process-local-1");
 });
+
+
+test("memory store reports durable success only after owner-scoped AgentMemory capture", async () => {
+  let capturedUserId = null;
+  let capturedText = null;
+  const registry = new ToolRegistry({
+    ultronCore: {},
+    agentMemoryStore: {
+      capture: async (content, options) => {
+        capturedText = content;
+        capturedUserId = options.userId;
+        return { state: "captured" };
+      }
+    }
+  });
+
+  const result = await registry.execute("memory_store", { content: "Project uses isolated task workers" }, {
+    actorId: "owner-123"
+  });
+  assert.equal(result.success, true);
+  assert.equal(result.durable, true);
+  assert.equal(result.storage, "agentmemory");
+  assert.equal(capturedUserId, "owner-123");
+  assert.match(capturedText, /^Remember this:/);
+});
