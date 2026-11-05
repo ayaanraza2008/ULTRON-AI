@@ -59,3 +59,18 @@ PR #441 has since been merged to `main`. PRs #444 (guarded HexStrike) and #445 (
 - Keep external messages, purchases, bookings, publishing, destructive actions, device control, and security scans behind action-specific authorization.
 - No paid services, API credits, or large local model downloads without explicit approval.
 - Report capabilities as implemented, unit-tested, integration-tested, live-verified, blocked, or not applicable. A configuration flag, mocked test, source file, green build, or service deploy state is not proof of live functionality.
+
+
+## Fresh Render operational observation — 2026-11-05 06:20 UTC
+
+Read-only inspection of Render workspace **Ultron core** confirmed four existing Free-plan web services:
+- ultron-ai-core (main, https://ultron-ai-core.onrender.com)
+- ultron-browser-use-core (main, https://ultron-browser-use-core.onrender.com)
+- ultron-rea-gateway (main, https://ultron-rea-gateway.onrender.com)
+- ultron-core-interface (feature/ultron-live-core-interface-20261029, https://ultron-core-interface.onrender.com)
+
+The three backend services last recorded successful deploys from commit 81dd9b9e81bf35c5e49e152113e0991fe7362010 on 2026-11-04 around 21:41 UTC. The interface service remains on its separate feature branch. All four live service records currently report an empty Render healthCheckPath, although the repository candidate render.yaml specifies /api/health, /health, /healthz, and / respectively. This is evidence that the Blueprint configuration has not been synced to the live services; no settings were changed.
+
+Read-only metrics returned no HTTP request-count/latency samples and no CPU samples for the queried 2026-11-04 06:00 UTC to 2026-11-05 06:30 UTC interval. Three services returned some memory samples; the interface returned none. Render logs for the final hour queried returned no app/request entries. These empty observations do not prove the services are down, but they also do not prove live user traffic or end-to-end operation. Keep live acceptance BLOCKED / UNVERIFIED until health endpoints and authenticated synthetic flows are confirmed.
+
+No Render configuration, environment variable, deploy, or service was modified during this inspection.
