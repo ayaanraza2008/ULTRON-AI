@@ -33,6 +33,8 @@ These are present in the repository but were not present in the live migration l
 
 The live database also did not contain `public.paired_devices` or `public.pending_device_pairings`. Device pairing therefore remains unavailable until these migrations are separately reviewed and applied as part of an authorized release. The telemetry migration depends on the paired-device migration and must remain later in version order.
 
+The active migration directory should currently contain exactly 17 forward SQL files: the 15 applied baseline files plus the two pending device files. The ledger regression test locks this distinction and rejects any duplicate or out-of-order version.
+
 ## Rollback handling
 
 Destructive rollback scripts are stored under `supabase/rollback/`, outside the active `supabase/migrations/` directory. They must never be discovered as forward migrations by the Supabase CLI. Rollbacks can delete paired-device records and must not be run against production without a verified backup and explicit owner approval.
