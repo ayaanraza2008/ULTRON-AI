@@ -28,6 +28,7 @@ import { DeviceHub, APPROVED_REMOTE_ACTIONS } from "../integrations/device-hub.j
 import { WindowsDesktopAgent, DESKTOP_SCREEN_STATE } from "../system/windows-desktop-agent.js";
 import { RemoteTaskOrchestrator } from "../system/remote-task-orchestrator.js";
 import { DeviceWebSocketGateway } from "../integrations/device-websocket-gateway.js";
+import { DeviceWebSocketGateway } from "../integrations/device-websocket-gateway.js";
 import { createApp } from "../server.js";
 
 async function withServer({ env = {}, fetchImpl = async () => new Response("{}", { status: 200 }) } = {}, run) {
@@ -243,6 +244,50 @@ test("4. Real message delivery: active subscriber, offline queueing, and deliver
 
   // Tablet Beta queue is now empty
   assert.equal(mdm.pollPendingEvents("tablet-beta").length, 0);
+});
+
+test("Authenticated WebSocket state-sync ACK is bound to the paired device owner", async () => {
+  let ackInput = null;
+  const fakeHub = {
+    pairedDevices: new Map([["phone-ack-1", {
+      id: "phone-ack-1",
+      ownerUserId: "owner-ack-1",
+      status: "active"
+    }]]),
+    registerEventListener() { return () => {}; }
+  };
+  const gateway = new DeviceWebSocketGateway({
+    deviceHub: fakeHub,
+    logger: { warn() {} }
+  });
+  gateway.setStateSyncAckHandler(async input => {
+    ackInput = input;
+    return { success: true, acknowledged: true, remainingCount: 0 };
+  });
+  const sentFrames = [];
+  const session = {
+    authenticated: true,
+    deviceId: "phone-ack-1",
+    device: { id: "phone-ack-1", ownerUserId: "owner-ack-1", authToken: "device-token" },
+    socket: { write(frame) { sentFrames.push(Buffer.from(frame)); return true; } }
+  };
+  try {
+    await gateway.handleClientMessage(session, JSON.stringify({
+      type: "STATE_SYNC_ACK",
+      deliveryId: "del-ack-123"
+    }));
+    assert.deepEqual(ackInput, {
+      deviceId: "phone-ack-1",
+      ownerUserId: "owner-ack-1",
+      deliveryId: "del-ack-123"
+    });
+    assert.equal(sentFrames.length, 1);
+    const payload = sentFrames[0].subarray(2).toString("utf8");
+    assert.equal(JSON.parse(payload).type, "STATE_SYNC_ACK_RESULT");
+    assert.equal(JSON.parse(payload).success, true);
+  } finally {
+    gateway.close();
+  }
 });
 
 test("5. Server-authoritative monotonic version conflict resolution & sensitive data filter", () => {
