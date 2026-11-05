@@ -280,9 +280,37 @@ export class MobileControlEngine extends EventEmitter {
       params.package = params.package || params.packageName;
     }
 
+    // Read the real foreground package before authorizing UI interactions. Caller-
+    // supplied package names are not trusted for taps/typing because they could
+    // otherwise disguise a sensitive foreground app as an ordinary app.
+    let preState = null;
+    const isUiInteraction = MOBILE_INTERACTION_APPROVAL_ACTIONS.has(actionName);
+    const deviceAuthorization = this.permissions.deviceAuthorizations.get(deviceId);
+    if (isUiInteraction && deviceAuthorization?.authorized && deviceAuthorization.authorizedBy === userId &&
+        this.registry.devices.get(deviceId)?.platform === "android") {
+      try {
+        preState = await this.adb.getForegroundApp(deviceId);
+      } catch {}
+      const foregroundPackage = preState?.package || preState?.packageName || preState?.appPackage;
+      if (!foregroundPackage) {
+        return {
+          success: false,
+          action: actionName,
+          deviceId,
+          code: "FOREGROUND_APP_UNVERIFIED",
+          reason: "ULTRON could not verify the foreground app, so it blocked this interaction rather than risk acting inside a sensitive app."
+        };
+      }
+    }
+
+    const permissionParams = { ...params };
+    if (isUiInteraction && preState) {
+      permissionParams.package = preState.package || preState.packageName || preState.appPackage;
+    }
+
     // 1. Permission & Safety Evaluation
-    const toolApprovalVerified = hasVerifiedToolApproval(context, userId, actionName, params);
-    const perm = await this.permissions.checkPermission(actionName, params, deviceId, userId, confirmationToken, toolApprovalVerified);
+    const toolApprovalVerified = hasVerifiedToolApproval(context, userId, actionName, permissionParams);
+    const perm = await this.permissions.checkPermission(actionName, permissionParams, deviceId, userId, confirmationToken, toolApprovalVerified);
     if (!perm.permitted) {
       return {
         success: false,
@@ -297,12 +325,13 @@ export class MobileControlEngine extends EventEmitter {
     }
 
     // 2. Pre-Action State Capture
-    let preState = null;
-    try {
-      if (this.registry.devices.get(deviceId)?.platform === "android") {
-        preState = await this.adb.getForegroundApp(deviceId);
-      }
-    } catch {}
+    if (!preState) {
+      try {
+        if (this.registry.devices.get(deviceId)?.platform === "android") {
+          preState = await this.adb.getForegroundApp(deviceId);
+        }
+      } catch {}
+    }
 
     const startedAt = Date.now();
     this.emit("action_started", { action: actionName, deviceId, params });
