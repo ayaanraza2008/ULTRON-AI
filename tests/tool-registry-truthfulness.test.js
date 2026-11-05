@@ -25,7 +25,8 @@ test("AI inference tool does not report deterministic offline rules as model inf
 
 test("memory store tool does not invent a memory ID when persistence is unavailable", async () => {
   const registry = new ToolRegistry({
-    ultronCore: {}
+    ultronCore: {},
+    agentMemoryStore: { capture: async () => ({ state: "not_configured" }), readiness: () => ({ configured: false }) }
   });
 
   const result = await registry.execute("memory_store", { content: "This should not be persisted" }, { actorId: "owner-a" });
