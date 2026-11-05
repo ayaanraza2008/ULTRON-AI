@@ -7,7 +7,45 @@
  * and anti-SSRF network validation.
  */
 
-import { safeServiceBase } from "../network-safety.js";
+import { safePinnedFetch, safeServiceBase } from "../network-safety.js";
+const MAX_RESPONSE_BYTES = 256 * 1024;
+
+function boundedLimit(value, fallback, maximum) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.max(1, Math.min(maximum, Math.trunc(parsed))) : fallback;
+}
+
+async function readJsonLimited(response) {
+  const declaredLength = Number(response.headers?.get?.("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_RESPONSE_BYTES) {
+    try { await response.body?.cancel?.(); } catch {}
+    throw Object.assign(new Error("Immich response exceeded the size limit."), { code: "IMMICH_RESPONSE_TOO_LARGE" });
+  }
+  if (!response.body?.getReader) {
+    throw Object.assign(new Error("Immich response cannot be safely size-limited."), { code: "IMMICH_RESPONSE_UNBOUNDED" });
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let totalBytes = 0;
+  let raw = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > MAX_RESPONSE_BYTES) {
+        try { await reader.cancel(); } catch {}
+        throw Object.assign(new Error("Immich response exceeded the size limit."), { code: "IMMICH_RESPONSE_TOO_LARGE" });
+      }
+      raw += decoder.decode(value, { stream: true });
+    }
+    raw += decoder.decode();
+  } finally {
+    try { reader.releaseLock?.(); } catch {}
+  }
+  try { return raw ? JSON.parse(raw) : {}; }
+  catch { throw Object.assign(new Error("Immich returned invalid JSON."), { code: "IMMICH_INVALID_RESPONSE" }); }
+}
 
 export function getImmichReadiness(env = process.env) {
   const ownerUserId = String(env.ULTRON_INTEGRATION_OWNER_USER_ID || "").trim();
@@ -50,7 +88,7 @@ export function getImmichReadiness(env = process.env) {
 export class ImmichConnector {
   constructor(options = {}) {
     this.env = options.env || process.env;
-    this.customFetch = options.fetch || fetch;
+    this.customFetch = options.fetch || safePinnedFetch;
   }
 
   /**
@@ -79,6 +117,7 @@ export class ImmichConnector {
           "x-api-key": this.env.IMMICH_API_KEY,
           "Accept": "application/json"
         },
+        redirect: "error",
         signal: AbortSignal.timeout(5000)
       });
 
@@ -86,7 +125,7 @@ export class ImmichConnector {
         return { success: false, status: res.status, error: "IMMICH_SERVER_ERROR" };
       }
 
-      const data = await res.json();
+      const data = await readJsonLimited(res);
       return { success: true, version: data, online: true };
     } catch (err) {
       return { success: false, error: err.message, online: false };
@@ -109,6 +148,7 @@ export class ImmichConnector {
           "x-api-key": this.env.IMMICH_API_KEY,
           "Accept": "application/json"
         },
+        redirect: "error",
         signal: AbortSignal.timeout(8000)
       });
 
@@ -116,17 +156,18 @@ export class ImmichConnector {
         return { success: false, status: res.status, albums: [] };
       }
 
-      const albums = await res.json();
-      const sanitized = (Array.isArray(albums) ? albums : []).slice(0, Math.min(50, limit)).map(a => ({
-        id: a.id,
-        albumName: String(a.albumName || "Untitled").slice(0, 100),
-        assetCount: a.assetCount || 0,
-        createdAt: a.createdAt
+      const albums = await readJsonLimited(res);
+      const boundedCount = boundedLimit(limit, 20, 50);
+      const sanitized = (Array.isArray(albums) ? albums : []).slice(0, boundedCount).map(a => ({
+        id: typeof a?.id === "string" ? a.id.slice(0, 128) : null,
+        albumName: String(a?.albumName || "Untitled").slice(0, 100),
+        assetCount: Number.isSafeInteger(Number(a?.assetCount)) ? Math.max(0, Number(a.assetCount)) : 0,
+        createdAt: typeof a?.createdAt === "string" ? a.createdAt.slice(0, 40) : null
       }));
 
       return { success: true, count: sanitized.length, albums: sanitized };
     } catch (err) {
-      return { success: false, error: err.message, albums: [] };
+      return { success: false, error: err.code || err.message, albums: [] };
     }
   }
 
@@ -148,7 +189,8 @@ export class ImmichConnector {
           "Content-Type": "application/json",
           "Accept": "application/json"
         },
-        body: JSON.stringify({ query: String(query).slice(0, 80) }),
+        body: JSON.stringify({ query: typeof query === "string" ? query.slice(0, 80) : "" }),
+        redirect: "error",
         signal: AbortSignal.timeout(8000)
       });
 
@@ -156,19 +198,21 @@ export class ImmichConnector {
         return { success: false, status: res.status, assets: [] };
       }
 
-      const data = await res.json();
-      const assets = (data.assets?.items || []).slice(0, Math.min(30, limit)).map(item => ({
-        id: item.id,
-        type: item.type,
-        originalFileName: item.originalFileName,
-        fileCreatedAt: item.fileCreatedAt,
-        duration: item.duration || null,
-        isFavorite: Boolean(item.isFavorite)
+      const data = await readJsonLimited(res);
+      const boundedCount = boundedLimit(limit, 10, 30);
+      const items = Array.isArray(data?.assets?.items) ? data.assets.items : [];
+      const assets = items.slice(0, boundedCount).map(item => ({
+        id: typeof item?.id === "string" ? item.id.slice(0, 128) : null,
+        type: typeof item?.type === "string" ? item.type.slice(0, 24) : "UNKNOWN",
+        originalFileName: typeof item?.originalFileName === "string" ? item.originalFileName.slice(0, 160) : null,
+        fileCreatedAt: typeof item?.fileCreatedAt === "string" ? item.fileCreatedAt.slice(0, 40) : null,
+        duration: Number.isFinite(item?.duration) ? Math.max(0, item.duration) : null,
+        isFavorite: Boolean(item?.isFavorite)
       }));
 
       return { success: true, count: assets.length, assets };
     } catch (err) {
-      return { success: false, error: err.message, assets: [] };
+      return { success: false, error: err.code || err.message, assets: [] };
     }
   }
 }
