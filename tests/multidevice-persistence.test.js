@@ -276,3 +276,140 @@ test("MultiDeviceManager: async save, load, and dynamic adapter switching", asyn
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
   }
 });
+
+
+test("FilePersistenceAdapter: genuine AES-256-GCM encryption at rest with derived key", async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ultron-crypto-persist-"));
+  const storePath = path.join(tmpDir, "encrypted-state.json");
+  const testSecret = "ultron_secure_test_master_secret_key_32_bytes_long!";
+
+  try {
+    const adapter = new FilePersistenceAdapter({
+      storagePath: storePath,
+      masterSecret: testSecret
+    });
+
+    const sensitiveData = {
+      devices: [["dev-secure-1", { id: "dev-secure-1", name: "ConfidentialWorkstation", platform: "windows" }]],
+      sharedState: [["vault", { key: "vault", payload: { secretToken: "super_secret_payload_value_12345" }, version: 1 }]],
+      pendingDeliveries: [],
+      revokedDevices: []
+    };
+
+    const saveOk = adapter.saveSync(sensitiveData);
+    assert.equal(saveOk, true);
+
+    // Read the raw disk content directly to prove encryption at rest
+    const rawContent = fs.readFileSync(storePath, "utf8");
+    assert.ok(rawContent.length > 0);
+
+    // Raw content must NOT contain sensitive plaintext strings
+    assert.equal(rawContent.includes("ConfidentialWorkstation"), false, "Plaintext device name must not appear in encrypted file");
+    assert.equal(rawContent.includes("super_secret_payload_value_12345"), false, "Plaintext payload must not appear in encrypted file");
+
+    // Must be a valid AES-256-GCM encrypted envelope
+    const parsedEnvelope = JSON.parse(rawContent);
+    assert.equal(parsedEnvelope.encrypted, true);
+    assert.equal(parsedEnvelope.algorithm, "aes-256-gcm");
+    assert.ok(parsedEnvelope.iv && parsedEnvelope.iv.length === 24); // 12 bytes = 24 hex chars
+    assert.ok(parsedEnvelope.tag && parsedEnvelope.tag.length === 32); // 16 bytes = 32 hex chars
+    assert.ok(parsedEnvelope.ciphertext && parsedEnvelope.ciphertext.length > 0);
+
+    // Load back with key: verify seamless decryption
+    const loaded = adapter.loadSync();
+    assert.ok(loaded);
+    assert.equal(loaded.devices[0][1].name, "ConfidentialWorkstation");
+    assert.equal(loaded.sharedState[0][1].payload.secretToken, "super_secret_payload_value_12345");
+
+    // Load with an adapter without the encryption key: must throw or reject securely
+    const unkeyedAdapter = new FilePersistenceAdapter({ storagePath: storePath, masterSecret: "" });
+    assert.throws(() => unkeyedAdapter.loadSync(), /ENCRYPTION_KEY_REQUIRED_FOR_PERSISTENCE/);
+  } finally {
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+  }
+});
+
+test("FilePersistenceAdapter: seamless backward compatibility with legacy unencrypted records", async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ultron-legacy-persist-"));
+  const storePath = path.join(tmpDir, "legacy-state.json");
+  const testSecret = "ultron_secure_test_master_secret_key_32_bytes_long!";
+
+  try {
+    // Write unencrypted legacy JSON directly to disk
+    const legacyPayload = {
+      version: "2.0.0",
+      savedAt: new Date().toISOString(),
+      devices: [["legacy-dev", { id: "legacy-dev", name: "Legacy Phone", platform: "android" }]],
+      sharedState: [],
+      pendingDeliveries: [],
+      revokedDevices: []
+    };
+    fs.writeFileSync(storePath, JSON.stringify(legacyPayload, null, 2), "utf8");
+
+    // Load with encrypted-capable adapter
+    const adapter = new FilePersistenceAdapter({
+      storagePath: storePath,
+      masterSecret: testSecret
+    });
+
+    const loaded = adapter.loadSync();
+    assert.ok(loaded);
+    assert.equal(loaded.devices[0][0], "legacy-dev");
+    assert.equal(loaded.devices[0][1].name, "Legacy Phone");
+
+    // Resaving now automatically upgrades the file to encrypted at rest
+    adapter.saveSync(loaded);
+    const upgradedRaw = fs.readFileSync(storePath, "utf8");
+    const envelope = JSON.parse(upgradedRaw);
+    assert.equal(envelope.encrypted, true);
+    assert.equal(envelope.algorithm, "aes-256-gcm");
+  } finally {
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+  }
+});
+
+test("MultiDeviceManager: presence freshness and heartbeat timeout eliminate phantom devices", () => {
+  const mdm = new MultiDeviceManager({ persist: false, seedDefaultFleet: false });
+
+  // Register device 1: active fresh heartbeat
+  mdm.registerDevice({
+    id: "dev-fresh",
+    name: "Fresh Phone",
+    platform: "android",
+    capabilities: ["screen_unlock"],
+    online: true,
+    lastSeenAt: new Date().toISOString()
+  });
+
+  // Register device 2: stale device with heartbeat from 3 minutes ago
+  const staleTimestamp = new Date(Date.now() - 180_000).toISOString();
+  mdm.registerDevice({
+    id: "dev-stale",
+    name: "Stale PC",
+    platform: "windows",
+    capabilities: ["run_script"],
+    online: true, // Marked true initially, but heartbeat is stale!
+    lastSeenAt: staleTimestamp
+  });
+
+  // isDeviceOnline evaluates real heartbeat freshness
+  assert.equal(mdm.isDeviceOnline("dev-fresh"), true);
+  assert.equal(mdm.isDeviceOnline("dev-stale"), false, "Stale device must be evaluated as offline (not a phantom online device)");
+
+  // listDevices({ online: true }) reflects reality
+  const onlineList = mdm.listDevices({ online: true });
+  assert.equal(onlineList.length, 1);
+  assert.equal(onlineList[0].id, "dev-fresh");
+
+  // findEligibleDevices({ onlineOnly: true }) does not dispatch to phantom devices
+  const eligiblePc = mdm.findEligibleDevices("run_script", { onlineOnly: true });
+  assert.equal(eligiblePc.length, 0, "Stale PC must not be eligible for online task dispatch");
+
+  // When fresh heartbeat telemetry arrives, device becomes online
+  const presResult = mdm.updateDevicePresence("dev-stale", { online: true });
+  assert.equal(presResult.success, true);
+  assert.equal(mdm.isDeviceOnline("dev-stale"), true);
+
+  const recheckedEligible = mdm.findEligibleDevices("run_script", { onlineOnly: true });
+  assert.equal(recheckedEligible.length, 1);
+});

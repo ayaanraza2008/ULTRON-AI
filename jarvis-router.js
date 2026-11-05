@@ -224,6 +224,13 @@ export function createJarvisRouter({
   remoteTaskOrchestrator.multiDeviceManager = multiDeviceManagerInstance;
   remoteTaskOrchestrator.telephonyGateway = telephonyGateway;
 
+  // Trigger async durable state load on router creation if persistent
+  if (multiDeviceManagerInstance && typeof multiDeviceManagerInstance.load === "function") {
+    multiDeviceManagerInstance.load().catch(err => {
+      if (logger?.warn) logger.warn("MultiDeviceManager: failed to load durable state at boot", { error: err?.message });
+    });
+  }
+
 
   // --- JARVIS Capability Benchmark ---
   router.get("/jarvis/benchmark", requireOwner, async (_req, res) => {
@@ -1040,7 +1047,7 @@ export function createJarvisRouter({
     }
     const result = multiDeviceManagerInstance.acknowledgeDelivery(req.device.id, req.params.deliveryId);
     if (!result.success || !result.acknowledged) {
-      return res.status(404).json({ error: { code: result.error || "DELIVERY_NOT_FOUND", message: "The state-sync delivery was not pending for this device." }, ...result });
+      return res.status(result.error === "STATE_PERSISTENCE_FAILED" ? 503 : 404).json({ error: { code: result.error || "DELIVERY_NOT_FOUND", message: "The state-sync delivery was not pending for this device." }, ...result });
     }
     return res.json(result);
   });
@@ -1979,6 +1986,13 @@ export function createJarvisRouter({
     res.json({ history: remoteTaskOrchestrator.getTaskHistory(limit) });
   });
 
+  const hudSseListeners = new Set();
+  const broadcastHudEvent = (eventData) => {
+    for (const listener of hudSseListeners) {
+      try { listener(eventData); } catch {}
+    }
+  };
+
   // --- Live Cyber-HUD Event Stream (Server-Sent Events) ---
   router.get("/jarvis/hud/events", requireOwner, (req, res) => {
     res.writeHead(200, {
@@ -1990,6 +2004,8 @@ export function createJarvisRouter({
     const sendEvent = (eventData) => {
       res.write("data: " + JSON.stringify(eventData) + "\n\n");
     };
+
+    hudSseListeners.add(sendEvent);
 
     // Initial state event
     sendEvent({
@@ -2005,6 +2021,7 @@ export function createJarvisRouter({
 
     req.on("close", () => {
       clearInterval(timer);
+      hudSseListeners.delete(sendEvent);
     });
   });
 
@@ -2027,6 +2044,12 @@ export function createJarvisRouter({
     if (state) currentHudState.state = state;
     if (activeTask !== undefined) currentHudState.activeTask = activeTask;
     currentHudState.updatedAt = new Date().toISOString();
+    broadcastHudEvent({
+      type: "CORE_STATE_CHANGE",
+      state: currentHudState.state,
+      detail: currentHudState.activeTask || "HUD state updated",
+      hud: currentHudState
+    });
     res.json({
       success: true,
       hud: currentHudState

@@ -1069,7 +1069,7 @@ internal sealed class CompanionContext : ApplicationContext
 
             // Shared ecosystem state is stored locally before the delivery is ACKed.
             // If local persistence or the ACK fails, the server retains the event for retry.
-            await PollPendingStateEventsAsync(backendUri, identity);
+            await PollPendingStateEventsAsync(backendUri, (identity.DeviceId!, identity.Token!));
         }
         catch (TaskCanceledException) { }
         catch (Exception ex)

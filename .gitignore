@@ -26,4 +26,5 @@ android-companion/local.properties
 windows-companion/bin/
 windows-companion/obj/
 windows-companion/publish/
+artifacts/
 

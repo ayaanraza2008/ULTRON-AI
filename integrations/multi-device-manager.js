@@ -298,7 +298,8 @@ export class MultiDeviceManager {
       screenLocked: deviceMeta.screenLocked ?? true,
       online: deviceMeta.online ?? true,
       battery: deviceMeta.battery || { percent: 100, isCharging: false },
-      lastSeenAt: new Date().toISOString(),
+      lastSeenAt: deviceMeta.lastSeenAt || new Date().toISOString(),
+      heartbeatTimeoutMs: deviceMeta.heartbeatTimeoutMs || 90_000,
       currentMedia: null
     };
 
@@ -316,10 +317,28 @@ export class MultiDeviceManager {
     return device;
   }
 
+  isDeviceOnline(deviceOrId) {
+    const dev = typeof deviceOrId === "string" ? this.devices.get(deviceOrId) : deviceOrId;
+    if (!dev || this.revokedDevices.has(dev.id) || dev.status === "revoked") return false;
+    if (dev.online !== true) return false;
+    if (dev.lastSeenAt) {
+      const elapsed = Date.now() - new Date(dev.lastSeenAt).getTime();
+      const timeout = dev.heartbeatTimeoutMs || 90_000;
+      if (elapsed > timeout) {
+        dev.online = false;
+        return false;
+      }
+    }
+    return true;
+  }
+
   listDevices(filter = {}) {
     let list = Array.from(this.devices.values()).filter(device =>
       !this.revokedDevices.has(device.id) && device.status !== "revoked"
     );
+    for (const d of list) {
+      d.online = this.isDeviceOnline(d);
+    }
     if (filter.type) {
       list = list.filter(d => d.type === filter.type);
     }
@@ -519,7 +538,7 @@ export class MultiDeviceManager {
     const cleanCap = String(capability || "").toLowerCase().trim();
     let matches = Array.from(this.devices.values()).filter(d => !this.revokedDevices.has(d.id) && d.status !== "revoked");
     if (onlineOnly) {
-      matches = matches.filter(d => d.online === true);
+      matches = matches.filter(d => this.isDeviceOnline(d));
     }
     if (type) {
       matches = matches.filter(d => d.type === type);
