@@ -40,7 +40,7 @@ import { AgentOrchestrator } from "../agents/orchestrator.js";
 import { egoBrowserAdapter as defaultEgoBrowserAdapter } from "../integrations/browser/ego-lite/ego-adapter.js";
 import { consumeToolApprovalProof } from "../security/tool-approval-authority.js";
 import { getHexStrikeReadiness, runHexStrikeScan } from "../integrations/hexstrike-ai.js";
-import { captureAgentMemory as defaultAgentMemoryCapture } from "../agentmemory-integration.js";
+import { captureAgentMemory as defaultAgentMemoryCapture, agentMemoryReadiness as defaultAgentMemoryReadiness } from "../agentmemory-integration.js";
 
 export const PERMISSION_LEVELS = {
   LEVEL_1_READ: 1,      // Read-only, inspection, telemetry, search
@@ -90,7 +90,7 @@ export class ToolRegistry {
       agentOrchestrator: new AgentOrchestrator(),
       egoBrowserAdapter: defaultEgoBrowserAdapter,
       hexStrike: { getReadiness: getHexStrikeReadiness, runScan: runHexStrikeScan },
-      agentMemoryStore: { capture: defaultAgentMemoryCapture }
+      agentMemoryStore: { capture: defaultAgentMemoryCapture, readiness: defaultAgentMemoryReadiness }
     };
 
     const { approvalVerifier = null, ...runtimeAdapters } = adapters || {};
@@ -445,7 +445,15 @@ export class ToolRegistry {
       requiresConfirmation: false,
       timeoutMs: 5000,
       inputSchema: { type: "object", required: ["content"], properties: { content: { type: "string" }, tags: { type: "array" } } },
-      checkHealth: () => TOOL_STATUS.OPERATIONAL,
+      checkHealth: () => {
+        try {
+          return this.adapters.agentMemoryStore?.readiness?.().configured === true
+            ? TOOL_STATUS.OPERATIONAL
+            : TOOL_STATUS.REQUIRES_CONFIG;
+        } catch {
+          return TOOL_STATUS.ERROR;
+        }
+      },
       execute: async (params, context = {}) => {
         const ownerId = String(context.userId || context.actorId || "").trim();
         if (ownerId && typeof this.adapters.agentMemoryStore?.capture === "function") {
