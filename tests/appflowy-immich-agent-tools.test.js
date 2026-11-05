@@ -132,6 +132,55 @@ test("private-data consent requires an exact current-message attestation", () =>
   ), false);
 });
 
+test("a prior private-data approval cannot authorize a later short confirmation", async () => {
+  let providerCalls = 0;
+  let immichCalls = 0;
+  const env = {
+    OPENROUTER_API_KEY: "provider-test-secret",
+    OPENROUTER_BASE_URL: "https://openrouter.ai/api/v1",
+    OPENROUTER_DEFAULT_MODEL: "openrouter/free",
+    IMMICH_BASE_URL: "https://immich.example.com",
+    IMMICH_API_KEY: "immich-private-key"
+  };
+
+  await withServer(env, ownerId, async (url, options = {}) => {
+    assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+    providerCalls += 1;
+    const payload = JSON.parse(options.body);
+    if (providerCalls === 1) {
+      return new Response(JSON.stringify({
+        choices: [{ message: { role: "assistant", content: null, tool_calls: [{
+          id: "stale-approval-search",
+          type: "function",
+          function: { name: "immich_search_assets", arguments: JSON.stringify({ query: "beach", limit: 5 }) }
+        }] } }]
+      }), { status: 200 });
+    }
+    const toolMessages = payload.messages.filter(message => message.role === "tool");
+    assert.equal(toolMessages.length, 1);
+    const result = JSON.parse(toolMessages[0].content);
+    assert.equal(result.error.code, "AUTONOMY_APPROVAL_REQUIRED");
+    assert.equal(result.approvalRequired, true);
+    return new Response(JSON.stringify({
+      choices: [{ message: { role: "assistant", content: "Please repeat the approval phrase in your current message." } }]
+    }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prompt: "yes",
+        messages: [{ role: "user", content: "I approve reading my Immich photo and video metadata for this request." }]
+      })
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.toolResults[0].result.error.code, "AUTONOMY_APPROVAL_REQUIRED");
+    assert.equal(immichCalls, 0);
+    assert.equal(providerCalls, 2);
+  });
+});
+
 test("explicit current-message approval allows only the requested owner-scoped Immich metadata search", async () => {
   let providerCalls = 0;
   let immichCalls = 0;
