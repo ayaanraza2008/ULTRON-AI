@@ -5,6 +5,19 @@
 **Audit branch:** `audit/overnight-evidence-refresh-20261105`  
 **Purpose:** Record observed repository, CI, Render, and Supabase state without treating documentation or configuration as proof of live capability.
 
+## 0. Follow-up refresh — 2026-11-05 09:45 UTC
+
+This section supersedes the earlier repository/PR snapshot below where the two disagree. The Render and Supabase observations later in this document have **not** been re-queried in this follow-up and remain observations from the earlier audit window.
+
+- **Current main:** `573f31f953997cb0e546ef599f77e66cf8f7775b` (`ci(security): install audited tree without lifecycle scripts`, 2026-11-05 07:45:59 UTC). Exact-head GitHub Actions run [41989534064](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41989534064) completed successfully: both `test` and `world-intelligence-build` jobs passed.
+- **Repository size:** the recursive Git tree for this main commit returned 885 paths and was not truncated.
+- **PR #447 — mobile authorization:** branch `fix/mobile-device-authorization-20261105` is now at `20f3cadd536729bd6f9e3200782f4bd24ca8467c`, with current `main` as its merge base (25 commits ahead, 0 behind). The merge commit brings in the latest mainline Browser Use bridge/workflow/docs updates while preserving the mobile screenshot/sensitive-app and confirmation hardening. Fresh exact-head run [42004618304](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/42004618304) is in progress; PR remains open and unmerged.
+- **PR #448 — AppFlowy/Immich:** draft branch `feat/appflowy-immich-agent-tools-20261105` is now at `51a49f421802ea6b344fa0630216a77202a2e0fa`, stacked on the updated #447 head (46 commits ahead, 0 behind). The merge commit synchronizes the previously missing five parent commits and current mainline changes. Fresh exact-head runs [42004705488](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/42004705488) and [42004694255](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/42004694255) are in progress. Earlier green runs refer to pre-sync SHA `c209ac2f...` and are not proof for the new head.
+- **51-repository reuse matrix:** `docs/REFERENCE_REPOSITORY_DECISIONS_2026-11-05.md` now distinguishes the core `ToolRegistry` from the separate `/api/agent/tools` agent-runtime catalogue. Source inspection confirms agent-runtime schemas and dispatch for OpenViking search/read, OpenSEO, Chatwoot, OpenProject and Cal.diy; AgentMemory is used internally for task-aware recall/capture. AppFlowy and Immich private-data tools remain in draft PR #448 and require exact current-message consent, owner scope and a passing exact-head CI run before merge.
+- **Upstream provenance and license correction:** GitHub API rejected six sampled placeholder upstream SHAs in the prior 56-repository registry. Seven priority entries now carry observed real `main`-branch commits and GitHub-declared license metadata in `reports/repository-integration-registry.json`; OpenViking is AGPL-3.0, AgentMemory Apache-2.0, and Hermes Agent MIT according to current GitHub metadata. The other 49 of 56 entries remain explicitly unverified. This is repository metadata validation, not a complete license/legal review or source-code audit.
+- **Changes made in this follow-up:** only documentation/report files and two feature branches were updated. No changes were pushed to `main`; no PR was merged; no Render deployment, Supabase write/migration, secret change, or production data mutation was performed.
+
+
 ## 1. Repository and release state
 
 - `main` was observed at `d7562b7f79fbc3c3ce76ea5bf7eb6fc285fab8f8` (`fix(browser): install missing Chromium on bridge startup`).
@@ -93,7 +106,7 @@ A focused remediation is in draft PR [#447](https://github.com/ayaanraza2008/ULT
 - The UI exposes explicit device authorization and confirmation.
 - Device execution now rejects stale/offline targets.
 
-**Test status:** The latest CI run [41911536377](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41911536377) completed successfully: **1,613 tests passed, 0 failed, 3 skipped**, and the World Intelligence build passed. The earlier offline-device regression failure was fixed by rejecting explicit targets that are no longer online. PR #447 is still a draft and remains unmerged; no deployment was triggered.
+**Test status:** The latest CI run on PR #447 head `d80e7ff0` completed successfully: **1,614 tests passed, 0 failed, 3 skipped**, and the World Intelligence build passed. Regression coverage includes owner-bound pairing, single-use exact-action approvals, sensitive-app tap/launch blocking, and foreground-package spoof rejection. PR #447 remains draft/unmerged; no deployment was triggered.
 
 ## 8. Why PR #443 must not be merged wholesale
 
@@ -124,25 +137,27 @@ Read-only inspection of the Render workspace confirmed the expected workspace **
 
 | Service | Branch | Latest live commit | Latest deploy result |
 |---|---|---|---|
-| `ultron-ai-core` | `main` | `92cab6a06485045cbb29d2d283c2b07fe121eb55` | succeeded |
-| `ultron-browser-use-core` | `main` | `92cab6a06485045cbb29d2d283c2b07fe121eb55` | succeeded |
-| `ultron-rea-gateway` | `main` | `92cab6a06485045cbb29d2d283c2b07fe121eb55` | succeeded |
+| `ultron-ai-core` | `main` | `81dd9b9e81bf35c5e49e152113e0991fe7362010` | live (docs-only commit) |
+| `ultron-browser-use-core` | `main` | `81dd9b9e81bf35c5e49e152113e0991fe7362010` | live (docs-only commit) |
+| `ultron-rea-gateway` | `main` | `81dd9b9e81bf35c5e49e152113e0991fe7362010` | live (docs-only commit) |
 | `ultron-core-interface` | `feature/ultron-live-core-interface-20261029` | `32e19e563cd791bdd55db7b668b12101d7a13c6f` | succeeded |
 
 - The three `main` services are on the current main commit at inspection time. Recent Render build/deploy events returned succeeded; no `server_failed` event appeared in the inspected recent event pages.
-- The UI service is intentionally/actually tracking a feature branch, not `main`. This is deployment drift to resolve only after comparing its served UI assets and branch diff; do not switch it automatically.
-- All four services are on the Render Free plan in Singapore. The browser bridge and REA gateway have public IP allowlists (`0.0.0.0/0`); their application-level authentication and route protections must be verified independently.
+- The UI service is tracking `feature/ultron-live-core-interface-20261029`, not `main`. The branch is 52 commits ahead / 178 behind `main`. The inspected `core-ui-proxy.mjs`, `public/index.html`, `public/app.js`, `public/hand-gesture-core.js`, and `public/voice-activation.js` have identical content hashes on both branches, but the remaining 34-file branch diff is not fully reconciled; do not switch it automatically.
+- All four services are on the Render Free plan in Singapore, with `autoDeploy: yes` and an empty Render `healthCheckPath`. The core exposes `/api/health`, but Render is not configured to use it; configure this path for the core service after verifying its readiness semantics. A docs-only main commit `81dd9b9e` auto-deployed to the three main-branch services; no runtime application source changed in that commit. The browser bridge and REA gateway have public IP allowlists (`0.0.0.0/0`); their application-level authentication and route protections must be verified independently. The current Render connector exposes no service-settings update action, so auto-deploy was not disabled.
 - No deployment, restart, environment mutation, or service configuration change was performed during this audit.
 
-## 11. AppFlowy agent wiring follow-up
+## 11. AppFlowy and Immich agent wiring follow-up
 
-The AppFlowy adapter was present but its agent tool registration was missing. A separate draft PR [#449](https://github.com/ayaanraza2008/ULTRON-AI/pull/449) now proposes:
-- explicit owner-scoped `check_appflowy`, `appflowy_list_workspaces`, and `appflowy_get_document` tools;
-- deterministic routing for AppFlowy workspace requests;
-- fail-closed behavior when the authenticated user ID is absent;
+The AppFlowy and Immich adapters existed but agent tool registration and private-data approval boundaries needed hardening. Draft PR [#448](https://github.com/ayaanraza2008/ULTRON-AI/pull/448), based on mobile authorization PR #447, now proposes:
+- owner-scoped `check_appflowy`, `appflowy_list_workspaces`, and `appflowy_get_document` tools;
+- owner-scoped Immich status, album listing, and metadata search tools;
+- exact current-message approval before any private AppFlowy document or Immich media metadata read;
+- fail-closed behavior when authenticated user identity is absent;
+- deterministic AppFlowy productivity and Immich media-library routing;
 - owner-only tool-catalog visibility and regression tests.
 
-PR #449 is **draft / unmerged**. Its latest GitHub Actions run passed: **1,610 tests passed, 0 failed, 3 skipped**, and the World Intelligence build passed. The PR is not deployed. The reference-repository matrix should therefore describe AppFlowy as “agent wiring proposed in PR #449; live instance unverified” until the PR is reviewed/merged and an actual AppFlowy instance is smoke-tested.
+PR #448 is **draft / unmerged**. Latest synced CI on merge head `6e216066` passed **1,622 tests (0 failed, 3 skipped)** and the World Intelligence build passed. Standalone PR #449 was closed as superseded. Neither integration is deployed or live-verified; actual AppFlowy/Immich instances and credentials are still required.
 
 
 ## 12. Render runtime-log follow-up
@@ -179,15 +194,31 @@ A subsequent full application-log inspection found a failure that the warning/er
 - The Core proxy's source returns 502 after provider transport/upstream failure or after all eligible provider attempts fail. The current logs do not reveal which upstream provider/model failed, and no provider response body or credentials should be logged.
 - Root cause is **not yet established**. Candidate causes include provider availability/model routing, a rejected provider key, or a provider-side HTTP failure. Do not label Browser Use live-ready or attempt to bypass the health gate.
 
-Next safe diagnostic step: add redacted provider-attempt telemetry (provider name, model ID, upstream HTTP status/error class, attempt index; never API keys or response bodies) to the Core internal proxy, deploy only after explicit deployment authorization, then run a real read-only public-site smoke test. Until then, Browser Use remains a production blocker.
+Next safe diagnostic step: add redacted provider-attempt telemetry (provider name, model ID, upstream HTTP status/error class, attempt index; never API keys or response bodies) to the Core internal proxy, deploy only after explicit deployment authorization, then run a real read-only public-site smoke test. Until repeated smoke runs and a real public-site navigation/extraction test pass consistently, Browser Use should remain marked as intermittently verified rather than production-stable.
 
 
 ## 15. Pull-request verification snapshot
 
-As of 2026-11-04 21:25Z:
-- [PR #447](https://github.com/ayaanraza2008/ULTRON-AI/pull/447) — mobile authorization hardening, draft/unmerged, latest CI green (**1,613 passed, 0 failed, 3 skipped**; World Intelligence build green).
-- [PR #448](https://github.com/ayaanraza2008/ULTRON-AI/pull/448) — AppFlowy + Immich owner-scoped private-read tools with exact current-message approval; draft/unmerged, CI rerunning after final fail-closed and task-routing updates. [PR #449](https://github.com/ayaanraza2008/ULTRON-AI/pull/449) was closed as superseded.
+As of 2026-11-05 05:58Z:
+- [PR #447](https://github.com/ayaanraza2008/ULTRON-AI/pull/447) — mobile authorization hardening, draft/unmerged, latest CI green (**1,614 passed, 0 failed, 3 skipped**; World Intelligence build green).
+- [PR #448](https://github.com/ayaanraza2008/ULTRON-AI/pull/448) — AppFlowy + Immich owner-scoped private-read tools, draft/unmerged; latest synced CI green (**1,622 passed, 0 failed, 3 skipped**; World Intelligence build green). PR #449 was closed as superseded.
 - [PR #450](https://github.com/ayaanraza2008/ULTRON-AI/pull/450) — redacted Browser Use provider-failure diagnostics and startup-smoke readiness gating, draft/unmerged, latest CI green (**1,608 passed, 0 failed, 3 skipped**; World Intelligence build green).
-- [PR #446](https://github.com/ayaanraza2008/ULTRON-AI/pull/446) — this evidence refresh, draft/unmerged.
+- [PR #451](https://github.com/ayaanraza2008/ULTRON-AI/pull/451) — 51-repository decision matrix and evidence correction, draft/unmerged; previous synced CI green (**1,607 passed, 0 failed, 3 skipped**), latest Render evidence update CI rerunning.
 
-No PR has been merged and no deployment was initiated. Green CI does not substitute for source review or external live acceptance tests.
+No PR has been merged and no manual deployment was initiated. Render did auto-deploy docs-only commit 81dd9b9e because autoDeploy is enabled; no runtime application source changed in that commit. Green CI does not substitute for source review or external live acceptance tests.
+
+
+## 16. Latest Browser Use smoke result (after test-only revert deploy)
+
+The Browser Use bridge restarted on the Render deployment of commit `4f2bdf2` (the test-only revert; runtime source remained unchanged). Its startup log sequence at 2026-11-04 21:37Z showed:
+- first Core model-gateway call: HTTP 502;
+- retry: HTTP 200;
+- startup smoke: `status: passed`, target host `example.com`, provider `openrouter-compatible`, model `openrouter/free`, result length 374.
+
+This supersedes the earlier “smoke failed” observation as the latest state: the bridge passed its latest read-only startup smoke, but the transient 502 remains an observed reliability issue. A single startup smoke does not prove sustained uptime or real-world navigation/extraction quality. PR #450's redacted attempt telemetry remains useful for diagnosing future intermittent failures; its readiness gate should be validated before merge.
+
+## 17. Browser Use gateway reliability recheck (2026-11-04 21:42Z)
+
+After the docs-only 81dd9b9e deployment, Render application logs from the Browser Use bridge showed four consecutive HTTP 502 responses from the ULTRON Core internal model-gateway endpoint (21:41:59Z through 21:42:05Z), followed by HTTP 200 at 21:42:21Z. The read-only `example.com` startup smoke then passed using `openrouter/free` with result length 647.
+
+This is a repeat of the earlier 502-then-200 pattern, not a stable success signal. Keep Browser Use classified as **intermittently verified / production reliability blocker** until repeated smoke runs and a real read-only public-site navigation/extraction test pass consistently. PR #450's redacted provider-attempt diagnostics remain the next safe code change; do not merge or deploy without explicit release authorization.
