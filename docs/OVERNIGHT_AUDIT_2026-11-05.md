@@ -93,7 +93,7 @@ A focused remediation is in draft PR [#447](https://github.com/ayaanraza2008/ULT
 - The UI exposes explicit device authorization and confirmation.
 - Device execution now rejects stale/offline targets.
 
-**Test status:** The latest CI run [41911536377](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41911536377) completed successfully: **1,613 tests passed, 0 failed, 3 skipped**, and the World Intelligence build passed. The earlier offline-device regression failure was fixed by rejecting explicit targets that are no longer online. PR #447 is still a draft and remains unmerged; no deployment was triggered.
+**Test status:** The latest CI run on PR #447 head `d80e7ff0` completed successfully: **1,614 tests passed, 0 failed, 3 skipped**, and the World Intelligence build passed. Regression coverage includes owner-bound pairing, single-use exact-action approvals, sensitive-app tap/launch blocking, and foreground-package spoof rejection. PR #447 remains draft/unmerged; no deployment was triggered.
 
 ## 8. Why PR #443 must not be merged wholesale
 
@@ -144,7 +144,7 @@ The AppFlowy and Immich adapters existed but agent tool registration and private
 - deterministic AppFlowy productivity and Immich media-library routing;
 - owner-only tool-catalog visibility and regression tests.
 
-PR #448 is **draft / unmerged**. CI is rerunning after the latest AppFlowy owner-identity and task-routing updates. Standalone PR #449 was closed as superseded. Neither integration is deployed or live-verified; actual AppFlowy/Immich instances and credentials are still required.
+PR #448 is **draft / unmerged**. Its pre-sync CI passed **1,621 tests (0 failed, 3 skipped)**; it has now been synced with PR #447's latest green mobile authorization branch and CI is rerunning on merge head `6e216066`. Standalone PR #449 was closed as superseded. Neither integration is deployed or live-verified; actual AppFlowy/Immich instances and credentials are still required.
 
 
 ## 12. Render runtime-log follow-up
@@ -187,8 +187,8 @@ Next safe diagnostic step: add redacted provider-attempt telemetry (provider nam
 ## 15. Pull-request verification snapshot
 
 As of 2026-11-04 21:25Z:
-- [PR #447](https://github.com/ayaanraza2008/ULTRON-AI/pull/447) — mobile authorization hardening, draft/unmerged, latest CI green (**1,613 passed, 0 failed, 3 skipped**; World Intelligence build green).
-- [PR #449](https://github.com/ayaanraza2008/ULTRON-AI/pull/449) — AppFlowy read-only agent wiring, draft/unmerged, latest CI green (**1,610 passed, 0 failed, 3 skipped**; World Intelligence build green).
+- [PR #447](https://github.com/ayaanraza2008/ULTRON-AI/pull/447) — mobile authorization hardening, draft/unmerged, latest CI green (**1,614 passed, 0 failed, 3 skipped**; World Intelligence build green).
+- [PR #448](https://github.com/ayaanraza2008/ULTRON-AI/pull/448) — AppFlowy + Immich owner-scoped private-read tools; pre-sync CI green (**1,621 passed, 0 failed, 3 skipped**), latest merged-branch CI pending. PR #449 was closed as superseded.
 - [PR #450](https://github.com/ayaanraza2008/ULTRON-AI/pull/450) — redacted Browser Use provider-failure diagnostics, draft/unmerged; CI was still pending at this snapshot.
 - [PR #446](https://github.com/ayaanraza2008/ULTRON-AI/pull/446) — this evidence refresh, draft/unmerged.
 
