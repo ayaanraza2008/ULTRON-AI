@@ -388,7 +388,7 @@ export class AutonomousOrchestrator {
               timerId = setTimeout(() => reject(new Error(`Tool ${step.toolId} timed out after ${tool.timeoutMs}ms`)), tool.timeoutMs);
               if (timerId?.unref) timerId.unref();
             });
-            const mergedParams = { ...step.params, _upstreamArtifacts: artifacts };
+            const mergedParams = (tool.requiresConfirmation === true || Number(tool.permissionLevel) >= PERMISSION_LEVELS.LEVEL_3_SENSITIVE) ? { ...step.params } : { ...step.params, _upstreamArtifacts: artifacts };
             const { toolApprovalProofs, ...publicContext } = context || {};
             const stepApproval = toolApprovalProofs instanceof Map ? toolApprovalProofs.get(step.id) : null;
             const toolContext = stepApproval
