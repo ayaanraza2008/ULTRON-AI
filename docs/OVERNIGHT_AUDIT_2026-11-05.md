@@ -124,14 +124,14 @@ Read-only inspection of the Render workspace confirmed the expected workspace **
 
 | Service | Branch | Latest live commit | Latest deploy result |
 |---|---|---|---|
-| `ultron-ai-core` | `main` | `92cab6a06485045cbb29d2d283c2b07fe121eb55` | succeeded |
-| `ultron-browser-use-core` | `main` | `92cab6a06485045cbb29d2d283c2b07fe121eb55` | succeeded |
-| `ultron-rea-gateway` | `main` | `92cab6a06485045cbb29d2d283c2b07fe121eb55` | succeeded |
+| `ultron-ai-core` | `main` | `81dd9b9e81bf35c5e49e152113e0991fe7362010` | live (docs-only commit) |
+| `ultron-browser-use-core` | `main` | `81dd9b9e81bf35c5e49e152113e0991fe7362010` | live (docs-only commit) |
+| `ultron-rea-gateway` | `main` | `81dd9b9e81bf35c5e49e152113e0991fe7362010` | live (docs-only commit) |
 | `ultron-core-interface` | `feature/ultron-live-core-interface-20261029` | `32e19e563cd791bdd55db7b668b12101d7a13c6f` | succeeded |
 
 - The three `main` services are on the current main commit at inspection time. Recent Render build/deploy events returned succeeded; no `server_failed` event appeared in the inspected recent event pages.
-- The UI service is intentionally/actually tracking a feature branch, not `main`. This is deployment drift to resolve only after comparing its served UI assets and branch diff; do not switch it automatically.
-- All four services are on the Render Free plan in Singapore. The browser bridge and REA gateway have public IP allowlists (`0.0.0.0/0`); their application-level authentication and route protections must be verified independently.
+- The UI service is tracking `feature/ultron-live-core-interface-20261029`, not `main`. The branch is 52 commits ahead / 178 behind `main`. The inspected `core-ui-proxy.mjs`, `public/index.html`, `public/app.js`, `public/hand-gesture-core.js`, and `public/voice-activation.js` have identical content hashes on both branches, but the remaining 34-file branch diff is not fully reconciled; do not switch it automatically.
+- All four services are on the Render Free plan in Singapore, with `autoDeploy: yes` and an empty Render `healthCheckPath`. A docs-only main commit `81dd9b9e` auto-deployed to the three main-branch services; no runtime application source changed in that commit. The browser bridge and REA gateway have public IP allowlists (`0.0.0.0/0`); their application-level authentication and route protections must be verified independently. The current Render connector exposes no service-settings update action, so auto-deploy was not disabled.
 - No deployment, restart, environment mutation, or service configuration change was performed during this audit.
 
 ## 11. AppFlowy and Immich agent wiring follow-up
