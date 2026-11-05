@@ -240,7 +240,8 @@ export class MobilePermissionEngine extends EventEmitter {
     this._recordAudit({
       type: "CONFIRMATION_REQUESTED",
       action,
-      token,
+      deviceId,
+      userId: ownerId,
       status: "PENDING_CONFIRMATION",
       reason
     });
@@ -388,7 +389,6 @@ export class MobilePermissionEngine extends EventEmitter {
       action: actionName,
       deviceId,
       userId,
-      token,
       status: "PENDING_CONFIRMATION",
       reason
     });
@@ -471,11 +471,14 @@ export class MobilePermissionEngine extends EventEmitter {
    * Internal: Append to audit log buffer.
    */
   _recordAudit(entry) {
+    // Confirmation tokens are bearer capabilities: never persist them in the
+    // audit buffer or publish them to audit-event subscribers.
+    const { token: _discardedToken, ...safeEntry } = entry || {};
     const record = {
       id: crypto.randomUUID(),
       timestamp: Date.now(),
       isoTime: new Date().toISOString(),
-      ...entry
+      ...safeEntry
     };
 
     this.auditLogs.push(record);
@@ -488,12 +491,17 @@ export class MobilePermissionEngine extends EventEmitter {
   /**
    * Query recent audit logs with optional device filter.
    */
-  getAuditLogs(deviceId = null, limit = 100) {
-    let logs = this.auditLogs;
+  getAuditLogs(deviceId = null, limit = 100, userId = null) {
+    // Audit entries are private to their authenticated owner. An unscoped
+    // diagnostic caller must not receive a mixed-account audit stream.
+    const ownerId = typeof userId === "string" ? userId.trim() : "";
+    if (!ownerId) return [];
+    let logs = this.auditLogs.filter(log => log.userId === ownerId);
     if (deviceId) {
-      logs = logs.filter(l => l.deviceId === deviceId);
+      logs = logs.filter(log => log.deviceId === deviceId);
     }
-    return logs.slice(-limit);
+    const boundedLimit = Number.isInteger(Number(limit)) ? Math.max(1, Math.min(500, Number(limit))) : 100;
+    return logs.slice(-boundedLimit);
   }
 }
 
