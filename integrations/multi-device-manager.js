@@ -391,17 +391,23 @@ export class MultiDeviceManager {
 
   disconnectDevice(deviceId) {
     const dev = this.devices.get(deviceId);
-    if (!dev) return { success: false, error: "DEVICE_NOT_FOUND" };
+    if (!dev || this.revokedDevices.has(deviceId) || dev.status === "revoked") {
+      return { success: false, error: this.revokedDevices.has(deviceId) ? "DEVICE_REVOKED" : "DEVICE_NOT_FOUND" };
+    }
     dev.online = false;
     dev.lastSeenAt = new Date().toISOString();
+    if (this.isPersistent && !this.saveToDisk()) return { success: false, error: "DEVICE_PERSISTENCE_FAILED" };
     return { success: true, deviceId, online: false };
   }
 
   reconnectDevice(deviceId) {
     const dev = this.devices.get(deviceId);
-    if (!dev) return { success: false, error: "DEVICE_NOT_FOUND" };
+    if (!dev || this.revokedDevices.has(deviceId) || dev.status === "revoked") {
+      return { success: false, error: this.revokedDevices.has(deviceId) ? "DEVICE_REVOKED" : "DEVICE_NOT_FOUND" };
+    }
     dev.online = true;
     dev.lastSeenAt = new Date().toISOString();
+    if (this.isPersistent && !this.saveToDisk()) return { success: false, error: "DEVICE_PERSISTENCE_FAILED" };
     return { success: true, deviceId, online: true };
   }
 
@@ -409,10 +415,8 @@ export class MultiDeviceManager {
    * Unregisters / removes a device from the active fleet.
    */
   unregisterDevice(deviceId) {
-    const exists = this.devices.has(deviceId);
-    if (!exists) return { success: false, error: "DEVICE_NOT_FOUND" };
-    this.devices.delete(deviceId);
-    return { success: true, deviceId, unregistered: true };
+    if (!this.devices.has(deviceId)) return { success: false, error: "DEVICE_NOT_FOUND" };
+    return this.revokeDevice(deviceId, "owner_unregistered");
   }
 
   /**
@@ -420,7 +424,9 @@ export class MultiDeviceManager {
    */
   updateDevicePresence(deviceId, telemetry = {}) {
     const dev = this.devices.get(deviceId);
-    if (!dev) return { success: false, error: "DEVICE_NOT_FOUND" };
+    if (!dev || this.revokedDevices.has(deviceId) || dev.status === "revoked") {
+      return { success: false, error: this.revokedDevices.has(deviceId) ? "DEVICE_REVOKED" : "DEVICE_NOT_FOUND" };
+    }
     if (typeof telemetry.online === "boolean") dev.online = telemetry.online;
     if (telemetry.battery && typeof telemetry.battery.percent === "number") {
       dev.battery = {
@@ -430,6 +436,7 @@ export class MultiDeviceManager {
     }
     if (telemetry.vitals) dev.vitals = telemetry.vitals;
     dev.lastSeenAt = new Date().toISOString();
+    if (this.isPersistent && !this.saveToDisk()) return { success: false, error: "DEVICE_PERSISTENCE_FAILED" };
     return { success: true, deviceId, online: dev.online, lastSeenAt: dev.lastSeenAt };
   }
 
@@ -438,7 +445,7 @@ export class MultiDeviceManager {
    */
   findEligibleDevices(capability, { onlineOnly = true, type = null } = {}) {
     const cleanCap = String(capability || "").toLowerCase().trim();
-    let matches = Array.from(this.devices.values());
+    let matches = Array.from(this.devices.values()).filter(d => !this.revokedDevices.has(d.id) && d.status !== "revoked");
     if (onlineOnly) {
       matches = matches.filter(d => d.online === true);
     }
