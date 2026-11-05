@@ -859,7 +859,7 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
 
     const groqKey = typeof env.GROQ_API_KEY === "string" ? env.GROQ_API_KEY.trim() : "";
     const groqBaseUrl = safeBase(env.GROQ_BASE_URL || "https://api.groq.com/openai/v1");
-    if (groqKey && groqBaseUrl && !seen.has("groq")) {
+    if (env.GROQ_PAID_FALLBACK_ENABLED === "true" && groqKey && groqBaseUrl && !seen.has("groq")) {
       seen.add("groq");
       providers.push({
         name: "groq",

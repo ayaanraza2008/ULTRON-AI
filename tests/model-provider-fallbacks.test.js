@@ -372,6 +372,8 @@ test("automatic OpenRouter fallback ignores invalid, paid, and duplicate model I
 
  
 test("direct Groq and Gemini keys use configured endpoints after OpenRouter free candidates", async () => {
+  // Explicit opt-in is required because Groq may incur usage charges.
+
   const calls = [];
   const env = {
     OPENROUTER_API_KEY: "primary-test-secret",
@@ -381,6 +383,7 @@ test("direct Groq and Gemini keys use configured endpoints after OpenRouter free
     GROQ_API_KEY: "groq-test-secret",
     GROQ_BASE_URL: "https://api.groq.com/openai/v1",
     GROQ_DEFAULT_MODEL: "openai/gpt-oss-120b",
+    GROQ_PAID_FALLBACK_ENABLED: "true",
     GEMINI_API_KEY: "gemini-test-secret",
     GEMINI_BASE_URL: "https://generativelanguage.googleapis.com/v1beta/openai",
     GEMINI_DEFAULT_MODEL: "gemini-3.8-flash"
@@ -400,5 +403,49 @@ test("direct Groq and Gemini keys use configured endpoints after OpenRouter free
     assert.deepEqual(calls.map(call => call.authorization), ["Bearer primary-test-secret", "Bearer groq-test-secret", "Bearer gemini-test-secret"]);
     assert.deepEqual(calls.map(call => call.model), ["openrouter/free", "openai/gpt-oss-120b", "gemini-3.8-flash"]);
     assert.equal(JSON.stringify(calls.map(call => call.body)).includes("untrusted-client-key"), false);
+  });
+});
+
+
+test("Groq paid fallback stays disabled unless explicitly enabled", async () => {
+  const calls = [];
+  const env = {
+    OPENROUTER_API_KEY: "primary-test-secret",
+    OPENROUTER_BASE_URL: "https://openrouter.ai/api/v1",
+    OPENROUTER_DEFAULT_MODEL: "openrouter/free",
+    ULTRON_AVAILABLE_MODELS: "openrouter/free",
+    GROQ_API_KEY: "groq-test-secret",
+    GROQ_BASE_URL: "https://api.groq.com/openai/v1",
+    GROQ_DEFAULT_MODEL: "openai/gpt-oss-120b",
+    GEMINI_API_KEY: "gemini-test-secret",
+    GEMINI_BASE_URL: "https://generativelanguage.googleapis.com/v1beta/openai",
+    GEMINI_DEFAULT_MODEL: "gemini-3.8-flash"
+  };
+  await withServer(env, async (url, options) => {
+    calls.push({ url, authorization: options.headers.Authorization });
+    if (url === "https://openrouter.ai/api/v1/chat/completions") {
+      return new Response(JSON.stringify({ error: { message: "rate limited" } }), { status: 429 });
+    }
+    assert.equal(url, "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions");
+    return new Response(JSON.stringify({
+      model: "gemini-3.8-flash",
+      choices: [{ message: { role: "assistant", content: "Gemini fallback completed." } }]
+    }), { status: 200 });
+  }, async base => {
+    const response = await fetch(base + "/api/agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Say hello" })
+    });
+    assert.equal(response.status, 200);
+    assert.match(await response.text(), /Gemini fallback completed/);
+    assert.deepEqual(calls.map(call => call.url), [
+      "https://openrouter.ai/api/v1/chat/completions",
+      "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+    ]);
+    assert.deepEqual(calls.map(call => call.authorization), [
+      "Bearer primary-test-secret",
+      "Bearer gemini-test-secret"
+    ]);
   });
 });
