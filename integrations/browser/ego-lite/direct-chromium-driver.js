@@ -341,7 +341,14 @@ export class DirectChromiumCdpDriver {
           : Number.isInteger(performanceStatus) && performanceStatus > 0
             ? performanceStatus
             : null;
-        const finalUrl = info?.url || url;
+        // Runtime.evaluate returns the value of JSON.stringify as a string.
+        // Parse it before reading the final URL and readyState.
+        let pageInfo = info;
+        if (typeof pageInfo === "string") {
+          try { pageInfo = JSON.parse(pageInfo); } catch { pageInfo = null; }
+        }
+        const finalUrl = typeof pageInfo?.url === "string" ? pageInfo.url : url;
+        const readyState = typeof pageInfo?.readyState === "string" ? pageInfo.readyState : undefined;
         const isHttpNavigation = /^https?:/i.test(finalUrl);
         if (status === null && isHttpNavigation) {
           throw new Error("Could not observe the main-frame HTTP response status through CDP.");
@@ -371,7 +378,7 @@ export class DirectChromiumCdpDriver {
           executionDriver: this.driverType,
           executionMechanism: "REAL_CDP",
           driverVerified: true,
-          readyState: info?.readyState
+          readyState
         };
       } catch (err) {
         if (options.throwOnError) throw err;
