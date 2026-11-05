@@ -114,6 +114,34 @@ test("ToolRegistry enforces the configured execution timeout and abort signal", 
 });
 
 
+test("ToolRegistry treats undefined optional object fields consistently in approval fingerprints", async () => {
+  const registry = new ToolRegistry();
+  let calls = 0;
+  const tool = registry.registerTool({
+    id: "undefined-optional-proof-tool",
+    name: "Undefined optional proof test",
+    category: TOOL_CATEGORIES.SYSTEM_CONTROL,
+    permissionLevel: PERMISSION_LEVELS.LEVEL_4_CRITICAL,
+    execute: async () => { calls += 1; return { ok: true }; }
+  });
+  const proof = createToolApprovalProof({
+    actorId: "owner-a",
+    toolId: tool.id,
+    permissionLevel: tool.permissionLevel,
+    approvalId: "appr-undefined-optional",
+    params: { destination: "/approved/path", optionalFlag: undefined }
+  });
+
+  assert.deepEqual(
+    await registry.execute(tool.id, { destination: "/approved/path" }, {
+      actorId: "owner-a",
+      toolApprovalProof: proof
+    }),
+    { ok: true }
+  );
+  assert.equal(calls, 1);
+});
+
 test("ToolRegistry rejects an approval proof when execution parameters change", async () => {
   const registry = new ToolRegistry();
   let calls = 0;
