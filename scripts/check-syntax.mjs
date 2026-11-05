@@ -181,6 +181,8 @@ const FILES_TO_CHECK = [
   "system/windows-desktop-agent.js",
   "tests/windows-desktop-agent.test.js",
   "integrations/multi-device-manager.js",
+  "integrations/multi-device-persistence.js",
+  "tests/multidevice-persistence.test.js",
   "tests/multi-device-manager.test.js",
   "integrations/android-bridge.js",
   "tests/android-bridge.test.js",

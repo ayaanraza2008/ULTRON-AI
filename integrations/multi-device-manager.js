@@ -15,6 +15,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { deviceHub as defaultDeviceHub } from "./device-hub.js";
 import { deviceWebSocketGateway as defaultDeviceGateway } from "./device-websocket-gateway.js";
+import {
+  BaseMultiDevicePersistenceAdapter,
+  FilePersistenceAdapter,
+  DatabasePersistenceAdapter,
+  createMultiDevicePersistenceAdapter
+} from "./multi-device-persistence.js";
 
 export const DEVICE_TYPES = {
   WINDOWS_PC: "windows_pc",
@@ -38,10 +44,18 @@ export class MultiDeviceManager {
     this.subscribers = new Map();
     this.pendingDeliveries = new Map();
     this.revokedDevices = new Set();
+    this.env = options.env || process.env;
     this.storagePath = options.storagePath || path.resolve(process.cwd(), "data", "multidevice-state.json");
     // Persistence is opt-in for isolated instances; the production singleton
     // explicitly enables it. Tests and short-lived tools stay side-effect free.
-    this.isPersistent = Boolean(options.persist === true || options.storagePath);
+    this.isPersistent = Boolean(options.persist === true || options.storagePath || options.persistenceAdapter || options.databaseUrl || this.env.ULTRON_DATABASE_URL || options.inMemoryMockDb);
+    this.persistenceAdapter = options.persistenceAdapter || (this.isPersistent ? createMultiDevicePersistenceAdapter({
+      storagePath: this.storagePath,
+      databaseUrl: options.databaseUrl || this.env.ULTRON_DATABASE_URL,
+      supabaseRest: options.supabaseRest,
+      inMemoryMockDb: options.inMemoryMockDb,
+      logger: options.logger
+    }) : null);
     this.isInitializing = true;
     if (options.seedDefaultFleet !== false) {
       this.initializeDefaultFleet();
@@ -61,63 +75,74 @@ export class MultiDeviceManager {
     }
   }
 
+  serializeState() {
+    return {
+      version: "2.0.0",
+      savedAt: new Date().toISOString(),
+      devices: Array.from(this.devices.entries()),
+      sharedState: Array.from(this.sharedState.entries()),
+      pendingDeliveries: Array.from(this.pendingDeliveries.entries()),
+      revokedDevices: Array.from(this.revokedDevices)
+    };
+  }
+
+  hydrateState(data) {
+    if (!data) return false;
+    if (Array.isArray(data.devices)) {
+      for (const [id, entry] of data.devices) {
+        if (id && entry) {
+          // An online flag from disk is never proof of current connectivity.
+          this.devices.set(id, { ...entry, online: false });
+        }
+      }
+    }
+    if (Array.isArray(data.sharedState)) {
+      for (const [key, state] of data.sharedState) {
+        if (key && state) this.sharedState.set(key, state);
+      }
+    }
+    if (Array.isArray(data.pendingDeliveries)) {
+      for (const [id, queue] of data.pendingDeliveries) {
+        if (id && Array.isArray(queue)) this.pendingDeliveries.set(id, queue);
+      }
+    }
+    if (Array.isArray(data.revokedDevices)) {
+      this.revokedDevices = new Set(data.revokedDevices);
+    }
+    return true;
+  }
+
   saveToDisk() {
     if (!this.isPersistent) return false;
-    let tmpPath = null;
-    try {
-      const dir = path.dirname(this.storagePath);
-      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      const serialized = {
-        savedAt: new Date().toISOString(),
-        devices: Array.from(this.devices.entries()),
-        sharedState: Array.from(this.sharedState.entries()),
-        pendingDeliveries: Array.from(this.pendingDeliveries.entries()),
-        revokedDevices: Array.from(this.revokedDevices)
-      };
-      // Write beside the destination and rename so a crash cannot leave a
-      // partially written registry/state document.
-      tmpPath = `${this.storagePath}.${process.pid}.${crypto.randomUUID()}.tmp`;
-      fs.writeFileSync(tmpPath, JSON.stringify(serialized, null, 2), { encoding: "utf8", mode: 0o600 });
-      fs.renameSync(tmpPath, this.storagePath);
-      return true;
-    } catch {
-      if (tmpPath) {
-        try { fs.unlinkSync(tmpPath); } catch {}
-      }
-      return false;
+    if (this.persistenceAdapter && typeof this.persistenceAdapter.saveSync === "function") {
+      return this.persistenceAdapter.saveSync(this.serializeState());
     }
+    return false;
   }
 
   loadFromDisk() {
-    try {
-      if (!fs.existsSync(this.storagePath)) return false;
-      const raw = fs.readFileSync(this.storagePath, "utf8");
-      const data = JSON.parse(raw);
-      if (Array.isArray(data.devices)) {
-        for (const [id, entry] of data.devices) {
-          if (id && entry) {
-            // An online flag from disk is never proof of current connectivity.
-            this.devices.set(id, { ...entry, online: false });
-          }
-        }
-      }
-      if (Array.isArray(data.sharedState)) {
-        for (const [key, state] of data.sharedState) {
-          if (key && state) this.sharedState.set(key, state);
-        }
-      }
-      if (Array.isArray(data.pendingDeliveries)) {
-        for (const [id, queue] of data.pendingDeliveries) {
-          if (id && Array.isArray(queue)) this.pendingDeliveries.set(id, queue);
-        }
-      }
-      if (Array.isArray(data.revokedDevices)) {
-        this.revokedDevices = new Set(data.revokedDevices);
-      }
-      return true;
-    } catch {
-      return false;
+    if (!this.isPersistent) return false;
+    if (this.persistenceAdapter && typeof this.persistenceAdapter.loadSync === "function") {
+      const data = this.persistenceAdapter.loadSync();
+      return this.hydrateState(data);
     }
+    return false;
+  }
+
+  async save() {
+    if (!this.isPersistent || !this.persistenceAdapter) return false;
+    return await this.persistenceAdapter.save(this.serializeState());
+  }
+
+  async load() {
+    if (!this.isPersistent || !this.persistenceAdapter) return false;
+    const data = await this.persistenceAdapter.load();
+    return this.hydrateState(data);
+  }
+
+  setPersistenceAdapter(adapter) {
+    this.persistenceAdapter = adapter;
+    this.isPersistent = Boolean(adapter);
   }
 
   subscribeDevice(deviceId, callback) {
@@ -753,3 +778,10 @@ export class MultiDeviceManager {
 // Real runtime starts with no fabricated online devices. Actual devices must pair
 // and heartbeat before they can be selected for remote operations.
 export const multiDeviceManager = new MultiDeviceManager({ seedDefaultFleet: false, persist: true, registerDeliveryAckHandler: true });
+
+export {
+  BaseMultiDevicePersistenceAdapter,
+  FilePersistenceAdapter,
+  DatabasePersistenceAdapter,
+  createMultiDevicePersistenceAdapter
+};
