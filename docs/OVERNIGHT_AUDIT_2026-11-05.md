@@ -186,13 +186,13 @@ Next safe diagnostic step: add redacted provider-attempt telemetry (provider nam
 
 ## 15. Pull-request verification snapshot
 
-As of 2026-11-04 21:25Z:
+As of 2026-11-05 05:58Z:
 - [PR #447](https://github.com/ayaanraza2008/ULTRON-AI/pull/447) — mobile authorization hardening, draft/unmerged, latest CI green (**1,614 passed, 0 failed, 3 skipped**; World Intelligence build green).
 - [PR #448](https://github.com/ayaanraza2008/ULTRON-AI/pull/448) — AppFlowy + Immich owner-scoped private-read tools, draft/unmerged; latest synced CI green (**1,622 passed, 0 failed, 3 skipped**; World Intelligence build green). PR #449 was closed as superseded.
-- [PR #450](https://github.com/ayaanraza2008/ULTRON-AI/pull/450) — redacted Browser Use provider-failure diagnostics, draft/unmerged; CI was still pending at this snapshot.
-- [PR #446](https://github.com/ayaanraza2008/ULTRON-AI/pull/446) — this evidence refresh, draft/unmerged.
+- [PR #450](https://github.com/ayaanraza2008/ULTRON-AI/pull/450) — redacted Browser Use provider-failure diagnostics and startup-smoke readiness gating, draft/unmerged, latest CI green (**1,608 passed, 0 failed, 3 skipped**; World Intelligence build green).
+- [PR #451](https://github.com/ayaanraza2008/ULTRON-AI/pull/451) — 51-repository decision matrix and evidence correction, draft/unmerged; previous synced CI green (**1,607 passed, 0 failed, 3 skipped**), latest Render evidence update CI rerunning.
 
-No PR has been merged and no deployment was initiated. Green CI does not substitute for source review or external live acceptance tests.
+No PR has been merged and no manual deployment was initiated. Render did auto-deploy docs-only commit 81dd9b9e because autoDeploy is enabled; no runtime application source changed in that commit. Green CI does not substitute for source review or external live acceptance tests.
 
 
 ## 16. Latest Browser Use smoke result (after test-only revert deploy)
@@ -203,3 +203,9 @@ The Browser Use bridge restarted on the Render deployment of commit `4f2bdf2` (t
 - startup smoke: `status: passed`, target host `example.com`, provider `openrouter-compatible`, model `openrouter/free`, result length 374.
 
 This supersedes the earlier “smoke failed” observation as the latest state: the bridge passed its latest read-only startup smoke, but the transient 502 remains an observed reliability issue. A single startup smoke does not prove sustained uptime or real-world navigation/extraction quality. PR #450's redacted attempt telemetry remains useful for diagnosing future intermittent failures; its readiness gate should be validated before merge.
+
+## 17. Browser Use gateway reliability recheck (2026-11-04 21:42Z)
+
+After the docs-only 81dd9b9e deployment, Render application logs from the Browser Use bridge showed four consecutive HTTP 502 responses from the ULTRON Core internal model-gateway endpoint (21:41:59Z through 21:42:05Z), followed by HTTP 200 at 21:42:21Z. The read-only `example.com` startup smoke then passed using `openrouter/free` with result length 647.
+
+This is a repeat of the earlier 502-then-200 pattern, not a stable success signal. Keep Browser Use classified as **intermittently verified / production reliability blocker** until repeated smoke runs and a real read-only public-site navigation/extraction test pass consistently. PR #450's redacted provider-attempt diagnostics remain the next safe code change; do not merge or deploy without explicit release authorization.
