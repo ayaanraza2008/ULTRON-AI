@@ -141,10 +141,10 @@ services:
     runtime: node
     plan: free
     region: singapore
-    branch: main
+    branch: feature/ultron-live-core-interface-20261029
     buildCommand: npm install --ignore-scripts
     startCommand: node core-ui-proxy.mjs
-    healthCheckPath: /
+    healthCheckPath: /healthz
     autoDeployTrigger: commit
     buildFilter:
       paths:
