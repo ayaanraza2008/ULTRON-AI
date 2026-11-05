@@ -341,16 +341,21 @@ export class DirectChromiumCdpDriver {
           : Number.isInteger(performanceStatus) && performanceStatus > 0
             ? performanceStatus
             : null;
-        if (status === null) {
+        const finalUrl = info?.url || url;
+        const isHttpNavigation = /^https?:/i.test(finalUrl);
+        if (status === null && isHttpNavigation) {
           throw new Error("Could not observe the main-frame HTTP response status through CDP.");
         }
+        // about:blank and other browser-internal schemes have no HTTP response.
+        // Preserve REAL_CDP control and report status 0 rather than inventing 200.
+        const reportedStatus = status ?? 0;
         const snapshotResult = await this._extractRealElements(pageId);
 
         const pageData = {
           pageId,
-          url: info?.url || url,
+          url: finalUrl,
           title: title || "",
-          status,
+          status: reportedStatus,
           html: "",
           extractedElements: snapshotResult,
           navigatedAt: new Date().toISOString()
