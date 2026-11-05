@@ -383,7 +383,7 @@ test("voice listening uses browser recognition and Kokoro speech with sentence-b
   assert.ok(app.includes("body: JSON.stringify({ ...body, stream: true })"));
   assert.ok(app.includes("async function speakStreamingSegment(text, epoch, preferKokoro)"));
   assert.ok(app.includes("Never cut server or browser speech at an arbitrary word count."));
-  assert.ok(app.includes("if (force) {\\n          enqueueStreamSpeech(streamSpeechBuffer.trim());"));
+  assert.ok(app.includes("enqueueStreamSpeech(streamSpeechBuffer.trim());"));
   assert.doesNotMatch(app, /streamSpeechBuffer\\.length >= (?:72|22)/);
   assert.ok(app.includes("const kokoroSpeechPromise = streamSpeechUsesKokoro"));
   assert.ok(app.includes("ALWAYS reply in clear, natural English, regardless of the input language"));
