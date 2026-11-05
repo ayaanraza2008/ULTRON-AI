@@ -11,6 +11,7 @@ function serviceBlock(name) {
   return blueprint.slice(start, nextService < 0 ? undefined : nextService);
 }
 
+// Keep the UI service pinned to its deployed branch and its dedicated /healthz endpoint.
 test("Render Blueprint preserves the existing separately deployed ULTRON interface branch", () => {
   const ui = serviceBlock("ultron-core-interface");
   assert.match(ui, /branch:\s*feature\/ultron-live-core-interface-20261029/);
