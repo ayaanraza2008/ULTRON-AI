@@ -16,15 +16,16 @@
 
 The previous canonical score of **85.10%** was calculated from the 2026-11-04 candidate PR #441 evidence. It is retained only as a historical baseline; the 2026-11-05 evidence refresh did not recompute a new weighted score. Do not report 85.10% as a freshly verified current score or claim 100%.
 
-PR #441 has since been merged to `main`. PRs #444 (guarded HexStrike) and #445 (telephony webhook hardening/free-mode guardrails) were also reported merged by the 2026-11-05 independent audit. PR #447 remains a draft and contains important mobile authorization hardening. PR #448 is a dependent draft for owner-approved AppFlowy/Immich tools. PR #450 adds Browser Use gateway diagnostics/readiness gating. PR #451 is documentation-only.
+PR #441 has since been merged to `main`. PRs #444 (guarded HexStrike) and #445 (telephony webhook hardening/free-mode guardrails) were also reported merged by the 2026-11-05 independent audit. PR #447 is ready for review and contains mobile authorization hardening. PR #448 is a dependent draft for owner-approved AppFlowy/Immich tools; its latest head additionally binds private-data consent to the exact document ID or media query and is awaiting CI. PR #450 adds Browser Use gateway diagnostics/readiness gating and is ready for review. PR #451 is documentation-only and ready for review. PR #453 fixes Chromium/CDP HTTP status reporting and is ready for review. PR #454 hardens action-bound approval proofs, truthful inference status and owner-scoped memory; its latest exact-head CI passed and it is ready for review.
 
 ## Verified software and CI evidence
 
 - PR #441 candidate baseline: 1,467 discovered tests; 1,466 passed, 0 failed, 1 intentionally skipped; 357/357 syntax checks clean; 44 Python tests passed; Windows and Android companion builds passed; World Intelligence build passed; repository security gate reported zero findings.
 - PR #447 mobile authorization + Chromium startup hardening: exact-head CI passed 1,617 tests (1,614 passed, 0 failed, 3 skipped); World Intelligence build and repository security quality gate passed. The PR is ready for review and remains unmerged.
-- PR #448 AppFlowy/Immich branch: latest reported CI passed 1,622 tests, 0 failed, 3 skipped; World Intelligence build passed. It remains dependent on PR #447 and unmerged.
-- PR #450 Browser Use gateway branch: latest reported CI passed 1,608 tests, 0 failed, 3 skipped; World Intelligence build passed. The bridge had one HTTP 502 followed by a successful retry and read-only smoke; this is recovery evidence, not reliability certification.
-- PR #454 approval-proof and truthful memory/inference hardening: current head `009b79eb0e05453fc108e903d16d7310513f7a41` is in draft while expanded owner-scoped memory changes run through CI. Earlier exact head `51dbf693` passed 1,613 tests, 0 failed, 3 skipped; do not transfer that pass result to the newer head.
+- PR #448 AppFlowy/Immich branch: previous exact head `6e216066` passed 1,622 tests, 0 failed, 3 skipped; the latest head `68abf85a7385431e78d7767c4e88dc829974197d` adds target-bound private-data approval and is awaiting CI. It remains dependent on PR #447 and unmerged.
+- PR #450 Browser Use gateway branch: exact-head CI passed 1,611 tests (1,608 passed, 0 failed, 3 skipped) and World Intelligence build passed. Render logs show repeated HTTP 502 bursts: one startup smoke eventually passed after retry, while a later startup smoke failed after repeated 502s. This is intermittent recovery, not reliability certification.
+- PR #453 Chromium/CDP HTTP status fix: exact head `ac915fb5b5ec7eb072c727fc628b32fb49e7aec1`; CI run 41977929754 passed 1,610 tests (1,607 passed, 0 failed, 3 skipped) and World Intelligence build.
+- PR #454 approval-proof and truthful memory/inference hardening: exact head `8eae1eeaa83327d79d6644ddc95bbd30e8a76fc1`; CI run 41980867968 passed 1,621 tests (1,618 passed, 0 failed, 3 skipped), with World Intelligence build and repository security gate passing. It is ready for review.
 - Latest observed main commit is `81dd9b9e81bf35c5e49e152113e0991fe7362010` (2026-11-04 21:40:40 UTC). Render backend services last recorded successful deploys from this commit on 2026-11-04 around 21:41 UTC. Feature-branch PRs below are not part of deployed main. No GitHub Actions run for that exact main SHA was returned by the current workflow-run lookup, so current-main CI is **not independently verified**.
 - A 2026-11-05 repository audit found 882 tracked paths at the preceding main commit, including the existing command-center frontend, core, agents, voice, vision, Windows/Android companion source, and integration adapters.
 
@@ -40,14 +41,14 @@ PR #441 has since been merged to `main`. PRs #444 (guarded HexStrike) and #445 (
 - Durable worker execution and persistence remain unverified until a guarded smoke test completes against a disposable test user and confirms cleanup.
 - Mobile device authorization fixes in PR #447 must be reviewed and merged before relying on the old main-branch mobile-control path.
 - Source files for AppFlowy, OpenSEO, Immich, OpenViking, AgentMemory, and productivity connectors do not by themselves mean those capabilities are registered in ToolRegistry or callable end-to-end. The 2026-11-05 audit found ToolRegistry exposed 46 tool IDs and identified several wiring gaps.
-- Browser Use read-only smoke recovered after an HTTP 502; reliability remains intermittent.
+- Browser Use startup smoke has shown repeated HTTP 502s; one attempt recovered and passed, while a later attempt failed. Reliability remains a release blocker until repeated runs are stable.
 - Real microphone, wake word, camera, gestures, Windows control, and Android control require actual companion/device acceptance tests. CI builds are not device acceptance.
 
 ## Priority build sequence
 
 1. Finish and verify the latest main CI run; record exact commit and run IDs.
 2. Review and safely land mobile authorization hardening (PR #447) before expanding mobile actions.
-3. Wire existing owner-scoped AppFlowy, Immich, OpenSEO, OpenViking and AgentMemory adapters into the agent/tool surface only with exact owner checks, current-message consent for private reads, and regression tests.
+3. Wire existing owner-scoped AppFlowy, Immich, OpenSEO, OpenViking and AgentMemory adapters into the agent/tool surface only with exact owner checks, current-message consent bound to the selected document/search target, and regression tests.
 4. Complete provider configuration diagnosis and guarded live model smoke; do not invent credentials or bypass provider authentication.
 5. Run the disposable-user worker lifecycle smoke and verify persisted terminal state plus cleanup.
 6. Exercise the separate frontend against the backend: sign-in, chat, history persistence, streaming, voice, vision permissions, and failure recovery.
