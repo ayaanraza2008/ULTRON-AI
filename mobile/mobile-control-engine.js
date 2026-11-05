@@ -20,7 +20,8 @@ const MOBILE_INTERACTION_APPROVAL_ACTIONS = new Set([
   "mobile_swipe_on_screen",
   "mobile_type_keys",
   "mobile_press_button",
-  "mobile_open_url"
+  "mobile_open_url",
+  "mobile_take_screenshot"
 ]);
 const MOBILE_APP_APPROVAL_ACTIONS = new Set([
   "mobile_launch_app",
