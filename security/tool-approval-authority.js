@@ -24,7 +24,14 @@ function stableSerialize(value, seen = new WeakSet(), depth = 0) {
   if (seen.has(value)) throw new TypeError("Approval parameters contain a circular reference.");
   seen.add(value);
   try {
-    if (Array.isArray(value)) return "[" + value.map(item => stableSerialize(item, seen, depth + 1)).join(",") + "]";
+    if (Array.isArray(value)) {
+      // Array.from visits sparse slots, matching JSON.stringify's null handling.
+      return "[" + Array.from(value, item => stableSerialize(item, seen, depth + 1)).join(",") + "]";
+    }
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) {
+      throw new TypeError("Approval parameters must contain plain objects.");
+    }
     const keys = Object.keys(value).filter(key => value[key] !== undefined).sort();
     return "{" + keys.map(key =>
       JSON.stringify(key) + ":" + stableSerialize(value[key], seen, depth + 1)
