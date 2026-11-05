@@ -144,7 +144,7 @@ The AppFlowy and Immich adapters existed but agent tool registration and private
 - deterministic AppFlowy productivity and Immich media-library routing;
 - owner-only tool-catalog visibility and regression tests.
 
-PR #448 is **draft / unmerged**. Its pre-sync CI passed **1,621 tests (0 failed, 3 skipped)**; it has now been synced with PR #447's latest green mobile authorization branch and CI is rerunning on merge head `6e216066`. Standalone PR #449 was closed as superseded. Neither integration is deployed or live-verified; actual AppFlowy/Immich instances and credentials are still required.
+PR #448 is **draft / unmerged**. Latest synced CI on merge head `6e216066` passed **1,622 tests (0 failed, 3 skipped)** and the World Intelligence build passed. Standalone PR #449 was closed as superseded. Neither integration is deployed or live-verified; actual AppFlowy/Immich instances and credentials are still required.
 
 
 ## 12. Render runtime-log follow-up
@@ -188,7 +188,7 @@ Next safe diagnostic step: add redacted provider-attempt telemetry (provider nam
 
 As of 2026-11-04 21:25Z:
 - [PR #447](https://github.com/ayaanraza2008/ULTRON-AI/pull/447) — mobile authorization hardening, draft/unmerged, latest CI green (**1,614 passed, 0 failed, 3 skipped**; World Intelligence build green).
-- [PR #448](https://github.com/ayaanraza2008/ULTRON-AI/pull/448) — AppFlowy + Immich owner-scoped private-read tools; pre-sync CI green (**1,621 passed, 0 failed, 3 skipped**), latest merged-branch CI pending. PR #449 was closed as superseded.
+- [PR #448](https://github.com/ayaanraza2008/ULTRON-AI/pull/448) — AppFlowy + Immich owner-scoped private-read tools, draft/unmerged; latest synced CI green (**1,622 passed, 0 failed, 3 skipped**; World Intelligence build green). PR #449 was closed as superseded.
 - [PR #450](https://github.com/ayaanraza2008/ULTRON-AI/pull/450) — redacted Browser Use provider-failure diagnostics, draft/unmerged; CI was still pending at this snapshot.
 - [PR #446](https://github.com/ayaanraza2008/ULTRON-AI/pull/446) — this evidence refresh, draft/unmerged.
 
