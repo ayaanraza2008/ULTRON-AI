@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import express from "express";
 import { createAgentRouter } from "../agent-runtime.js";
 import { ImmichConnector } from "../integrations/immich.js";
-import { parsePrivateDataReadApproval } from "../agent-runtime.js";
+import { parsePrivateDataReadApproval, privateDataReadApprovalMatchesAction } from "../agent-runtime.js";
 
 const ownerId = "00000000-0000-4000-8000-000000000001";
 
@@ -111,6 +111,16 @@ test("private Immich search is blocked until an explicit approval and never call
     assert.equal(providerCalls, 2);
     assert.equal(immichCalls, 0);
   });
+});
+
+test("private-data approval is bound to the exact document ID or media query in the current message", () => {
+  const appflowyMessage = "I approve reading my AppFlowy workspace and documents for this request. Read document doc-99."; 
+  assert.equal(privateDataReadApprovalMatchesAction(appflowyMessage, "appflowy_get_document", { documentId: "doc-99" }), true);
+  assert.equal(privateDataReadApprovalMatchesAction(appflowyMessage, "appflowy_get_document", { documentId: "doc-100" }), false);
+  const immichMessage = "I approve reading my Immich photo and video metadata for this request. Search for beach photos."; 
+  assert.equal(privateDataReadApprovalMatchesAction(immichMessage, "immich_search_assets", { query: "beach" }), true);
+  assert.equal(privateDataReadApprovalMatchesAction(immichMessage, "immich_search_assets", { query: "vacation" }), false);
+  assert.equal(privateDataReadApprovalMatchesAction(immichMessage, "immich_list_albums", {}), true);
 });
 
 test("private-data consent requires an exact current-message attestation", () => {
