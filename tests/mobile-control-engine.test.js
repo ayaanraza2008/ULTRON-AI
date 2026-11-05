@@ -214,3 +214,42 @@ test("MobileControlEngine: emergency stop halts all actions immediately", async 
 
   await engine.shutdown();
 });
+
+test("MobileControlEngine: Level-3 tool approval cannot bypass Level-4 sensitive-app confirmation", async () => {
+  const mockAdb = new MockAdbBridge();
+  const mockMcp = new MockMcpClient();
+  const registry = new MobileDeviceRegistry({ adbBridge: mockAdb });
+  const permissions = new MobilePermissionEngine();
+  const engine = new MobileControlEngine({
+    adbBridge: mockAdb,
+    mcpClient: mockMcp,
+    deviceRegistry: registry,
+    permissionEngine: permissions,
+    autoStartMcp: false
+  });
+
+  await engine.initialize();
+  engine.authorizeDevice("emulator-5554", "test-owner", MOBILE_PERMISSION_LEVELS.LEVEL_2_INTERACTION);
+
+  const result = await engine.executeAction("tap", {
+    device: "emulator-5554",
+    x: 10,
+    y: 20,
+    package: "com.google.android.apps.walletnfcrel"
+  }, {
+    userId: "test-owner",
+    mobileApprovalVerified: true,
+    mobileApprovalActorId: "test-owner",
+    mobileApprovalToolId: "mobile_interaction_dispatch",
+    mobileApprovalPermissionLevel: MOBILE_PERMISSION_LEVELS.LEVEL_3_SENSITIVE
+  });
+
+  assert.equal(result.success, false);
+  assert.equal(result.requiresConfirmation, true);
+  assert.equal(result.code, "CONFIRMATION_REQUIRED");
+  assert.ok(result.confirmationToken);
+  assert.equal(mockMcp.commandLog?.length || 0, 0);
+
+  await engine.shutdown();
+});
+
