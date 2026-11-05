@@ -8,14 +8,17 @@
 
 > **Release verdict: NOT PRODUCTION-READY.** The primary candidate PR #441 has already merged, but merge status is not production acceptance. Current work remains in review branches and live acceptance gates remain open. No deployment or production migration was performed during this audit.
 
-## Latest follow-up — 2026-11-05 11:52 UTC (17:22 Asia/Kolkata)
+## Current evidence — 2026-11-05 12:15 UTC (17:45 Asia/Kolkata)
 
-- Consolidated review candidate [PR #473](https://github.com/ayaanraza2008/ULTRON-AI/pull/473) is open, mergeable and unmerged at `f5d409a986b208a3687ce23408afa2f126a47efd`, based on main `573f31f953997cb0e546ef599f77e66cf8f7775b`.
-- Exact-head GitHub Actions [42022174570](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/42022174570) passed both `test` and `world-intelligence-build`; syntax passed 386/386, dependency audit reported 0 vulnerabilities, and 3 tests were skipped.
-- Candidate includes the real CDP main-document HTTP status fix plus tests for 404, browser-internal URLs and missing response evidence. Browser source PRs #450/#453/#462 were closed without merge as superseded by #473. Earlier source PRs #457/#460/#461/#467/#470/#471 are also closed without merge.
-- The code and Render Blueprint changes remain review-only. No PR merged; no Render Blueprint sync, deployment, Supabase migration, production secret update or data mutation was performed.
-- Production acceptance blockers remain: no paired-device tables in Supabase (15 migrations applied), leaked-password protection disabled, no authenticated persisted worker-task proof, no live text/vision model inference acceptance, no two-account live RLS acceptance, no verified live Browser Use task with Chromium, blank health checks on live Render services, and unprotected `main`.
-- PR #456 (migration-ledger cleanup) and PR #466 (evidence refresh) remain separate open reviews. Do not run migrations or deploy as part of review-branch work.
+- Backend [PR #473](https://github.com/ayaanraza2008/ULTRON-AI/pull/473) is open, mergeable, unmerged at `0fcca7f65b00d306e993eb307d0b00d20c8284bc`; exact-head Actions [42024635761](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/42024635761) passed `test` and `world-intelligence-build`. The real Chromium/CDP test, Browser Use bridge checks, disposable PostgreSQL suite and security quality gate passed; syntax 386/386 and dependency audit 0 vulnerabilities.
+- Backend #473 exposes authenticated owner-scoped employee task API endpoints. Its provider/worker guard, bounded input, owner filters and audit attempt are test-covered. This is code/CI proof, not production user acceptance.
+- Living Core task drawer [PR #474](https://github.com/ayaanraza2008/ULTRON-AI/pull/474) is open, mergeable, unmerged at `58c99c2b620e0437422c4740eb69f1655b679d43`; exact-head Actions [42025331336](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/42025331336) passed both jobs. Its target base is the deployed UI branch and merge can auto-deploy; do not merge before backend #473 is available and explicit interface release approval.
+- Manual model/text+vision and two-account RLS acceptance workflows are staged in #473, default NO, and have not been run.
+- Production Supabase still has 15 migrations and lacks `paired_devices` / `pending_device_pairings`; Leaked Password Protection is disabled. The corresponding migration is not applied.
+- No live task proof exists yet for enqueue → claim → execute → persist result → audit readback through a signed-in disposable test account. No live model inference or two-account RLS acceptance has run.
+- Render live services still have blank health-check paths. Browser Use live service build does not yet install Playwright/Chromium. Candidate `render.yaml` branch/health fixes are not synced to Render.
+- `main` has no branch protection/required checks. Current main is still `573f31f953997cb0e546ef599f77e66cf8f7775b`.
+- No PR merge, Render Blueprint sync/deploy, Supabase production migration, production secret/configuration change or production data write was performed.
 
 ## 1. Historical mainline and integration snapshot — 2026-11-05 10:40 UTC (superseded where conflicting by the current follow-up above)
 
