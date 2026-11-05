@@ -31,7 +31,7 @@
 
 ### Supabase live state
 - Live migration history contains 15 applied migrations, ending at `20261027185203_private_document_storage`.
-- Read-only checks show that `public.paired_devices`, `public.pending_device_pairings`, and `public.paired_device_telemetry` are absent. The durable paired-device and telemetry migrations exist in source but are not applied to production.
+- Read-only checks show that `public.paired_devices` and `public.pending_device_pairings` are absent. The follow-on migration's `battery_percent` and `is_charging` telemetry columns therefore are not live either; the durable paired-device and telemetry migrations exist in source but are not applied to production.
 - `public.agent_tasks`, `public.memory_items`, schedules, and audit tables exist, but the audited counts were: **0 tasks** (0 queued, 0 running, 0 completed, 0 failed, 0 blocked), **0 employee schedules**, **0 memory items**, and **0 task audit events in the preceding 24 hours**. A running worker with an empty queue is not evidence of task completion.
 - Supabase Security Advisor still reports **Leaked Password Protection Disabled**. The available integration can inspect this warning but does not expose the Auth dashboard setting needed to enable it.
 
