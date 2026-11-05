@@ -136,15 +136,16 @@ services:
         value: .runtime/geo-sleuth/skills/geo-sleuth
 
   # 2. ULTRON Living Core interface + same-origin API proxy
+  # Preserve the separately deployed live UI branch; do not move this service to backend main.
   - type: web
     name: ultron-core-interface
     runtime: node
     plan: free
     region: singapore
-    branch: main
+    branch: feature/ultron-live-core-interface-20261029
     buildCommand: npm install --ignore-scripts
     startCommand: node core-ui-proxy.mjs
-    healthCheckPath: /
+    healthCheckPath: /healthz
     autoDeployTrigger: commit
     buildFilter:
       paths:
