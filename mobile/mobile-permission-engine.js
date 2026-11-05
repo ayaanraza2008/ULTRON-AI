@@ -73,6 +73,36 @@ export const SENSITIVE_PACKAGES = [
   "com.google.android.apps.authenticator2"
 ];
 
+function stableSerialize(value, seen = new WeakSet(), depth = 0) {
+  if (depth > 24) throw new TypeError("Mobile approval parameters are too deeply nested.");
+  // Match JSON semantics: omit undefined object properties and normalize
+  // undefined array entries (including sparse slots) to null.
+  if (value === undefined || value === null) return "null";
+  if (typeof value === "string" || typeof value === "boolean") return JSON.stringify(value);
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) throw new TypeError("Mobile approval parameters contain a non-finite number.");
+    return JSON.stringify(value);
+  }
+  if (typeof value !== "object") throw new TypeError("Mobile approval parameters must be JSON-compatible.");
+  if (seen.has(value)) throw new TypeError("Mobile approval parameters contain a circular reference.");
+  seen.add(value);
+  try {
+    if (Array.isArray(value)) {
+      return "[" + Array.from(value, item => stableSerialize(item, seen, depth + 1)).join(",") + "]";
+    }
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) {
+      throw new TypeError("Mobile approval parameters must contain plain objects.");
+    }
+    const keys = Object.keys(value).filter(key => value[key] !== undefined).sort();
+    return "{" + keys.map(key =>
+      JSON.stringify(key) + ":" + stableSerialize(value[key], seen, depth + 1)
+    ).join(",") + "}";
+  } finally {
+    seen.delete(value);
+  }
+}
+
 const PRIVATE_SUBNETS = [
   /^127\./,
   /^10\./,
@@ -97,35 +127,48 @@ export class MobilePermissionEngine extends EventEmitter {
   /**
    * Authorize a mobile device for operation.
    */
-  authorizeDevice(deviceId, maxLevel = MOBILE_PERMISSION_LEVELS.LEVEL_3_SENSITIVE, userId = "system") {
-    if (!deviceId) throw new Error("Device ID is required for authorization.");
+  authorizeDevice(deviceId, maxLevel = MOBILE_PERMISSION_LEVELS.LEVEL_2_INTERACTION, userId = null) {
+    const ownerId = typeof userId === "string" ? userId.trim() : "";
+    const level = Number(maxLevel);
+    if (typeof deviceId !== "string" || !deviceId.trim()) throw new Error("Device ID is required for authorization.");
+    if (!ownerId) throw new Error("An authenticated owner ID is required to authorize a device.");
+    if (!Number.isInteger(level) || level < MOBILE_PERMISSION_LEVELS.LEVEL_1_READ || level > MOBILE_PERMISSION_LEVELS.LEVEL_2_INTERACTION) {
+      throw new Error("Persistent device authorization is limited to read and ordinary interaction. Sensitive actions require one-time confirmation.");
+    }
     this.deviceAuthorizations.set(deviceId, {
       authorized: true,
-      maxLevel,
+      maxLevel: level,
       authorizedAt: Date.now(),
-      authorizedBy: userId
+      authorizedBy: ownerId
     });
 
     this._recordAudit({
       type: "DEVICE_AUTHORIZED",
       deviceId,
-      userId,
-      maxLevel,
+      userId: ownerId,
+      maxLevel: level,
       status: "GRANTED"
     });
+    return { success: true, deviceId, maxLevel: level, authorizedBy: ownerId };
   }
 
   /**
    * Revoke device authorization.
    */
-  revokeDevice(deviceId, userId = "system") {
+  revokeDevice(deviceId, userId = null) {
+    const ownerId = typeof userId === "string" ? userId.trim() : "";
+    const existing = this.deviceAuthorizations.get(deviceId);
+    if (!ownerId || !existing || existing.authorizedBy !== ownerId) {
+      throw new Error("Only the authenticated device owner can revoke this authorization.");
+    }
     this.deviceAuthorizations.delete(deviceId);
     this._recordAudit({
       type: "DEVICE_REVOKED",
       deviceId,
-      userId,
+      userId: ownerId,
       status: "REVOKED"
     });
+    return { success: true, deviceId, revokedBy: ownerId };
   }
 
   /**
@@ -177,15 +220,18 @@ export class MobilePermissionEngine extends EventEmitter {
   /**
    * Request confirmation token for an action.
    */
-  requestConfirmation(action, params = {}, reason = "") {
+  requestConfirmation(action, params = {}, reason = "", userId = null) {
+    const ownerId = typeof userId === "string" ? userId.trim() : "";
+    if (!ownerId) throw new Error("An authenticated owner ID is required to request action confirmation.");
     const token = crypto.randomUUID();
     const expiresAt = Date.now() + this.tokenTtlMs;
     const deviceId = params.device || params.deviceId || null;
     const req = {
       token,
       action,
-      params,
+      params: JSON.parse(JSON.stringify(params)),
       deviceId,
+      userId: ownerId,
       reason,
       expiresAt,
       requestedAt: Date.now()
@@ -223,12 +269,16 @@ export class MobilePermissionEngine extends EventEmitter {
   /**
    * Check whether a requested action on a device is permitted.
    */
-  async checkPermission(actionName, params = {}, deviceId, userId = "system", confirmationToken = null) {
+  async checkPermission(actionName, params = {}, deviceId, userId = null, confirmationToken = null, approvalVerified = false) {
+    userId = typeof userId === "string" ? userId.trim() : "";
+    if (!userId) {
+      return { permitted: false, reason: "An authenticated user identity is required for mobile control.", code: "AUTHENTICATED_USER_REQUIRED" };
+    }
     let requiredLevel = ACTION_PERMISSION_TIERS[actionName] || MOBILE_PERMISSION_LEVELS.LEVEL_3_SENSITIVE;
 
-    // 1. Device Authorization Check
+    // 1. Device Authorization Check — pairing is owner-bound, not global.
     const auth = this.deviceAuthorizations.get(deviceId);
-    if (!auth || !auth.authorized) {
+    if (!auth || !auth.authorized || auth.authorizedBy !== userId) {
       this._recordAudit({
         type: "PERMISSION_CHECK",
         action: actionName,
@@ -273,8 +323,10 @@ export class MobilePermissionEngine extends EventEmitter {
       }
     }
 
-    // 4. Critical Tier / Level 4: Requires Single-Use Confirmation Token
-    if (requiredLevel === MOBILE_PERMISSION_LEVELS.LEVEL_4_CRITICAL || auth.maxLevel < requiredLevel) {
+    // 4. Sensitive and critical actions require a fresh owner-bound approval,
+    // unless a trusted server-side tool invocation has already consumed its own
+    // action-bound approval proof at the ToolRegistry boundary.
+    if (!approvalVerified && (requiredLevel >= MOBILE_PERMISSION_LEVELS.LEVEL_3_SENSITIVE || auth.maxLevel < requiredLevel)) {
       if (!confirmationToken) {
         const reason = (targetPkg && SENSITIVE_PACKAGES.includes(targetPkg))
           ? `Interaction with sensitive application '${targetPkg}' requires explicit user confirmation.`
@@ -283,7 +335,7 @@ export class MobilePermissionEngine extends EventEmitter {
       }
 
       // Validate single-use confirmation token
-      const tokenVerification = this.verifyConfirmationToken(confirmationToken, actionName, deviceId);
+      const tokenVerification = this.verifyConfirmationToken(confirmationToken, actionName, deviceId, userId, params);
       if (!tokenVerification.valid) {
         this._recordAudit({
           type: "CONFIRMATION_FAILED",
@@ -324,7 +376,7 @@ export class MobilePermissionEngine extends EventEmitter {
     this.pendingConfirmations.set(token, {
       token,
       action: actionName,
-      params,
+      params: JSON.parse(JSON.stringify(params)),
       deviceId,
       userId,
       expiresAt,
@@ -354,26 +406,31 @@ export class MobilePermissionEngine extends EventEmitter {
   /**
    * Verify and consume a single-use confirmation token.
    */
-  verifyConfirmationToken(token, expectedAction, expectedDeviceId) {
+  verifyConfirmationToken(token, expectedAction, expectedDeviceId, expectedUserId, expectedParams) {
     if (!token || !this.pendingConfirmations.has(token)) {
       return { valid: false, reason: "Confirmation token not found or already consumed (anti-replay)." };
     }
 
     const pending = this.pendingConfirmations.get(token);
-    this.pendingConfirmations.delete(token); // Atomically consume token
-
     if (Date.now() > pending.expiresAt) {
+      this.pendingConfirmations.delete(token);
       return { valid: false, reason: "Confirmation token has expired." };
     }
-
+    if (!expectedUserId || pending.userId !== expectedUserId) {
+      return { valid: false, reason: "Confirmation token belongs to a different authenticated user." };
+    }
     if (pending.action !== expectedAction) {
       return { valid: false, reason: `Token action mismatch: expected '${expectedAction}', found '${pending.action}'` };
     }
-
     if (pending.deviceId && pending.deviceId !== expectedDeviceId) {
       return { valid: false, reason: `Token device mismatch: expected '${expectedDeviceId}', found '${pending.deviceId}'` };
     }
+    if (stableSerialize(pending.params) !== stableSerialize(expectedParams)) {
+      return { valid: false, reason: "Confirmation token parameters do not match the originally approved action." };
+    }
 
+    // Consume only after all identity, action, device, and parameter bindings have been validated.
+    this.pendingConfirmations.delete(token);
     return { valid: true, pending };
   }
 

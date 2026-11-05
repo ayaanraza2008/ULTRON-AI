@@ -10,8 +10,66 @@ import { EventEmitter } from "node:events";
 import { adbBridge } from "./adb-bridge.js";
 import { mobileMcpClient, MCP_CLIENT_STATUS } from "./mobile-mcp-client.js";
 import { mobileDeviceRegistry, DEVICE_STATES } from "./mobile-device-registry.js";
-import { mobilePermissionEngine, MOBILE_PERMISSION_LEVELS } from "./mobile-permission-engine.js";
+import { mobilePermissionEngine, MOBILE_PERMISSION_LEVELS, ACTION_PERMISSION_TIERS, SENSITIVE_PACKAGES } from "./mobile-permission-engine.js";
 import { mobileTaskPlanner } from "./mobile-task-planner.js";
+
+const MOBILE_INTERACTION_APPROVAL_ACTIONS = new Set([
+  "mobile_click_on_screen_at_coordinates",
+  "mobile_double_tap_on_screen",
+  "mobile_long_press_on_screen_at_coordinates",
+  "mobile_swipe_on_screen",
+  "mobile_type_keys",
+  "mobile_press_button",
+  "mobile_open_url",
+  "mobile_take_screenshot"
+]);
+const MOBILE_APP_APPROVAL_ACTIONS = new Set([
+  "mobile_launch_app",
+  "mobile_terminate_app",
+  "mobile_clear_app_data"
+]);
+const MOBILE_ACTION_ALIASES = Object.freeze({
+  tap: "mobile_click_on_screen_at_coordinates",
+  click: "mobile_click_on_screen_at_coordinates",
+  double_tap: "mobile_double_tap_on_screen",
+  long_press: "mobile_long_press_on_screen_at_coordinates",
+  swipe: "mobile_swipe_on_screen",
+  type: "mobile_type_keys",
+  type_text: "mobile_type_keys",
+  press: "mobile_press_button",
+  press_button: "mobile_press_button",
+  launch_app: "mobile_launch_app",
+  terminate_app: "mobile_terminate_app",
+  clear_app_data: "mobile_clear_app_data",
+  open_url: "mobile_open_url",
+  screenshot: "mobile_take_screenshot"
+});
+
+function hasVerifiedToolApproval(context, userId, actionName, params = {}) {
+  const actionLevel = ACTION_PERMISSION_TIERS[actionName] || MOBILE_PERMISSION_LEVELS.LEVEL_3_SENSITIVE;
+  const targetPackage = params.package || params.packageName || params.app;
+  const effectiveLevel = targetPackage && SENSITIVE_PACKAGES.includes(targetPackage)
+    ? Math.max(actionLevel, MOBILE_PERMISSION_LEVELS.LEVEL_4_CRITICAL)
+    : actionLevel;
+  // A generic Level-3 tool approval must never bypass the separate Level-4
+  // confirmation required for sensitive apps or critical actions.
+  if (effectiveLevel >= MOBILE_PERMISSION_LEVELS.LEVEL_4_CRITICAL) return false;
+  if (context?.mobileApprovalVerified !== true ||
+      context.mobileApprovalActorId !== userId ||
+      Number(context.mobileApprovalPermissionLevel) < MOBILE_PERMISSION_LEVELS.LEVEL_3_SENSITIVE) {
+    return false;
+  }
+  if (context.mobileApprovalToolId === "mobile_interaction_dispatch") {
+    return MOBILE_INTERACTION_APPROVAL_ACTIONS.has(actionName);
+  }
+  if (context.mobileApprovalToolId === "mobile_app_lifecycle") {
+    return MOBILE_APP_APPROVAL_ACTIONS.has(actionName);
+  }
+  if (context.mobileApprovalToolId === "mobile_autonomous_task" && context.mobileWorkflowApproval === true) {
+    return effectiveLevel < MOBILE_PERMISSION_LEVELS.LEVEL_4_CRITICAL;
+  }
+  return false;
+}
 
 export class MobileControlEngine extends EventEmitter {
   constructor(options = {}) {
@@ -53,15 +111,11 @@ export class MobileControlEngine extends EventEmitter {
     // 2. Initial device discovery
     await this.registry.scanDevices();
 
-    // 3. Auto-authorize local physical/emulator devices with default safe permissions
+    // Discovery never grants control permissions. Each device must be explicitly
+    // authorized by its authenticated owner through the pairing UI/API.
     const devices = this.registry.getDevices();
-    for (const dev of devices) {
-      if (dev.state === DEVICE_STATES.ONLINE) {
-        this.permissions.authorizeDevice(dev.id, MOBILE_PERMISSION_LEVELS.LEVEL_3_SENSITIVE, "system_init");
-      }
-    }
 
-    // 4. Optionally connect Mobile MCP server
+    // 3. Optionally connect Mobile MCP server
     let mcpStatus = { connected: false };
     if (this.autoStartMcp) {
       try {
@@ -89,12 +143,7 @@ export class MobileControlEngine extends EventEmitter {
    */
   async discoverDevices() {
     const devices = await this.registry.scanDevices();
-    // Ensure any newly detected online devices are authorized
-    for (const dev of devices) {
-      if (dev.state === DEVICE_STATES.ONLINE && !this.permissions.deviceAuthorizations.has(dev.id)) {
-        this.permissions.authorizeDevice(dev.id, MOBILE_PERMISSION_LEVELS.LEVEL_3_SENSITIVE, "auto_discovery");
-      }
-    }
+    // Discovery is read-only; it must never silently authorize a newly attached device.
     return {
       success: true,
       count: devices.length,
@@ -102,6 +151,18 @@ export class MobileControlEngine extends EventEmitter {
       devices,
       activeDeviceId: this.registry.selectedDeviceId || devices[0]?.id || null
     };
+  }
+
+  /**
+   * Explicitly authorize an online device for routine read/interaction actions.
+   * Sensitive and critical actions still require a one-time confirmation token.
+   */
+  authorizeDevice(deviceId, userId, maxLevel = MOBILE_PERMISSION_LEVELS.LEVEL_2_INTERACTION) {
+    const device = this.registry.getDevices().find(item => item.id === deviceId && item.state === DEVICE_STATES.ONLINE);
+    if (!device) {
+      throw new Error("Only a currently online, discovered device can be authorized.");
+    }
+    return this.permissions.authorizeDevice(deviceId, maxLevel, userId);
   }
 
   /**
@@ -115,15 +176,21 @@ export class MobileControlEngine extends EventEmitter {
    * Get active target device or throw actionable error.
    */
   _requireTargetDevice(deviceId = null) {
+    const devices = this.registry.getDevices();
     const target = deviceId || this.registry.selectedDeviceId;
-    if (!target) {
-      const devices = this.registry.getDevices();
-      if (devices.length === 0) {
-        throw new Error("No mobile devices connected. Please connect an Android device via USB or Wireless ADB.");
+    if (target) {
+      const online = devices.find(device => device.id === target && device.state === DEVICE_STATES.ONLINE);
+      if (!online) {
+        throw new Error(`No mobile devices connected or target device '${target}' is not currently online.`);
       }
-      return devices[0].id;
+      return online.id;
     }
-    return target;
+
+    const online = devices.find(device => device.state === DEVICE_STATES.ONLINE);
+    if (!online) {
+      throw new Error("No mobile devices connected. Please connect an Android device via USB or Wireless ADB.");
+    }
+    return online.id;
   }
 
   /**
@@ -178,14 +245,10 @@ export class MobileControlEngine extends EventEmitter {
       };
     }
 
-    // Normalize action name if missing mobile_ prefix
+    // Normalize common UI/agent aliases to the actual Mobile MCP tool names.
     if (typeof actionName === "string" && !actionName.startsWith("mobile_")) {
-      const candidate = "mobile_" + actionName;
-      if (this.permissions.constructor?.ACTION_PERMISSION_TIERS?.[candidate] || candidate in (this.permissions?.constructor?.ACTION_PERMISSION_TIERS || {})) {
-        actionName = candidate;
-      } else {
-        actionName = candidate;
-      }
+      const candidate = MOBILE_ACTION_ALIASES[actionName] || "mobile_" + actionName;
+      actionName = candidate;
     }
 
     let deviceId;
@@ -200,7 +263,16 @@ export class MobileControlEngine extends EventEmitter {
         reason: err.message
       };
     }
-    const userId = context.userId || "operator";
+    const userId = typeof context.userId === "string" ? context.userId.trim() : "";
+    if (!userId) {
+      return {
+        success: false,
+        action: actionName,
+        deviceId,
+        code: "AUTHENTICATED_USER_REQUIRED",
+        reason: "An authenticated user identity is required for mobile control."
+      };
+    }
     const confirmationToken = context.confirmationToken || params.confirmationToken || null;
 
     // Normalize app package parameters
@@ -209,8 +281,37 @@ export class MobileControlEngine extends EventEmitter {
       params.package = params.package || params.packageName;
     }
 
+    // Read the real foreground package before authorizing UI interactions. Caller-
+    // supplied package names are not trusted for taps/typing because they could
+    // otherwise disguise a sensitive foreground app as an ordinary app.
+    let preState = null;
+    const isUiInteraction = MOBILE_INTERACTION_APPROVAL_ACTIONS.has(actionName);
+    const deviceAuthorization = this.permissions.deviceAuthorizations.get(deviceId);
+    if (isUiInteraction && deviceAuthorization?.authorized && deviceAuthorization.authorizedBy === userId &&
+        this.registry.devices.get(deviceId)?.platform === "android") {
+      try {
+        preState = await this.adb.getForegroundApp(deviceId);
+      } catch {}
+      const foregroundPackage = preState?.package || preState?.packageName || preState?.appPackage;
+      if (!foregroundPackage) {
+        return {
+          success: false,
+          action: actionName,
+          deviceId,
+          code: "FOREGROUND_APP_UNVERIFIED",
+          reason: "ULTRON could not verify the foreground app, so it blocked this interaction rather than risk acting inside a sensitive app."
+        };
+      }
+    }
+
+    const permissionParams = { ...params };
+    if (isUiInteraction && preState) {
+      permissionParams.package = preState.package || preState.packageName || preState.appPackage;
+    }
+
     // 1. Permission & Safety Evaluation
-    const perm = await this.permissions.checkPermission(actionName, params, deviceId, userId, confirmationToken);
+    const toolApprovalVerified = hasVerifiedToolApproval(context, userId, actionName, permissionParams);
+    const perm = await this.permissions.checkPermission(actionName, permissionParams, deviceId, userId, confirmationToken, toolApprovalVerified);
     if (!perm.permitted) {
       return {
         success: false,
@@ -225,12 +326,13 @@ export class MobileControlEngine extends EventEmitter {
     }
 
     // 2. Pre-Action State Capture
-    let preState = null;
-    try {
-      if (this.registry.devices.get(deviceId)?.platform === "android") {
-        preState = await this.adb.getForegroundApp(deviceId);
-      }
-    } catch {}
+    if (!preState) {
+      try {
+        if (this.registry.devices.get(deviceId)?.platform === "android") {
+          preState = await this.adb.getForegroundApp(deviceId);
+        }
+      } catch {}
+    }
 
     const startedAt = Date.now();
     this.emit("action_started", { action: actionName, deviceId, params });
@@ -318,6 +420,21 @@ export class MobileControlEngine extends EventEmitter {
    * Execute an autonomous multi-step mobile workflow DAG with rollback and cancellation.
    */
   async executeWorkflow(workflowPlan, context = {}) {
+    if (typeof context.userId !== "string" || !context.userId.trim()) {
+      return {
+        success: false,
+        code: "AUTHENTICATED_USER_REQUIRED",
+        error: "An authenticated user identity is required for mobile workflows.",
+        completedSteps: [],
+        stepResults: []
+      };
+    }
+    const userId = context.userId.trim();
+    const workflowApprovalVerified =
+      context.mobileApprovalVerified === true &&
+      context.mobileApprovalActorId === userId &&
+      context.mobileApprovalToolId === "mobile_autonomous_task" &&
+      Number(context.mobileApprovalPermissionLevel) >= MOBILE_PERMISSION_LEVELS.LEVEL_3_SENSITIVE;
     const workflowId = `wf-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     this.activeWorkflows.set(workflowId, { cancelled: false, currentStep: 0 });
 
@@ -347,7 +464,10 @@ export class MobileControlEngine extends EventEmitter {
 
       this.emit("workflow_step_started", { workflowId, stepIndex: i + 1, action: step.action });
 
-      const execRes = await this.executeAction(step.action, stepParams, context);
+      const execRes = await this.executeAction(step.action, stepParams, {
+        ...context,
+        ...(workflowApprovalVerified ? { mobileWorkflowApproval: true } : {})
+      });
       stepResults.push({
         stepIndex: i + 1,
         action: step.action,
@@ -398,14 +518,18 @@ export class MobileControlEngine extends EventEmitter {
   /**
    * Confirm and execute a pending Level 4 Critical action via single-use token.
    */
-  async confirmAction(confirmationToken, userId = "operator") {
+  async confirmAction(confirmationToken, userId = null) {
+    const ownerId = typeof userId === "string" ? userId.trim() : "";
+    if (!ownerId) {
+      return { success: false, code: "AUTHENTICATED_USER_REQUIRED", error: "An authenticated owner identity is required to confirm this action." };
+    }
     const pending = this.permissions.pendingConfirmations.get(confirmationToken);
-    if (!pending) {
-      throw new Error("Invalid, consumed, or expired confirmation token.");
+    if (!pending || pending.userId !== ownerId) {
+      return { success: false, code: "CONFIRMATION_NOT_FOUND_OR_OWNER_MISMATCH", error: "This confirmation does not belong to the authenticated user or has expired." };
     }
 
     return this.executeAction(pending.action, pending.params, {
-      userId,
+      userId: ownerId,
       confirmationToken
     });
   }
@@ -413,9 +537,9 @@ export class MobileControlEngine extends EventEmitter {
   /**
    * High-Level Helper: Capture screenshot from active device.
    */
-  async captureScreenshot(deviceId = null, options = {}) {
+  async captureScreenshot(deviceId = null, options = {}, context = {}) {
     const id = this._requireTargetDevice(deviceId);
-    const res = await this.executeAction("mobile_take_screenshot", { device: id, ...options });
+    const res = await this.executeAction("mobile_take_screenshot", { device: id, ...options }, context);
     const imgData = res.image?.data || res.result?.data || null;
     return {
       ...res,
@@ -425,52 +549,52 @@ export class MobileControlEngine extends EventEmitter {
     };
   }
 
-  async captureScreen(deviceId = null, options = {}) {
-    return this.captureScreenshot(deviceId, options);
+  async captureScreen(deviceId = null, options = {}, context = {}) {
+    return this.captureScreenshot(deviceId, options, context);
   }
 
   /**
    * High-Level Helper: Inspect screen UI hierarchy elements.
    */
-  async inspectHierarchy(deviceId = null) {
+  async inspectHierarchy(deviceId = null, context = {}) {
     const id = this._requireTargetDevice(deviceId);
-    return this.executeAction("mobile_list_elements_on_screen", { device: id });
+    return this.executeAction("mobile_list_elements_on_screen", { device: id }, context);
   }
 
-  async getHierarchy(deviceId = null) {
-    return this.inspectHierarchy(deviceId);
+  async getHierarchy(deviceId = null, context = {}) {
+    return this.inspectHierarchy(deviceId, context);
   }
 
   /**
    * High-Level Helper: Tap at coordinate (x, y).
    */
-  async tap(x, y, deviceId = null) {
+  async tap(x, y, deviceId = null, context = {}) {
     const id = this._requireTargetDevice(deviceId);
-    return this.executeAction("mobile_click_on_screen_at_coordinates", { device: id, x, y });
+    return this.executeAction("mobile_click_on_screen_at_coordinates", { device: id, x, y }, context);
   }
 
   /**
    * High-Level Helper: Swipe in direction.
    */
-  async swipe(direction = "down", deviceId = null) {
+  async swipe(direction = "down", deviceId = null, context = {}) {
     const id = this._requireTargetDevice(deviceId);
-    return this.executeAction("mobile_swipe_on_screen", { device: id, direction });
+    return this.executeAction("mobile_swipe_on_screen", { device: id, direction }, context);
   }
 
   /**
    * High-Level Helper: Type text into active element.
    */
-  async typeText(text, deviceId = null) {
+  async typeText(text, deviceId = null, context = {}) {
     const id = this._requireTargetDevice(deviceId);
-    return this.executeAction("mobile_type_keys", { device: id, text });
+    return this.executeAction("mobile_type_keys", { device: id, text }, context);
   }
 
   /**
    * High-Level Helper: Press hardware navigation key.
    */
-  async pressKey(button = "HOME", deviceId = null) {
+  async pressKey(button = "HOME", deviceId = null, context = {}) {
     const id = this._requireTargetDevice(deviceId);
-    return this.executeAction("mobile_press_button", { device: id, button });
+    return this.executeAction("mobile_press_button", { device: id, button }, context);
   }
 
   /**
