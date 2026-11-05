@@ -600,10 +600,11 @@ export class MobileControlEngine extends EventEmitter {
   /**
    * Comprehensive subsystem status and telemetry.
    */
-  async getStatus() {
+  async getStatus(userId = null) {
     const diag = await this.registry.getPlatformDiagnostics();
     const mcpStat = this.mcpClient.getStatus();
     const devices = this.registry.getDevices();
+    const ownerId = typeof userId === "string" ? userId.trim() : "";
 
     return {
       subsystem: "ULTRON Mobile Control Engine",
@@ -620,7 +621,7 @@ export class MobileControlEngine extends EventEmitter {
         toolsDiscovered: mcpStat.toolsCount
       },
       platformDiagnostics: diag,
-      recentAuditLogs: this.permissions.getAuditLogs(null, 10)
+      recentAuditLogs: ownerId ? this.permissions.getAuditLogs(null, 10, ownerId) : []
     };
   }
 
