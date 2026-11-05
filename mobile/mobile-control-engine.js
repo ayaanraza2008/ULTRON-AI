@@ -10,7 +10,7 @@ import { EventEmitter } from "node:events";
 import { adbBridge } from "./adb-bridge.js";
 import { mobileMcpClient, MCP_CLIENT_STATUS } from "./mobile-mcp-client.js";
 import { mobileDeviceRegistry, DEVICE_STATES } from "./mobile-device-registry.js";
-import { mobilePermissionEngine, MOBILE_PERMISSION_LEVELS, ACTION_PERMISSION_TIERS } from "./mobile-permission-engine.js";
+import { mobilePermissionEngine, MOBILE_PERMISSION_LEVELS, ACTION_PERMISSION_TIERS, SENSITIVE_PACKAGES } from "./mobile-permission-engine.js";
 import { mobileTaskPlanner } from "./mobile-task-planner.js";
 
 const MOBILE_INTERACTION_APPROVAL_ACTIONS = new Set([
@@ -44,7 +44,15 @@ const MOBILE_ACTION_ALIASES = Object.freeze({
   screenshot: "mobile_take_screenshot"
 });
 
-function hasVerifiedToolApproval(context, userId, actionName) {
+function hasVerifiedToolApproval(context, userId, actionName, params = {}) {
+  const actionLevel = ACTION_PERMISSION_TIERS[actionName] || MOBILE_PERMISSION_LEVELS.LEVEL_3_SENSITIVE;
+  const targetPackage = params.package || params.packageName || params.app;
+  const effectiveLevel = targetPackage && SENSITIVE_PACKAGES.includes(targetPackage)
+    ? Math.max(actionLevel, MOBILE_PERMISSION_LEVELS.LEVEL_4_CRITICAL)
+    : actionLevel;
+  // A generic Level-3 tool approval must never bypass the separate Level-4
+  // confirmation required for sensitive apps or critical actions.
+  if (effectiveLevel >= MOBILE_PERMISSION_LEVELS.LEVEL_4_CRITICAL) return false;
   if (context?.mobileApprovalVerified !== true ||
       context.mobileApprovalActorId !== userId ||
       Number(context.mobileApprovalPermissionLevel) < MOBILE_PERMISSION_LEVELS.LEVEL_3_SENSITIVE) {
@@ -57,8 +65,7 @@ function hasVerifiedToolApproval(context, userId, actionName) {
     return MOBILE_APP_APPROVAL_ACTIONS.has(actionName);
   }
   if (context.mobileApprovalToolId === "mobile_autonomous_task" && context.mobileWorkflowApproval === true) {
-    const requiredLevel = ACTION_PERMISSION_TIERS[actionName] || MOBILE_PERMISSION_LEVELS.LEVEL_3_SENSITIVE;
-    return requiredLevel < MOBILE_PERMISSION_LEVELS.LEVEL_4_CRITICAL;
+    return effectiveLevel < MOBILE_PERMISSION_LEVELS.LEVEL_4_CRITICAL;
   }
   return false;
 }
@@ -274,7 +281,7 @@ export class MobileControlEngine extends EventEmitter {
     }
 
     // 1. Permission & Safety Evaluation
-    const toolApprovalVerified = hasVerifiedToolApproval(context, userId, actionName);
+    const toolApprovalVerified = hasVerifiedToolApproval(context, userId, actionName, params);
     const perm = await this.permissions.checkPermission(actionName, params, deviceId, userId, confirmationToken, toolApprovalVerified);
     if (!perm.permitted) {
       return {
