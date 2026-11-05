@@ -990,6 +990,34 @@ export function createJarvisRouter({
     return res.status(202).json(result);
   });
 
+  router.get("/jarvis/devices/my/state/events", authenticateOwnerOrDevice, (req, res) => {
+    if (!req.device?.id || !req.device?.ownerUserId) {
+      return res.status(401).json({ error: { code: "DEVICE_AUTHENTICATION_REQUIRED", message: "A verified paired device is required." } });
+    }
+    const paired = deviceHubInstance.pairedDevices.get(req.device.id);
+    if (!paired || paired.status === "revoked" || paired.ownerUserId !== req.device.ownerUserId) {
+      return res.status(403).json({ error: { code: "DEVICE_OWNER_MISMATCH", message: "The paired device is not authorized for this owner." } });
+    }
+    const events = multiDeviceManagerInstance.pollPendingEvents(req.device.id);
+    return res.json({ success: true, count: events.length, events });
+  });
+
+  router.post("/jarvis/devices/my/state/events/:deliveryId/ack", authenticateOwnerOrDevice, express.json(), (req, res) => {
+    if (!req.device?.id || !req.device?.ownerUserId) {
+      return res.status(401).json({ error: { code: "DEVICE_AUTHENTICATION_REQUIRED", message: "A verified paired device is required." } });
+    }
+    const paired = deviceHubInstance.pairedDevices.get(req.device.id);
+    if (!paired || paired.status === "revoked" || paired.ownerUserId !== req.device.ownerUserId) {
+      return res.status(403).json({ error: { code: "DEVICE_OWNER_MISMATCH", message: "The paired device is not authorized for this owner." } });
+    }
+    const result = multiDeviceManagerInstance.acknowledgeDelivery(req.device.id, req.params.deliveryId);
+    if (!result.success || !result.acknowledged) {
+      return res.status(result.error === "STATE_PERSISTENCE_FAILED" ? 503 : 404)
+        .json({ error: { code: result.error || "DELIVERY_NOT_FOUND", message: "The state-sync delivery was not acknowledged." }, ...result });
+    }
+    return res.json(result);
+  });
+
   router.get("/jarvis/devices/:id/state/events", authenticateOwnerOrDevice, (req, res) => {
     if (!req.device?.id || req.device.id !== req.params.id) {
       return res.status(403).json({ error: { code: "DEVICE_ID_MISMATCH", message: "A device may only poll its own state events." } });

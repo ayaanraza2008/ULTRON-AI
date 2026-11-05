@@ -125,6 +125,59 @@ class UltronApiClient(private val context: Context) {
         return res.optJSONArray("tasks") ?: JSONArray()
     }
 
+    /**
+     * Pulls queued owner-scoped ecosystem state for this paired device.
+     * Each event is committed to private local preferences before it is ACKed,
+     * so a transient local storage failure leaves the server queue intact.
+     */
+    fun syncPendingStateEvents(): Boolean {
+        return try {
+            val response = executeJson(openConnection("/api/jarvis/devices/my/state/events", "GET"))
+            val events = response.optJSONArray("events") ?: JSONArray()
+            val prefs = context.getSharedPreferences("ultron_shared_state_v1", Context.MODE_PRIVATE)
+
+            for (index in 0 until events.length()) {
+                val event = events.optJSONObject(index) ?: return false
+                val deliveryId = event.optString("deliveryId").takeIf {
+                    it.matches(Regex("^[A-Za-z0-9_-]{1,128}$"))
+                } ?: return false
+                val stateKey = event.optString("stateKey").takeIf { it.isNotBlank() } ?: return false
+                val version = event.optLong("version", -1L)
+                if (version < 1L) return false
+
+                val preferenceKey = "state:$stateKey"
+                val currentText = prefs.getString(preferenceKey, null)
+                val currentVersion = try {
+                    if (currentText.isNullOrBlank()) 0L else JSONObject(currentText).optLong("version", 0L)
+                } catch (_: Exception) {
+                    -1L
+                }
+                if (currentVersion < 0L) return false
+
+                // Idempotent: older/duplicate events do not overwrite newer local state.
+                if (version > currentVersion) {
+                    val stateRecord = JSONObject().apply {
+                        put("version", version)
+                        put("payload", event.opt("payload") ?: JSONObject.NULL)
+                        put("timestamp", event.optString("timestamp"))
+                    }
+                    val committed = prefs.edit().putString(preferenceKey, stateRecord.toString()).commit()
+                    if (!committed) return false
+                }
+
+                val ackBody = JSONObject()
+                val ack = executeJson(
+                    openConnection("/api/jarvis/devices/my/state/events/$deliveryId/ack", "POST"),
+                    ackBody
+                )
+                if (!ack.optBoolean("acknowledged", false)) return false
+            }
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     fun sendTelemetry(batteryPercent: Int, isCharging: Boolean): Boolean {
         if (DeviceTokenStore.load(context).isNullOrBlank() || batteryPercent !in 0..100) return false
         val body = JSONObject().apply {
