@@ -8,17 +8,17 @@
 
 > **Release verdict: NOT PRODUCTION-READY.** The primary candidate PR #441 has already merged, but merge status is not production acceptance. Current work remains in review branches and live acceptance gates remain open. No deployment or production migration was performed during this audit.
 
-## Current evidence — 2026-11-05 12:15 UTC (17:45 Asia/Kolkata)
+## Current evidence — 2026-11-05 12:36 UTC (18:06 Asia/Kolkata)
 
-- Backend [PR #473](https://github.com/ayaanraza2008/ULTRON-AI/pull/473) is open, mergeable, unmerged at `0fcca7f65b00d306e993eb307d0b00d20c8284bc`; exact-head Actions [42024635761](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/42024635761) passed `test` and `world-intelligence-build`. The real Chromium/CDP test, Browser Use bridge checks, disposable PostgreSQL suite and security quality gate passed; syntax 386/386 and dependency audit 0 vulnerabilities.
-- Backend #473 exposes authenticated owner-scoped employee task API endpoints. Its provider/worker guard, bounded input, owner filters and audit attempt are test-covered. This is code/CI proof, not production user acceptance.
-- Living Core task drawer [PR #474](https://github.com/ayaanraza2008/ULTRON-AI/pull/474) is open, mergeable, unmerged at `58c99c2b620e0437422c4740eb69f1655b679d43`; exact-head Actions [42025331336](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/42025331336) passed both jobs. Its target base is the deployed UI branch and merge can auto-deploy; do not merge before backend #473 is available and explicit interface release approval.
-- Manual model/text+vision and two-account RLS acceptance workflows are staged in #473, default NO, and have not been run.
-- Production Supabase still has 15 migrations and lacks `paired_devices` / `pending_device_pairings`; Leaked Password Protection is disabled. The corresponding migration is not applied.
-- No live task proof exists yet for enqueue → claim → execute → persist result → audit readback through a signed-in disposable test account. No live model inference or two-account RLS acceptance has run.
-- Render live services still have blank health-check paths. Browser Use live service build does not yet install Playwright/Chromium. Candidate `render.yaml` branch/health fixes are not synced to Render.
-- `main` has no branch protection/required checks. Current main is still `573f31f953997cb0e546ef599f77e66cf8f7775b`.
-- No PR merge, Render Blueprint sync/deploy, Supabase production migration, production secret/configuration change or production data write was performed.
+- Backend [PR #473](https://github.com/ayaanraza2008/ULTRON-AI/pull/473) is open, mergeable, unmerged at `7118b7e3e6de97eaf4c46a77e7e6fd96b0559874`. Exact-head run [42027892320](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/42027892320) passed `test` and `world-intelligence-build`; isolated PostgreSQL, real Chromium/CDP and dependency/security gates completed successfully (0 confirmed dependency vulnerabilities).
+- PR #473 includes account-scoped mobile/task APIs, device-pairing fail-closed behavior, worker smoke key handling, Browser Use and CDP diagnostics, memory-delete correctness, readiness counters, current provider fallback controls and gated manual acceptance workflows.
+- Groq paid fallback requires `GROQ_PAID_FALLBACK_ENABLED=true`; Render candidate default is `false`. OpenRouter free candidates remain first. PR #366 is closed as superseded without merge.
+- UI [PR #474](https://github.com/ayaanraza2008/ULTRON-AI/pull/474) is open/mergeable/unmerged at `58c99c2b620e0437422c4740eb69f1655b679d43`; exact-head run [42025331336](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/42025331336) passed both jobs. It targets the live UI branch and may auto-deploy on merge; explicit release approval is required.
+- PR #456 migration-ledger and PR #466 evidence docs remain separate, open and unmerged.
+- Production Supabase remains at 15 migrations and lacks `paired_devices` / `pending_device_pairings`; leaked-password protection remains disabled. No authenticated durable task acceptance, live model inference, two-account RLS test, or physical paired-device acceptance has been performed.
+- Live Render health-check paths remain blank, and its deployed Browser Use service still lacks Chromium because the corrected Blueprint is not synced. Candidate source fix exists in #473; no sync or deploy occurred.
+- `main` remains unprotected and has no required checks. Current main SHA remains `573f31f953997cb0e546ef599f77e66cf8f7775b`.
+- No PR merge, Render Blueprint sync/deployment, production Supabase migration, secret/configuration mutation or production data write was performed.
 
 ## 1. Historical mainline and integration snapshot — 2026-11-05 10:40 UTC (superseded where conflicting by the current follow-up above)
 
