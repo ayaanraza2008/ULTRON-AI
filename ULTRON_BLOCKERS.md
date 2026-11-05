@@ -86,3 +86,10 @@ No production migrations, merges, Blueprint synchronization, or deployments were
 - Live Supabase data snapshot: 1 conversation, 8 messages, 0 memory items, 0 agent tasks, 0 employee schedules, 0 documents. Treat memory and autonomous task persistence as implemented/schema-present but not live-workflow verified.
 - The live two-account Supabase E2E isolation test is gated by an explicit write-confirmation flag, expected project ref, publishable key, and two dedicated test accounts. It was not run against production.
 - At least 100 open pull requests were returned by GitHub. Triage the dependency graph; do not bulk-merge or bulk-close.
+
+## 2026-11-05 13:10 IST Render operational evidence
+
+- Live Render workspace `Ultron core` confirms four web services. Backend core and REA gateway use `main`; Browser Use bridge uses `main`; UI service uses `feature/ultron-live-core-interface-20261029`. All four currently have auto-deploy-on-commit enabled and empty Render health-check paths. No service settings were changed.
+- Latest observed Browser Use bridge deployment on 2026-11-04 produced one startup smoke success against `openrouter/free`, followed shortly by repeated internal model-gateway HTTP 502 responses and a failed startup smoke with reason `BRIDGE_HTTP_502`. This is concrete evidence of intermittent upstream failure, not proof of a stable browser service.
+- Render logs show the REA gateway install on 2026-11-04 reported 6 npm dependency vulnerabilities (4 moderate, 2 high). The current `rea-gateway/package.json` pins direct `rea-agents` to 6.8.0 but no `rea-gateway/package-lock.json` exists in main. Exact transitive advisory identities are not yet available; do not run a blind `npm audit fix` or force upgrades. Add a reproducible lockfile and capture full audit JSON in an isolated CI branch before changing versions.
+- The REA gateway's own live MCP readiness smoke passed after startup. This verifies its local MCP catalog/demo-analysis/feature-trace path, not every external reverse-engineering provider.
