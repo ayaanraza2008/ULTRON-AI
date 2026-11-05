@@ -1,0 +1,73 @@
+name: REA gateway dependency audit
+
+on:
+  push:
+    branches:
+      - "audit/rea-gateway-dependency-audit-*"
+    paths:
+      - "rea-gateway/package.json"
+      - ".github/workflows/rea-gateway-dependency-audit.yml"
+  pull_request:
+    paths:
+      - "rea-gateway/package.json"
+      - ".github/workflows/rea-gateway-dependency-audit.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Audit production dependency tree
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Render-compatible Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24.22.1"
+          cache: npm
+          cache-dependency-path: rea-gateway/package.json
+
+      - name: Generate ephemeral lockfile without lifecycle scripts
+        working-directory: rea-gateway
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+
+      - name: Audit production dependencies and print advisory identities
+        working-directory: rea-gateway
+        shell: bash
+        run: |
+          set +e
+          npm audit --omit=dev --json > npm-audit.json
+          audit_status=$?
+          node --input-type=commonjs <<'NODE'
+          const fs = require('node:fs');
+          const report = JSON.parse(fs.readFileSync('npm-audit.json', 'utf8'));
+          const counts = report.metadata?.vulnerabilities || {};
+          console.log('Production dependency vulnerability counts:', JSON.stringify(counts));
+          for (const [name, item] of Object.entries(report.vulnerabilities || {})) {
+            console.log(JSON.stringify({
+              package: name,
+              severity: item.severity,
+              direct: item.isDirect,
+              range: item.range,
+              fixAvailable: item.fixAvailable,
+              advisories: (item.via || []).filter(v => typeof v === 'object').map(v => ({
+                title: v.title,
+                url: v.url,
+                range: v.range
+              }))
+            }));
+          }
+          NODE
+          exit "$audit_status"
+
+      - name: Preserve audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rea-gateway-npm-audit
+          path: rea-gateway/npm-audit.json
+          if-no-files-found: ignore
+          retention-days: 14
