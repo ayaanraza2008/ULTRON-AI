@@ -8,12 +8,12 @@ from urllib.parse import urlsplit
 from fastapi import FastAPI, Header, HTTPException
 from navigation_policy import build_host_resolver_rules, resolve_public_https_targets
 from pydantic import BaseModel, Field
-from startup_smoke import (SMOKE_TASK, browser_smoke_enabled, browser_runtime_status, configure_browser_logging, summarize_browser_smoke)
+from startup_smoke import (SMOKE_TASK, browser_smoke_enabled, browser_runtime_status, browser_readiness_status, configure_browser_logging, summarize_browser_smoke)
 
 app = FastAPI(title="ULTRON Browser Use Bridge", docs_url=None, redoc_url=None)
 SIDE_EFFECTS = re.compile(r"\b(send|submit|purchase|buy|checkout|pay|transfer|delete|publish|post|comment|message|email|invite|change password|change billing|place order|book|reserve|cancel subscription|upload|share publicly|accept terms|sign contract)\b", re.I)
 PRIVATE_TARGET = re.compile(r"https?://(?:localhost|127\.|0\.0\.0\.0|10\.\d+\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.|169\.254\.)", re.I)
-BROWSER_RUNTIME_STATUS: dict[str, Any] = {"ready": False, "reason": "NOT_CHECKED"}
+BROWSER_RUNTIME_STATUS: dict[str, Any] = {"ready": False, "reason": "NOT_CHECKED"}\nBROWSER_STARTUP_SMOKE_STATUS: dict[str, Any] = {"enabled": False, "status": "disabled"}
 
 class BrowserTask(BaseModel):
     task: str = Field(min_length=3, max_length=2500)
@@ -64,23 +64,22 @@ def model_gateway_settings() -> tuple[str, str] | None:
 @app.get("/health")
 async def health() -> dict[str, Any]:
     configured = model_gateway_settings() is not None
-    runtime_ready = BROWSER_RUNTIME_STATUS.get("ready") is True
-    if not configured or not runtime_ready:
+    readiness = browser_readiness_status(configured, BROWSER_RUNTIME_STATUS, BROWSER_STARTUP_SMOKE_STATUS)
+    if not readiness["ready"]:
         raise HTTPException(
             status_code=503,
             detail={
                 "ok": False,
                 "service": "ultron-browser-use-bridge",
                 "browserUseConfigured": configured,
-                "browserRuntimeReady": runtime_ready,
-                "browserRuntimeReason": BROWSER_RUNTIME_STATUS.get("reason"),
+                **readiness,
             },
         )
     return {
         "ok": True,
         "service": "ultron-browser-use-bridge",
         "browserUseConfigured": True,
-        "browserRuntimeReady": True,
+        **readiness,
         "modelGateway": "ultron_proxy" if os.getenv("ULTRON_MODEL_GATEWAY_BASE_URL", "").strip() else "direct_provider"
     }
 
@@ -301,19 +300,26 @@ async def run_task(payload: BrowserTask, x_ultron_browser_token: str | None = He
 
 @app.on_event("startup")
 async def _schedule_opt_in_browser_smoke() -> None:
-    global BROWSER_RUNTIME_STATUS
+    global BROWSER_RUNTIME_STATUS, BROWSER_STARTUP_SMOKE_STATUS
     BROWSER_RUNTIME_STATUS = await asyncio.to_thread(browser_runtime_status)
+    smoke_enabled = browser_smoke_enabled(os.environ)
+    BROWSER_STARTUP_SMOKE_STATUS = {
+        "enabled": smoke_enabled,
+        "status": "pending" if smoke_enabled else "disabled",
+    }
 
     # The smoke is off by default. A one-time Render env opt-in performs a
     # read-only navigation to example.com through ULTRON's authenticated model
     # gateway. It logs status metadata only, never page content or credentials.
-    if not browser_smoke_enabled(os.environ):
+    if not smoke_enabled:
         return
 
     async def run_smoke() -> None:
+        global BROWSER_STARTUP_SMOKE_STATUS
         logger = __import__("logging").getLogger("ultron.browser.smoke")
         token = os.getenv("ULTRON_BROWSER_USE_TOKEN", "")
         if not token:
+            BROWSER_STARTUP_SMOKE_STATUS = {"enabled": True, "status": "failed", "reason": "TOKEN_MISSING"}
             logger.warning("ULTRON browser smoke %s", {"status": "blocked", "reason": "TOKEN_MISSING"})
             return
         try:
@@ -326,6 +332,11 @@ async def _schedule_opt_in_browser_smoke() -> None:
             summary = {"status": "failed", "reason": "SMOKE_TIMEOUT"}
         except Exception as exc:
             summary = {"status": "failed", "reason": "SMOKE_" + type(exc).__name__[:60]}
+        BROWSER_STARTUP_SMOKE_STATUS = {
+            "enabled": True,
+            "status": summary.get("status", "failed"),
+            "reason": summary.get("reason"),
+        }
         logger.info("ULTRON browser startup smoke %s", summary)
 
     asyncio.create_task(run_smoke())
