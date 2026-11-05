@@ -629,7 +629,8 @@ test("13. WebSocket/SSE state sync delivers only to authenticated devices owned 
   });
 
   assert.equal(result.success, true);
-  assert.deepEqual(result.deliveredDeviceIds, ["phone-owner-a", "browser-owner-a"]);
+  assert.deepEqual(result.sentDeviceIds, ["phone-owner-a", "browser-owner-a"]);
+  assert.equal(result.deliveredDeviceIds, undefined);
   assert.equal(writes.length, 1);
   assert.equal(writes[0].payload.type, "STATE_SYNC");
   assert.equal(writes[0].payload.event.stateKey, "project-context");
