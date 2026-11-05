@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const migration = readFileSync(new URL("../supabase/migrations/20261027181000_private_document_storage.sql", import.meta.url), "utf8");
+const migration = readFileSync(new URL("../supabase/migrations/20261027185203_private_document_storage.sql", import.meta.url), "utf8");
 
 test("document storage migration creates a size-limited private bucket and owner policies", () => {
   assert.match(migration, /create table if not exists public\.documents/i);

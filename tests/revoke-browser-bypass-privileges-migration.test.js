@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const migrationPath = new URL("../supabase/migrations/20261023150000_revoke_browser_bypass_table_privileges.sql", import.meta.url);
+const migrationPath = new URL("../supabase/migrations/20261023205348_revoke_browser_bypass_table_privileges.sql", import.meta.url);
 
 test("browser-facing roles cannot TRUNCATE or create triggers on public application tables", async () => {
   const sql = await readFile(migrationPath, "utf8");
