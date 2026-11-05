@@ -74,7 +74,8 @@ test("ToolRegistry consumes orchestrator-minted proof objects exactly once", asy
     actorId: "owner-a",
     toolId: tool.id,
     permissionLevel: tool.permissionLevel,
-    approvalId: "appr-test-one"
+    approvalId: "appr-test-one",
+    params: {}
   });
 
   assert.deepEqual(
@@ -110,4 +111,33 @@ test("ToolRegistry enforces the configured execution timeout and abort signal", 
     error => error.code === "TOOL_TIMEOUT" && error.timeoutMs === 15
   );
   assert.equal(receivedSignal?.aborted, true);
+});
+
+
+test("ToolRegistry rejects an approval proof when execution parameters change", async () => {
+  const registry = new ToolRegistry();
+  let calls = 0;
+  const tool = registry.registerTool({
+    id: "parameter-bound-proof-tool",
+    name: "Parameter-bound proof test",
+    category: TOOL_CATEGORIES.SYSTEM_CONTROL,
+    permissionLevel: PERMISSION_LEVELS.LEVEL_4_CRITICAL,
+    execute: async () => { calls += 1; return { ok: true }; }
+  });
+  const proof = createToolApprovalProof({
+    actorId: "owner-a",
+    toolId: tool.id,
+    permissionLevel: tool.permissionLevel,
+    approvalId: "appr-parameter-bound",
+    params: { destination: "/approved/path", overwrite: false }
+  });
+
+  await assert.rejects(
+    () => registry.execute(tool.id, { destination: "/different/path", overwrite: false }, {
+      actorId: "owner-a",
+      toolApprovalProof: proof
+    }),
+    error => error.code === "TOOL_APPROVAL_INVALID"
+  );
+  assert.equal(calls, 0);
 });
