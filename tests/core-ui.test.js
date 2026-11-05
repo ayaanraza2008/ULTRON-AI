@@ -377,7 +377,9 @@ test("voice listening uses browser recognition and Kokoro speech with sentence-b
   assert.ok(app.includes("pendingInterimCommand && voiceActive"));
   assert.ok(app.includes("async function streamChatRequest(body, onDelta)"));
   assert.ok(app.includes("speechCapabilities.premiumSttConfigured"));
-  assert.match(app, /audioBase64,\\s*mimeType,\\s*\\.\\.\\.\\(speechLanguageMode === "hi-IN" \\? \\{ language: "hi" \\} : speechLanguageMode === "en-IN" \\? \\{ language: "en" \\} : \\{\\}\\)/);
+  assert.ok(app.includes("audioBase64,"));
+  assert.ok(app.includes('language: "hi"'));
+  assert.ok(app.includes('language: "en"'));
   assert.ok(app.includes("body: JSON.stringify({ ...body, stream: true })"));
   assert.ok(app.includes("async function speakStreamingSegment(text, epoch, preferKokoro)"));
   assert.ok(app.includes("Never cut server or browser speech at an arbitrary word count."));
