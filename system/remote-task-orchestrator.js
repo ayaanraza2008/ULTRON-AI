@@ -19,7 +19,7 @@ export class RemoteTaskOrchestrator {
     this.windowsDesktopAgent = options.windowsDesktopAgent || null;
     this.telephonyGateway = options.telephonyGateway || null;
     this.taskQueue = new Map();
-    this.processedIdempotencyKeys = new Set();
+    this.processedIdempotencyKeys = new Map();
     this.taskHistory = [];
     this.maxHistory = 100;
   }
@@ -43,20 +43,45 @@ export class RemoteTaskOrchestrator {
       };
     }
 
-    // Idempotency check: prevent duplicate execution from carrier re-transmissions
-    const idKey = idempotencyKey || `${callerId}_${action}_${JSON.stringify(payload)}`;
-    if (this.processedIdempotencyKeys.has(idKey)) {
+    // Idempotency is scoped to the caller and retains the original task outcome.
+    // A retry must not turn a still-running or failed operation into fake success.
+    const requestKey = idempotencyKey || `${action}_${JSON.stringify(payload)}`;
+    const idKey = `${String(callerId || "owner")}: ${requestKey}`;
+    const existingRequest = this.processedIdempotencyKeys.get(idKey);
+    if (existingRequest) {
+      const completedSuccessfully = existingRequest.status === "COMPLETED" && existingRequest.success === true;
+      const message = existingRequest.status === "RUNNING"
+        ? "Duplicate task suppressed; the original task is still running."
+        : existingRequest.status === "FAILED"
+          ? "Duplicate task suppressed; the original task failed."
+          : "Duplicate task suppressed; the original task completed.";
       return {
-        success: true,
+        success: completedSuccessfully,
         duplicateSuppressed: true,
-        message: "Duplicate task received within active window. Execution suppressed."
+        taskId: existingRequest.taskId,
+        status: existingRequest.status,
+        ...(existingRequest.result === null ? {} : { result: existingRequest.result }),
+        ...(existingRequest.error ? { error: existingRequest.error } : {}),
+        message
       };
     }
-    this.processedIdempotencyKeys.add(idKey);
-    const timer = setTimeout(() => this.processedIdempotencyKeys.delete(idKey), 30000);
-    if (typeof timer.unref === "function") timer.unref();
 
     const taskId = "rem-task-" + crypto.randomUUID();
+    const idempotencyRecord = {
+      taskId,
+      status: "RUNNING",
+      success: null,
+      result: null,
+      error: null,
+      startedAt: new Date().toISOString()
+    };
+    this.processedIdempotencyKeys.set(idKey, idempotencyRecord);
+    const timer = setTimeout(() => {
+      if (this.processedIdempotencyKeys.get(idKey) === idempotencyRecord) {
+        this.processedIdempotencyKeys.delete(idKey);
+      }
+    }, 30000);
+    if (typeof timer.unref === "function") timer.unref();
     const taskRecord = {
       id: taskId,
       callerId,
@@ -287,6 +312,11 @@ export class RemoteTaskOrchestrator {
       if (!isSuccess) {
         taskRecord.error = executionResult?.error || "TASK_FAILED";
       }
+      idempotencyRecord.status = isSuccess ? "COMPLETED" : "FAILED";
+      idempotencyRecord.success = isSuccess;
+      idempotencyRecord.result = executionResult;
+      idempotencyRecord.error = isSuccess ? null : (executionResult?.error || "TASK_FAILED");
+      idempotencyRecord.completedAt = taskRecord.completedAt;
 
       this.taskHistory.unshift(taskRecord);
       if (this.taskHistory.length > this.maxHistory) this.taskHistory.pop();
@@ -303,8 +333,16 @@ export class RemoteTaskOrchestrator {
     } catch (err) {
       taskRecord.status = "FAILED";
       taskRecord.error = err.message;
+      taskRecord.completedAt = new Date().toISOString();
+      idempotencyRecord.status = "FAILED";
+      idempotencyRecord.success = false;
+      idempotencyRecord.error = String(err?.message || "TASK_FAILED");
+      idempotencyRecord.result = { success: false, error: idempotencyRecord.error };
+      idempotencyRecord.completedAt = taskRecord.completedAt;
       this.taskQueue.delete(taskId);
-      return { success: false, taskId, error: err.message };
+      this.taskHistory.unshift(taskRecord);
+      if (this.taskHistory.length > this.maxHistory) this.taskHistory.pop();
+      return { success: false, taskId, error: idempotencyRecord.error };
     }
   }
 
