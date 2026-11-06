@@ -236,3 +236,57 @@ test("TelephonyBrain: PC media search uses the real remote task orchestrator res
   assert.equal(outcome.executed, true);
   assert.match(outcome.spokenResponse, /found 1 matching files/i);
 });
+
+
+test("TelephonyBrain: Routes ordinary conversation through ULTRON BrainRouter", async () => {
+  const brain = new TelephonyBrain({
+    brainRouter: {
+      async executeInference(args) {
+        assert.equal(args.prompt, "Explain how ULTRON routes AI providers");
+        assert.equal(args.context.source, "telephony");
+        assert.equal(args.context.language, "en-IN");
+        return {
+          success: true,
+          content: "ULTRON selects a provider and falls back when needed.",
+          provider: "openrouter-primary",
+          model: "openrouter/free",
+          latencyMs: 125
+        };
+      }
+    }
+  });
+
+  const outcome = await brain.processCallerUtterance({
+    callId: "call_ai_brain",
+    isOwner: true,
+    speechText: "Explain how ULTRON routes AI providers"
+  });
+
+  assert.equal(outcome.executed, true);
+  assert.equal(outcome.spokenResponse, "ULTRON selects a provider and falls back when needed.");
+  assert.equal(outcome.details.provider, "openrouter-primary");
+});
+
+test("TelephonyBrain: Does not fabricate a conversational answer when every AI provider fails", async () => {
+  const brain = new TelephonyBrain({
+    brainRouter: {
+      async executeInference() {
+        return {
+          success: false,
+          error: "ALL_PROVIDERS_UNAVAILABLE",
+          chainAttempted: ["openrouter-primary", "openrouter-secondary"]
+        };
+      }
+    }
+  });
+
+  const outcome = await brain.processCallerUtterance({
+    callId: "call_ai_unavailable",
+    isOwner: true,
+    speechText: "Explain how ULTRON routes AI providers"
+  });
+
+  assert.equal(outcome.executed, false);
+  assert.match(outcome.spokenResponse, /could not reach a working AI inference provider/i);
+  assert.equal(outcome.details.error, "ALL_PROVIDERS_UNAVAILABLE");
+});

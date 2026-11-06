@@ -207,6 +207,7 @@ export function createJarvisRouter({
   const computer = new WindowsComputerControl();
   const productivity = new ProductivitySuite();
   // Wire Telephony and Multi-Device Ecosystem
+  telephonyBrain.brainRouter = brain;
   telephonyBrain.windowsDesktopAgent = windowsDesktopAgent;
   telephonyBrain.multiDeviceManager = multiDeviceManagerInstance;
   telephonyBrain.remoteTaskOrchestrator = remoteTaskOrchestrator;

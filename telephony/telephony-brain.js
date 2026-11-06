@@ -405,11 +405,58 @@ export class TelephonyBrain {
             spokenResponse: "I understand. No notification or reminder has been scheduled by this telephone command."
           };
         }
+        if (this.brainRouter && typeof this.brainRouter.executeInference === "function") {
+          let inference;
+          try {
+            inference = await this.brainRouter.executeInference({
+              prompt: String(speechText || "").trim(),
+              context: {
+                source: "telephony",
+                language: lang.language,
+                callId: callId || null
+              }
+            });
+          } catch (error) {
+            inference = {
+              success: false,
+              error: String(error?.message || "TELEPHONY_INFERENCE_FAILED").slice(0, 300)
+            };
+          }
+
+          if (inference?.success === true && typeof inference.content === "string" && inference.content.trim()) {
+            return {
+              permitted: true,
+              intent: classification.intent,
+              executed: true,
+              spokenResponse: inference.content.trim().slice(0, 3000),
+              details: {
+                provider: inference.provider || null,
+                model: inference.model || null,
+                latencyMs: inference.latencyMs ?? null,
+                confidence: inference.confidence || null,
+                fallbackCount: inference.fallbackCount ?? null
+              }
+            };
+          }
+
+          return {
+            permitted: true,
+            intent: classification.intent,
+            executed: false,
+            spokenResponse: "I could not reach a working AI inference provider. Please try again when ULTRON's AI connection is available.",
+            details: {
+              error: inference?.error || "AI_INFERENCE_UNAVAILABLE",
+              chainAttempted: inference?.chainAttempted || []
+            }
+          };
+        }
+
         return {
           permitted: true,
           intent: classification.intent,
-          executed: true,
-          spokenResponse: `Understood sir. I have registered your instruction: ${speechText.slice(0, 100)}.`
+          executed: false,
+          spokenResponse: "The telephone AI brain is not connected to ULTRON's inference router. I have not processed this as an AI answer.",
+          details: { error: "BRAIN_ROUTER_UNAVAILABLE" }
         };
       }
     }
