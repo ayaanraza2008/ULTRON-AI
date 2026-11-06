@@ -959,7 +959,8 @@ export class MultiDeviceManager {
     let containsCredentials = false;
     try {
       containsCredentials = containsSensitiveSyncData(payload ?? {});
-      JSON.stringify(payload ?? {}); // Reject circular/BigInt payloads before mutation.
+      const serializedPayload = JSON.stringify(payload ?? {});
+      if (typeof serializedPayload !== "string") throw new TypeError("STATE_PAYLOAD_NOT_JSON_SERIALIZABLE");
     } catch {
       return {
         success: false,
