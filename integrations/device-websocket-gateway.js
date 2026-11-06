@@ -514,8 +514,22 @@ export class DeviceWebSocketGateway {
 
     // 2. Heartbeat & Telemetry
     if (msg.type === "HEARTBEAT") {
-      this.deviceHub.heartbeat(deviceId, token, msg.telemetry || {});
-      this.sendFrame(clientSession.socket, { type: "HEARTBEAT_ACK", timestamp: Date.now() });
+      const heartbeat = this.deviceHub.heartbeat(deviceId, token, msg.telemetry || {});
+      if (!heartbeat?.success) {
+        this.sendFrame(clientSession.socket, {
+          type: "HEARTBEAT_ACK",
+          success: false,
+          error: heartbeat?.error || "HEARTBEAT_REJECTED",
+          timestamp: Date.now()
+        });
+        this.disconnectClient(deviceId, 1008, "Heartbeat rejected", clientSession);
+        return;
+      }
+      this.sendFrame(clientSession.socket, {
+        type: "HEARTBEAT_ACK",
+        success: true,
+        timestamp: Date.now()
+      });
       return;
     }
 
