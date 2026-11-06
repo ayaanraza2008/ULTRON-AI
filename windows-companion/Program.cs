@@ -960,11 +960,14 @@ internal sealed class CompanionContext : ApplicationContext
             request.Headers.Add("x-device-token", deviceToken);
 
             using var response = await s_httpClient.SendAsync(request);
+            if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                PauseRemotePollingForRePair("Device authentication failed. Re-pair this Windows companion.");
+                return;
+            }
             if (!response.IsSuccessStatusCode)
             {
-                ShowStatus(response.StatusCode == System.Net.HttpStatusCode.Unauthorized
-                    ? "Device authentication failed. Re-pair this Windows companion."
-                    : $"ULTRON backend request failed (HTTP {(int)response.StatusCode}).");
+                ShowStatus($"ULTRON backend request failed (HTTP {(int)response.StatusCode}).");
                 return;
             }
 
@@ -1063,7 +1066,7 @@ internal sealed class CompanionContext : ApplicationContext
                 using var heartbeatResponse = await s_httpClient.SendAsync(heartbeat);
                 if (heartbeatResponse.StatusCode == System.Net.HttpStatusCode.Unauthorized)
                 {
-                    ShowStatus("Windows companion authentication expired. Re-pair this device to resume remote commands.");
+                    PauseRemotePollingForRePair("Windows companion authentication expired. Re-pair this device to resume remote commands.");
                     return;
                 }
                 if (!heartbeatResponse.IsSuccessStatusCode) return;
@@ -1148,7 +1151,7 @@ internal sealed class CompanionContext : ApplicationContext
         using var response = await s_httpClient.SendAsync(request);
         if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
         {
-            ShowStatus("Windows companion state sync authentication expired. Re-pair this device.");
+            PauseRemotePollingForRePair("Windows companion state sync authentication expired. Re-pair this device.");
             return;
         }
         if (!response.IsSuccessStatusCode) return;
@@ -1305,6 +1308,12 @@ internal sealed class CompanionContext : ApplicationContext
 
         selected.Add(("user", currentCommand));
         return selected.Select(item => (object)new { role = item.Role, content = item.Content }).ToList();
+    }
+
+    private void PauseRemotePollingForRePair(string message)
+    {
+        _commandPollTimer.Stop();
+        ShowStatus(message);
     }
 
     private void ShowStatus(string message)
