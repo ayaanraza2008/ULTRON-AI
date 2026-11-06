@@ -115,3 +115,15 @@ test("20,000-particle swarm buffers contain deterministic finite coordinates", (
   assert.deepEqual(first, second);
   for (const value of first) assert.ok(Number.isFinite(value));
 });
+
+
+test("private documents can be explicitly selected as bounded chat context", () => {
+  assert.match(appSource, /selectedDocumentIds:\s*\[\]/);
+  assert.match(appSource, /documentIds:\s*state\.selectedDocumentIds\.slice\(0, 3\)/);
+  assert.match(appSource, /function toggleDocumentForChat\(documentId\)/);
+  assert.match(appSource, /state\.selectedDocumentIds\.length >= 3/);
+  assert.match(appSource, /Use in chat/);
+  assert.match(appSource, /Remove from chat/);
+  assert.match(appSource, /Only selected files are read/);
+  assert.match(css, /\.document-entry--selected/);
+});
