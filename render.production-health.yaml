@@ -11,6 +11,23 @@ services:
     startCommand: npm start
     healthCheckPath: /api/health
     autoDeployTrigger: commit
+    buildFilter:
+      paths:
+        - "**/*.js"
+        - "**/*.mjs"
+        - "package.json"
+        - "package-lock.json"
+        - "public/**"
+        - "supabase/migrations/**"
+      ignoredPaths:
+        - "tests/**"
+        - "test/**"
+        - "docs/**"
+        - ".github/**"
+        - "README.md"
+        - "DEVELOPMENT_STATE.md"
+        - ".env.example"
+        - ".gitignore"
 
   - type: web
     name: ultron-browser-use-core
@@ -22,6 +39,9 @@ services:
     startCommand: cd browser-use-bridge && uvicorn main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     autoDeployTrigger: commit
+    buildFilter:
+      paths:
+        - "browser-use-bridge/**"
 
   - type: web
     name: ultron-rea-gateway
@@ -33,6 +53,12 @@ services:
     startCommand: cd rea-gateway && npm start
     healthCheckPath: /healthz
     autoDeployTrigger: commit
+    buildFilter:
+      paths:
+        - "rea-gateway/**"
+    buildFilter:
+      paths:
+        - "rea-gateway/**"
 
   - type: web
     name: ultron-core-interface
@@ -44,3 +70,10 @@ services:
     startCommand: node core-ui-proxy.mjs
     healthCheckPath: /healthz
     autoDeployTrigger: commit
+    buildFilter:
+      paths:
+        - "public/**"
+        - "core-ui-proxy.mjs"
+        - "particle-swarm-engine.js"
+        - "package.json"
+        - "package-lock.json"
