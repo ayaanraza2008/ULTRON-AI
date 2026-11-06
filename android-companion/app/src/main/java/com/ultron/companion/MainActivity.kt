@@ -51,6 +51,15 @@ class MainActivity : Activity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        if (intent == null) return
+        setIntent(intent)
+        if (intent.getBooleanExtra(EXTRA_START_VOICE_COMMAND, false)) {
+            window.decorView.post { beginVoiceCommand() }
+        }
+    }
+
     private fun buildLayout() {
         val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -408,7 +417,7 @@ class MainActivity : Activity() {
     private fun startWakeWordService() {
         try {
             startForegroundService(Intent(this, WakeWordService::class.java))
-            status.text = "Wake-word service requested. Keep its ongoing notification visible; tap the ULTRON alert when the word is detected."
+            status.text = "Wake-word service requested. Keep its ongoing notification visible. After “Ultron” is detected, tap the alert and speak your command."
         } catch (_: SecurityException) {
             status.text = "Android blocked microphone service startup. Re-check microphone/notification permissions."
         } catch (_: IllegalStateException) {
