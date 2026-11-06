@@ -160,66 +160,73 @@ export function createJarvisRouter({
   const syncPairedDeviceIntoFleet = async pairedDevice => {
     try {
       const manager = multiDeviceManagerInstance;
-    if (!manager || typeof manager.getDevice !== "function" || !pairedDevice?.id || !pairedDevice?.ownerUserId) return true;
-    if (await manager.ready === false) return true;
+      if (!manager || typeof manager.getDevice !== "function" || !pairedDevice?.id || !pairedDevice?.ownerUserId) return true;
+      if (await manager.ready === false) return true;
 
-    const platform = String(pairedDevice.platform || "unknown").toLowerCase();
-    const heartbeatTimeoutMs = platform === "android" ? 35 * 60 * 1000 : 90 * 1000;
-    const online = typeof deviceHubInstance.isDeviceOnline === "function"
-      ? deviceHubInstance.isDeviceOnline(pairedDevice.id)
-      : pairedDevice.online === true;
-    const existing = manager.getDevice(pairedDevice.id);
-    if (existing?.ownerUserId && existing.ownerUserId !== pairedDevice.ownerUserId) return false;
+      const platform = String(pairedDevice.platform || "unknown").toLowerCase();
+      const heartbeatTimeoutMs = platform === "android" ? 35 * 60 * 1000 : 90 * 1000;
+      const online = typeof deviceHubInstance.isDeviceOnline === "function"
+        ? deviceHubInstance.isDeviceOnline(pairedDevice.id)
+        : pairedDevice.online === true;
+      const existing = manager.getDevice(pairedDevice.id);
+      if (existing?.ownerUserId && existing.ownerUserId !== pairedDevice.ownerUserId) return false;
 
-    const type = platform === "windows"
-      ? "windows_pc"
-      : platform === "android"
-        ? "android_smartphone"
-        : platform === "browser"
-          ? "web_browser"
-          : "generic_companion";
-    const capabilities = Array.isArray(pairedDevice.capabilities)
-      ? pairedDevice.capabilities
-      : Object.keys(pairedDevice.capabilities || {});
-    const metadata = {
-      id: pairedDevice.id,
-      name: pairedDevice.name || pairedDevice.device_name || "Paired Companion",
-      ownerUserId: pairedDevice.ownerUserId,
-      type,
-      platform,
-      capabilities: capabilities.length ? capabilities : ["notifications", "telemetry"],
-      online,
-      battery: pairedDevice.battery || { percent: 100, isCharging: false },
-      heartbeatTimeoutMs
-    };
+      const type = platform === "windows"
+        ? "windows_pc"
+        : platform === "android"
+          ? "android_smartphone"
+          : platform === "browser"
+            ? "web_browser"
+            : "generic_companion";
+      const capabilities = Array.isArray(pairedDevice.capabilities)
+        ? pairedDevice.capabilities
+        : Object.keys(pairedDevice.capabilities || {});
+      const metadata = {
+        id: pairedDevice.id,
+        name: pairedDevice.name || pairedDevice.device_name || "Paired Companion",
+        ownerUserId: pairedDevice.ownerUserId,
+        type,
+        platform,
+        capabilities: capabilities.length ? capabilities : ["notifications", "telemetry"],
+        online,
+        battery: pairedDevice.battery || { percent: 100, isCharging: false },
+        heartbeatTimeoutMs
+      };
 
-    if (!existing) {
-      let result = manager.registerDevice(metadata);
-      if (result?.error === "ASYNC_PERSISTENCE_REQUIRED" && typeof manager.registerDeviceDurably === "function") {
-        result = await manager.registerDeviceDurably(metadata);
+      if (!existing) {
+        let result = manager.registerDevice(metadata);
+        if (result?.error === "ASYNC_PERSISTENCE_REQUIRED" && typeof manager.registerDeviceDurably === "function") {
+          result = await manager.registerDeviceDurably(metadata);
+        }
+        if (result?.success === false) {
+          logger.warn?.("Paired device could not be registered in the fleet manager", {
+            deviceId: pairedDevice.id,
+            code: result.error || "DEVICE_REGISTRATION_FAILED"
+          });
+        }
+        return result?.error !== "DEVICE_OWNER_MISMATCH";
       }
-      if (result?.success === false) {
-        logger.warn?.("Paired device could not be registered in the fleet manager", {
-          deviceId: pairedDevice.id,
-          code: result.error || "DEVICE_REGISTRATION_FAILED"
-        });
-      }
-      return result?.error !== "DEVICE_OWNER_MISMATCH";
-    }
 
-    if (online && typeof manager.isDeviceOnline === "function" && !manager.isDeviceOnline(pairedDevice.id)) {
-      const presence = { online: true, battery: pairedDevice.battery, heartbeatTimeoutMs };
-      let result = manager.updateDevicePresence(pairedDevice.id, presence);
-      if (result?.error === "ASYNC_PERSISTENCE_REQUIRED" && typeof manager.updateDevicePresenceDurably === "function") {
-        result = await manager.updateDevicePresenceDurably(pairedDevice.id, presence);
+      const shouldBindOwner = !existing.ownerUserId;
+      const shouldRefreshPresence = online && typeof manager.isDeviceOnline === "function" && !manager.isDeviceOnline(pairedDevice.id);
+      if (shouldBindOwner || shouldRefreshPresence) {
+        const presence = {
+          ownerUserId: pairedDevice.ownerUserId,
+          online,
+          battery: pairedDevice.battery,
+          heartbeatTimeoutMs
+        };
+        let result = manager.updateDevicePresence(pairedDevice.id, presence);
+        if (result?.error === "ASYNC_PERSISTENCE_REQUIRED" && typeof manager.updateDevicePresenceDurably === "function") {
+          result = await manager.updateDevicePresenceDurably(pairedDevice.id, presence);
+        }
+        if (result?.success === false) {
+          logger.warn?.("Paired device presence could not be refreshed in the fleet manager", {
+            deviceId: pairedDevice.id,
+            code: result.error || "DEVICE_PRESENCE_UPDATE_FAILED"
+          });
+        }
       }
-      if (result?.success === false) {
-        logger.warn?.("Paired device presence could not be refreshed in the fleet manager", {
-          deviceId: pairedDevice.id,
-          code: result.error || "DEVICE_PRESENCE_UPDATE_FAILED"
-        });
-      }
-    }
       return true;
     } catch (error) {
       logger.warn?.("Paired device fleet synchronization failed", {
