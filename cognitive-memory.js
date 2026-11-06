@@ -199,7 +199,7 @@ export function recallCognitiveMemoryGraph(items, query, {
   const rankedSeeds = eligibleMemories;
   // Start from the strongest semantic match; related rows are discovered via graph edges,
   // rather than being mislabeled as depth-zero seeds just because their text overlaps.
-  const queue = rankedSeeds.slice(0, 1).map(item => ({ id: item.id, depth: 0, relation: "query_match" }));
+  const queue = rankedSeeds.slice(0, Math.min(4, Math.max(1, Math.trunc(limit) || 1))).map(item => ({ id: item.id, depth: 0, relation: "query_match" }));
   const visited = new Map();
   const depthLimit = Math.max(0, Math.min(3, Math.trunc(maxDepth) || 0));
 
