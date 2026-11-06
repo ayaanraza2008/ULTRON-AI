@@ -185,3 +185,30 @@ test("a replaced WebSocket cannot execute commands from bytes already buffered b
   assert.equal(gateway.clients.get(deviceId), newSession);
   gateway.close();
 });
+
+test("a revoked WebSocket cannot execute frames after its close frame is sent", async () => {
+  const { gateway, device, deviceId, deviceHub, makeSocket } = makeGateway();
+  let heartbeatCount = 0;
+  deviceHub.heartbeat = () => { heartbeatCount += 1; return { success: true }; };
+  const session = {
+    socket: makeSocket(),
+    device: { id: deviceId, ownerUserId: device.ownerUserId, authToken: "device-token" },
+    deviceId,
+    authenticated: true,
+    buffer: Buffer.alloc(0),
+    pingTimer: null,
+    authTimeout: null
+  };
+  gateway.registerConnectedClient(deviceId, session);
+
+  // Revocation ends the socket, but a half-closed TCP socket may not yet
+  // report destroyed; the session-level closed flag must block new frames.
+  assert.equal(gateway.disconnectClient(deviceId, 1008, "Device access revoked", session), true);
+  assert.equal(session.socket.destroyed, false);
+  assert.equal(session.closed, true);
+
+  await gateway.handleSocketData(session, maskedTextFrame(JSON.stringify({ type: "HEARTBEAT" })));
+  assert.equal(heartbeatCount, 0);
+  assert.equal(gateway.clients.has(deviceId), false);
+  gateway.close();
+});
