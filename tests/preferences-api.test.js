@@ -100,8 +100,13 @@ test("invalid voice output preferences are rejected before any preference databa
       method: "PUT", headers,
       body: JSON.stringify({ voice_input_locale: "en-IN", voice_output_name: "Valid", voice_output_lang: "not a locale" })
     });
+    const badControl = await fetch(base + "/api/preferences", {
+      method: "PUT", headers,
+      body: JSON.stringify({ voice_input_locale: "en-IN", voice_output_name: "bad" + String.fromCharCode(10) + "voice", voice_output_lang: "en-GB" })
+    });
     assert.equal(badName.status, 400);
     assert.equal(badLang.status, 400);
+    assert.equal(badControl.status, 400);
     assert.equal(preferenceRequests, 0);
   } finally {
     await closeServer(server);

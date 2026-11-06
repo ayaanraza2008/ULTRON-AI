@@ -1561,7 +1561,7 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
     if (!allowedLocales.includes(locale)) return res.status(400).json({ error: { code: "INVALID_PREFERENCE", message: "Choose English, Hindi, or Hinglish for voice input." } });
     const voiceOutputName = req.body?.voice_output_name;
     const voiceOutputLang = req.body?.voice_output_lang;
-    if (voiceOutputName !== undefined && (typeof voiceOutputName !== "string" || voiceOutputName.length > 120 || /[\\u0000-\\u001f]/.test(voiceOutputName))) {
+    if (voiceOutputName !== undefined && (typeof voiceOutputName !== "string" || voiceOutputName.length > 120 || [...voiceOutputName].some(character => character.charCodeAt(0) < 32))) {
       return res.status(400).json({ error: { code: "INVALID_PREFERENCE", message: "Voice output name is invalid." } });
     }
     if (voiceOutputLang !== undefined && (typeof voiceOutputLang !== "string" || voiceOutputLang.length > 40 || (voiceOutputLang !== "" && !/^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(voiceOutputLang)))) {
