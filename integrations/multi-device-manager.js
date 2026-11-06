@@ -102,9 +102,9 @@ export class MultiDeviceManager {
     return {
       version: "2.0.0",
       savedAt: new Date().toISOString(),
-      devices: Array.from(this.devices.entries()),
-      sharedState: Array.from(this.sharedState.entries()),
-      pendingDeliveries: Array.from(this.pendingDeliveries.entries()),
+      devices: Array.from(this.devices.entries()).map(([k, v]) => [k, structuredClone(v)]),
+      sharedState: Array.from(this.sharedState.entries()).map(([k, v]) => [k, structuredClone(v)]),
+      pendingDeliveries: Array.from(this.pendingDeliveries.entries()).map(([k, v]) => [k, structuredClone(v)]),
       revokedDevices: Array.from(this.revokedDevices)
     };
   }
