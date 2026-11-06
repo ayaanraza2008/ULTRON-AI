@@ -31,7 +31,7 @@ const SENSITIVE_SYNC_KEY_NAMES = new Set([
 
 function containsSensitiveSyncData(value, seen = new WeakSet()) {
   if (typeof value === "string") {
-    return /(^|\\s)Bearer\\s+[A-Za-z0-9._~+_-]{8,}/i.test(value) ||
+    return /(^|\s)Bearer\s+[A-Za-z0-9._~+_-]{8,}/i.test(value) ||
       /(^|[^A-Za-z0-9])(?:sk-[A-Za-z0-9]{16,}|gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|sb_secret_[A-Za-z0-9_]{16,})([^A-Za-z0-9]|$)/i.test(value);
   }
   if (!value || typeof value !== "object") return false;
