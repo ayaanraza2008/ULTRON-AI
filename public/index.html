@@ -150,6 +150,30 @@
       <p class="drawer-note" id="runtime-note">Live status is read from ULTRON APIs. Values are not simulated.</p>
     </section>
 
+    <section class="drawer-section">
+      <div class="section-heading"><span>CONVERSATIONS</span><span class="section-heading__line"></span></div>
+      <div class="conversation-list" id="conversation-list"><p class="drawer-note">Load your recent threads...</p></div>
+    </section>
+
+    <section class="drawer-section">
+      <div class="section-heading"><span>MEMORY VAULT</span><span class="section-heading__line"></span></div>
+      <form class="memory-form" id="memory-form">
+        <label class="setting-field"><span>Memory type</span>
+          <select id="memory-kind">
+            <option value="preference">Preference</option>
+            <option value="project_fact">Project fact</option>
+            <option value="profile_note">Profile note</option>
+            <option value="document_reference">Document reference</option>
+          </select>
+        </label>
+        <label class="setting-field"><span>Title</span><input id="memory-title" type="text" maxlength="240" placeholder="A short memory title" required></label>
+        <label class="setting-field"><span>Content</span><textarea id="memory-content" rows="3" maxlength="20000" placeholder="Only save information you want ULTRON to remember" required></textarea></label>
+        <button class="drawer-submit" id="memory-save" type="submit">Save approved memory</button>
+        <p class="drawer-note" id="memory-feedback" role="status">Memory is account-scoped and only injected when the memory setting is enabled.</p>
+      </form>
+      <div class="memory-list" id="memory-items"><p class="drawer-note">Loading saved memory...</p></div>
+    </section>
+
     <section class="drawer-section drawer-section--last">
       <div class="section-heading"><span>SESSION</span><span class="section-heading__line"></span></div>
       <div class="session-line"><span id="account-label">Owner session</span><span class="session-line__dot" aria-hidden="true"></span></div>
@@ -165,6 +189,45 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
       </button>
     </div>
+    <section class="drawer-section">
+      <div class="section-heading"><span>QUEUE A TASK</span><span class="section-heading__line"></span></div>
+      <form class="task-form" id="task-form">
+        <label class="setting-field"><span>Goal</span><textarea id="task-goal" rows="3" maxlength="2000" placeholder="What should the AI employee prepare?" required></textarea></label>
+        <div class="task-options">
+          <label class="setting-field"><span>Role</span>
+            <select id="task-role">
+              <option value="chief-of-staff">Chief of staff</option>
+              <option value="web-dev">Web developer</option>
+              <option value="gtm-engineer">GTM engineer</option>
+              <option value="seo-aeo">SEO / AEO</option>
+              <option value="social-media">Social media</option>
+              <option value="ad-manager">Ad manager</option>
+              <option value="sales">Sales</option>
+              <option value="customer-satisfaction">Customer support</option>
+            </select>
+          </label>
+          <label class="setting-field"><span>Mode</span>
+            <select id="task-mode">
+              <option value="plan">Plan</option>
+              <option value="draft">Draft</option>
+              <option value="review">Review</option>
+              <option value="report">Report</option>
+            </select>
+          </label>
+        </div>
+        <button class="drawer-submit" id="task-submit" type="submit">Queue task</button>
+        <p class="drawer-note" id="task-feedback" role="status">Tasks run only when the durable worker and owner permissions are configured.</p>
+      </form>
+    </section>
+
+    <section class="drawer-section">
+      <div class="section-heading"><span>PRIVATE DOCUMENTS</span><span class="section-heading__line"></span></div>
+      <input id="document-input" type="file" accept=".txt,.md,.markdown,.csv,.json,.html,.htm,.pdf,.docx" hidden>
+      <button class="drawer-submit drawer-submit--secondary" id="document-upload" type="button">Upload private document</button>
+      <p class="drawer-note" id="document-feedback" role="status">TXT, Markdown, CSV, JSON, HTML, PDF and DOCX · up to 5 MB</p>
+      <div class="document-list" id="document-list"><p class="drawer-note">Loading private files...</p></div>
+    </section>
+
     <section class="drawer-section">
       <div class="section-heading"><span>RECENT TASKS</span><span class="section-heading__line"></span></div>
       <div class="activity-list" id="task-list"><p class="drawer-note">Loading real task records...</p></div>

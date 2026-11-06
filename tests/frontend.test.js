@@ -69,6 +69,9 @@ test("frontend wires existing same-origin auth, chat, memory and activity APIs",
     "/api/auth/signin",
     "/api/chat",
     "/api/conversations",
+    "/api/memory",
+    "/api/documents/upload",
+    "/api/jarvis/agents/task",
     "/api/preferences",
     "/api/models",
     "/api/jarvis/tools",
@@ -76,6 +79,16 @@ test("frontend wires existing same-origin auth, chat, memory and activity APIs",
   ]) assert.ok(appSource.includes(route), "missing route " + route);
   assert.match(appSource, /composer\.hidden\s*=\s*state\.mode\s*!==\s*"text"/);
   assert.match(appSource, /credentials:\s*"same-origin"/);
+});
+
+test("settings and activity drawers expose real conversation, memory, document and employee-task controls", () => {
+  for (const id of ["conversation-list", "memory-form", "memory-items", "task-form", "task-role", "task-mode", "document-input", "document-list"]) {
+    assert.ok(html.includes('id="' + id + '"'), "missing control " + id);
+  }
+  for (const route of ["/api/memory", "/api/documents/upload", "/api/jarvis/agents/task", "/api/conversations/"]) {
+    assert.ok(appSource.includes(route), "missing data route " + route);
+  }
+  assert.match(appSource, /The task is queued, not completed/);
 });
 
 test("the core stop control aborts in-flight chat requests and auth overlay makes the main app inert", () => {

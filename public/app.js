@@ -16,6 +16,9 @@ const state = {
   preferenceAvailable: false,
   models: [],
   history: [],
+  conversations: [],
+  memoryItems: [],
+  documents: [],
   conversationId: null,
   persistenceAvailable: false,
   attachments: [],
@@ -245,24 +248,85 @@ async function signOut() {
     try { await api("/api/logout", { method: "POST", body: {} }); } catch {}
   }
   state.history = [];
+  state.conversations = [];
+  state.memoryItems = [];
+  state.documents = [];
   state.conversationId = null;
   state.session = null;
   state.models = [];
+  renderConversationList();
+  renderMemoryItems();
+  renderDocuments();
   messageList.replaceChildren();
   closeDrawers();
   showAuth("You have signed out.");
   setConnection(true, "API READY");
 }
 
+function renderConversationList() {
+  const list = $("#conversation-list");
+  list.replaceChildren();
+  if (state.session?.authType !== "supabase") {
+    const note = document.createElement("p");
+    note.className = "drawer-note";
+    note.textContent = "Persistent conversation history requires the owner Supabase session."; 
+    list.append(note);
+    return;
+  }
+  if (!state.conversations.length) {
+    const note = document.createElement("p");
+    note.className = "drawer-note";
+    note.textContent = "No saved conversations yet.";
+    list.append(note);
+    return;
+  }
+  for (const conversation of state.conversations.slice(0, 12)) {
+    const entry = document.createElement("div");
+    entry.className = "conversation-entry";
+    const open = document.createElement("button");
+    open.type = "button";
+    open.textContent = conversation.title || "Untitled conversation";
+    open.addEventListener("click", () => void switchConversation(conversation.id));
+    const meta = document.createElement("span");
+    const date = new Date(conversation.updated_at || conversation.created_at || "");
+    meta.textContent = (conversation.id === state.conversationId ? "CURRENT · " : "") + (Number.isNaN(date.valueOf()) ? "Saved thread" : date.toLocaleString());
+    entry.append(open, meta);
+    list.append(entry);
+  }
+}
+
+async function switchConversation(conversationId) {
+  if (state.busy || typeof conversationId !== "string") return;
+  try {
+    const result = await api("/api/conversations/" + encodeURIComponent(conversationId) + "/messages");
+    state.conversationId = conversationId;
+    state.persistenceAvailable = true;
+    state.history = (Array.isArray(result.messages) ? result.messages : [])
+      .filter(item => ["user", "assistant"].includes(item.role) && typeof item.content === "string")
+      .slice(-40)
+      .map(item => ({ role: item.role, content: item.content }));
+    renderHistory();
+    renderConversationList();
+    closeDrawers();
+    setStatus("standby", "Conversation restored.", "Loaded from your saved history");
+  } catch (error) {
+    toast(apiErrorMessage(error, "The selected conversation could not be loaded."), "error");
+  }
+}
+
 async function loadConversation() {
   if (state.session?.authType !== "supabase") {
     state.persistenceAvailable = false;
+    state.conversations = [];
+    renderConversationList();
     return;
   }
   try {
     const result = await api("/api/conversations");
     state.persistenceAvailable = true;
-    const recent = Array.isArray(result.conversations) ? result.conversations[0] : null;
+    state.conversations = Array.isArray(result.conversations) ? result.conversations : [];
+    renderConversationList();
+    const recent = state.conversations[0];
     if (!recent?.id) {
       state.conversationId = null;
       state.history = [];
@@ -276,13 +340,13 @@ async function loadConversation() {
       .slice(-40)
       .map(item => ({ role: item.role, content: item.content }));
     renderHistory();
+    renderConversationList();
   } catch (error) {
     state.persistenceAvailable = false;
-    if (error.status === 401 || error.status === 403) {
-      toast("Conversation history is not available for this session.");
-    } else {
-      toast("Conversation history could not be loaded.");
-    }
+    state.conversations = [];
+    renderConversationList();
+    if (error.status === 401 || error.status === 403) toast("Conversation history is not available for this session.");
+    else toast("Conversation history could not be loaded.");
   }
 }
 
@@ -294,6 +358,10 @@ async function ensureConversation(firstMessage) {
       body: { title: String(firstMessage).slice(0, 70) || "New conversation" }
     });
     state.conversationId = result.conversation?.id || null;
+    if (result.conversation?.id) {
+      state.conversations = [result.conversation, ...state.conversations.filter(item => item.id !== result.conversation.id)].slice(0, 20);
+      renderConversationList();
+    }
     return state.conversationId;
   } catch {
     state.persistenceAvailable = false;
@@ -320,7 +388,7 @@ function setBusy(busy) {
   $("#send-button").disabled = busy;
   messageInput.disabled = busy;
   coreTrigger.disabled = false;
-  coreTrigger.setAttribute("aria-label", busy ? "Stop current request" : state.status === "listening" ? "Stop voice input" : "Start voice input");
+  coreTrigger.setAttribute("aria-label", busy ? "Stop current request" : state.status === "listening" ? "Stop voice input" : state.speaking ? "Stop voice output" : "Start voice input");
   $("#send-button").setAttribute("aria-busy", String(busy));
 }
 
@@ -636,6 +704,288 @@ async function loadPreferences() {
   }
 }
 
+
+function renderMemoryItems() {
+  const list = $("#memory-items");
+  list.replaceChildren();
+  if (state.session?.authType !== "supabase") {
+    const note = document.createElement("p");
+    note.className = "drawer-note";
+    note.textContent = "Saved memory management requires the owner Supabase session.";
+    list.append(note);
+    return;
+  }
+  if (!state.memoryItems.length) {
+    const note = document.createElement("p");
+    note.className = "drawer-note";
+    note.textContent = "No saved memory items.";
+    list.append(note);
+    return;
+  }
+  for (const memory of state.memoryItems.slice(0, 12)) {
+    const entry = document.createElement("div");
+    entry.className = "memory-entry";
+    const head = document.createElement("div");
+    head.className = "memory-entry__head";
+    const title = document.createElement("span");
+    title.textContent = memory.title || "Untitled memory";
+    const status = document.createElement("span");
+    status.textContent = memory.is_active ? "ACTIVE" : "PAUSED";
+    head.append(title, status);
+    const meta = document.createElement("div");
+    meta.className = "memory-entry__meta";
+    meta.textContent = [memory.kind, memory.source].filter(Boolean).join(" · ");
+    const body = document.createElement("div");
+    body.className = "memory-entry__body";
+    const content = String(memory.content || "");
+    body.textContent = content.length > 420 ? content.slice(0, 420) + "…" : content;
+    const actions = document.createElement("div");
+    actions.className = "inline-actions";
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.textContent = memory.is_active ? "Pause" : "Activate";
+    toggle.addEventListener("click", () => void updateMemory(memory.id, { is_active: !memory.is_active }));
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.textContent = "Delete";
+    remove.addEventListener("click", () => void deleteMemory(memory.id));
+    actions.append(toggle, remove);
+    entry.append(head, meta, body, actions);
+    list.append(entry);
+  }
+}
+
+async function loadMemory() {
+  if (state.session?.authType !== "supabase") {
+    state.memoryItems = [];
+    renderMemoryItems();
+    $("#memory-feedback").textContent = "Use the owner Supabase session to manage saved memories.";
+    return;
+  }
+  try {
+    const result = await api("/api/memory");
+    state.memoryItems = Array.isArray(result.items) ? result.items : [];
+    renderMemoryItems();
+    $("#memory-feedback").textContent = "Only active, unexpired memories are eligible for chat context when memory is enabled.";
+  } catch (error) {
+    state.memoryItems = [];
+    renderMemoryItems();
+    $("#memory-feedback").textContent = apiErrorMessage(error, "Saved memory is unavailable for this account.");
+  }
+}
+
+async function saveMemory(event) {
+  event.preventDefault();
+  const kind = $("#memory-kind").value;
+  const title = $("#memory-title").value.trim();
+  const content = $("#memory-content").value.trim();
+  if (!title || !content) {
+    $("#memory-feedback").textContent = "Enter both a title and memory content.";
+    return;
+  }
+  const button = $("#memory-save");
+  button.disabled = true;
+  $("#memory-feedback").textContent = "Saving the memory item...";
+  try {
+    await api("/api/memory", { method: "POST", body: { kind, title, content } });
+    $("#memory-title").value = "";
+    $("#memory-content").value = "";
+    await loadMemory();
+    toast("User-approved memory saved.");
+  } catch (error) {
+    $("#memory-feedback").textContent = apiErrorMessage(error, "Memory could not be saved.");
+  } finally {
+    button.disabled = state.session?.authType !== "supabase";
+  }
+}
+
+async function updateMemory(memoryId, patch) {
+  try {
+    await api("/api/memory/" + encodeURIComponent(memoryId), { method: "PATCH", body: patch });
+    await loadMemory();
+  } catch (error) {
+    toast(apiErrorMessage(error, "Memory could not be updated."), "error");
+  }
+}
+
+async function deleteMemory(memoryId) {
+  try {
+    await api("/api/memory/" + encodeURIComponent(memoryId), { method: "DELETE" });
+    await loadMemory();
+    toast("Memory item deleted.");
+  } catch (error) {
+    toast(apiErrorMessage(error, "Memory could not be deleted."), "error");
+  }
+}
+
+
+function renderDocuments() {
+  const list = $("#document-list");
+  list.replaceChildren();
+  if (state.session?.authType !== "supabase") {
+    const note = document.createElement("p");
+    note.className = "drawer-note";
+    note.textContent = "Private document storage requires the owner Supabase session.";
+    list.append(note);
+    return;
+  }
+  if (!state.documents.length) {
+    const note = document.createElement("p");
+    note.className = "drawer-note";
+    note.textContent = "No private documents are stored for this account.";
+    list.append(note);
+    return;
+  }
+  for (const file of state.documents.slice(0, 12)) {
+    const entry = document.createElement("div");
+    entry.className = "document-entry";
+    const head = document.createElement("div");
+    head.className = "document-entry__head";
+    const name = document.createElement("span");
+    name.textContent = file.filename || "Untitled file";
+    const size = document.createElement("span");
+    size.textContent = Number.isFinite(Number(file.size_bytes)) ? (Number(file.size_bytes) / 1048576).toFixed(2) + " MB" : "";
+    head.append(name, size);
+    const meta = document.createElement("span");
+    meta.className = "document-entry__meta";
+    meta.textContent = [file.mime_type, file.created_at ? new Date(file.created_at).toLocaleDateString() : ""].filter(Boolean).join(" · ");
+    const actions = document.createElement("div");
+    actions.className = "inline-actions";
+    const download = document.createElement("button");
+    download.type = "button";
+    download.textContent = "Download";
+    download.addEventListener("click", () => void downloadDocument(file));
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.textContent = "Delete";
+    remove.addEventListener("click", () => void deleteDocument(file.id));
+    actions.append(download, remove);
+    entry.append(head, meta, actions);
+    list.append(entry);
+  }
+}
+
+async function loadDocuments() {
+  if (state.session?.authType !== "supabase") {
+    state.documents = [];
+    renderDocuments();
+    $("#document-feedback").textContent = "Private document storage requires the owner Supabase session.";
+    return;
+  }
+  try {
+    const result = await api("/api/documents");
+    state.documents = Array.isArray(result.documents) ? result.documents : [];
+    renderDocuments();
+    $("#document-feedback").textContent = "Private account storage only. The current API stores and retrieves files; automatic document processing is not exposed by this route.";
+  } catch (error) {
+    state.documents = [];
+    renderDocuments();
+    $("#document-feedback").textContent = apiErrorMessage(error, "Private document storage is unavailable.");
+  }
+}
+
+async function uploadDocument(fileList) {
+  const file = Array.from(fileList || [])[0];
+  if (!file) return;
+  const extension = file.name.toLowerCase().split(".").pop();
+  const allowed = new Set(["txt", "md", "markdown", "csv", "json", "html", "htm", "pdf", "docx"]);
+  if (!allowed.has(extension) || file.size <= 0 || file.size > 5 * 1024 * 1024) {
+    $("#document-feedback").textContent = "Choose a supported document between 1 byte and 5 MB.";
+    $("#document-input").value = "";
+    return;
+  }
+  const button = $("#document-upload");
+  button.disabled = true;
+  $("#document-feedback").textContent = "Reading and securely uploading " + file.name + "...";
+  try {
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () => reject(new Error("The selected document could not be read."));
+      reader.readAsDataURL(file);
+    });
+    const separator = dataUrl.indexOf(",");
+    if (separator < 0) throw new Error("The selected document could not be encoded.");
+    await api("/api/documents/upload", {
+      method: "POST",
+      body: { filename: file.name, fileBase64: dataUrl.slice(separator + 1) }
+    });
+    await loadDocuments();
+    toast("Private document uploaded.");
+  } catch (error) {
+    $("#document-feedback").textContent = apiErrorMessage(error, "The document could not be uploaded.");
+    toast(apiErrorMessage(error, "The document could not be uploaded."), "error");
+  } finally {
+    button.disabled = state.session?.authType !== "supabase";
+    $("#document-input").value = "";
+  }
+}
+
+async function downloadDocument(file) {
+  try {
+    const response = await fetch("/api/documents/" + encodeURIComponent(file.id) + "/download", { credentials: "same-origin" });
+    if (!response.ok) {
+      let payload = null;
+      try { payload = await response.json(); } catch {}
+      throw new Error(payload?.error?.message || "The file could not be downloaded.");
+    }
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = file.filename || "ultron-document";
+    document.body.append(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+  } catch (error) {
+    toast(apiErrorMessage(error, "The document could not be downloaded."), "error");
+  }
+}
+
+async function deleteDocument(documentId) {
+  try {
+    await api("/api/documents/" + encodeURIComponent(documentId), { method: "DELETE" });
+    await loadDocuments();
+    toast("Private document deleted.");
+  } catch (error) {
+    toast(apiErrorMessage(error, "The document could not be deleted."), "error");
+  }
+}
+
+async function queueEmployeeTask(event) {
+  event.preventDefault();
+  const goal = $("#task-goal").value.trim();
+  if (goal.length < 2 || goal.length > 2000) {
+    $("#task-feedback").textContent = "Enter a task goal between 2 and 2,000 characters.";
+    return;
+  }
+  if (state.session?.authType !== "supabase") {
+    $("#task-feedback").textContent = "Task queue requires the owner Supabase session.";
+    return;
+  }
+  const button = $("#task-submit");
+  button.disabled = true;
+  $("#task-feedback").textContent = "Submitting the task to the durable queue...";
+  try {
+    const result = await api("/api/jarvis/agents/task", {
+      method: "POST",
+      body: { goal, role: $("#task-role").value, mode: $("#task-mode").value }
+    });
+    const task = result.task || {};
+    $("#task-feedback").textContent = (task.status || "QUEUED") + " · " +
+      (result.execution?.notice || "The task is queued, not completed.");
+    $("#task-goal").value = "";
+    await loadActivity();
+    toast("Task accepted by ULTRON's durable queue.");
+  } catch (error) {
+    $("#task-feedback").textContent = apiErrorMessage(error, "The task could not be queued.");
+    toast(apiErrorMessage(error, "The task could not be queued."), "error");
+  } finally {
+    button.disabled = state.session?.authType !== "supabase";
+  }
+}
+
 async function savePreferences() {
   if (!state.preferenceAvailable) {
     toast("Account preferences are unavailable for this session.", "error");
@@ -727,7 +1077,11 @@ async function loadActivity() {
 }
 
 async function loadWorkspace() {
-  await Promise.all([loadConversation(), loadPreferences(), loadModels(), refreshSystemStatus()]);
+  const ownerSession = state.session?.authType === "supabase";
+  $("#task-submit").disabled = !ownerSession;
+  $("#memory-save").disabled = !ownerSession;
+  $("#document-upload").disabled = !ownerSession;
+  await Promise.all([loadConversation(), loadPreferences(), loadMemory(), loadDocuments(), loadModels(), refreshSystemStatus()]);
   void loadActivity();
   if (!state.pollId) state.pollId = window.setInterval(() => {
     if (!document.hidden && state.authenticated) void refreshSystemStatus();
@@ -746,6 +1100,10 @@ async function startNewConversation() {
       const result = await api("/api/conversations", { method: "POST", body: { title: "New conversation" } });
       state.conversationId = result.conversation?.id || null;
       state.persistenceAvailable = Boolean(state.conversationId);
+      if (result.conversation?.id) {
+        state.conversations = [result.conversation, ...state.conversations.filter(item => item.id !== result.conversation.id)].slice(0, 20);
+        renderConversationList();
+      }
     } catch {
       state.persistenceAvailable = false;
       toast("A new thread will remain in this session only.");
@@ -778,8 +1136,6 @@ messageInput.addEventListener("keydown", event => {
     event.preventDefault();
     composer.requestSubmit();
   }
-});
-messageInput.addEventListener("input", () => {
 });
 $("#settings-open").addEventListener("click", () => openDrawer(settingsDrawer));
 $("#settings-close").addEventListener("click", closeDrawers);
@@ -822,6 +1178,10 @@ $("#speech-toggle").addEventListener("click", () => {
   void savePreferences();
 });
 $("#new-conversation").addEventListener("click", () => void startNewConversation());
+$("#memory-form").addEventListener("submit", event => void saveMemory(event));
+$("#task-form").addEventListener("submit", event => void queueEmployeeTask(event));
+$("#document-upload").addEventListener("click", () => $("#document-input").click());
+$("#document-input").addEventListener("change", event => void uploadDocument(event.target.files));
 
 setMode("voice");
 setStatus("standby", "ULTRON is initializing.", "Establishing secure connection");
