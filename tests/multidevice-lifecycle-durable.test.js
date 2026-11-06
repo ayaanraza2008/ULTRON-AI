@@ -191,10 +191,11 @@ test("Switching to a database adapter waits for its authoritative cloud state", 
     seedDefaultFleet: false
   });
   await manager.ready;
-  manager.registerDevice({
+  manager.devices.set("old-local-device", {
     id: "old-local-device",
     name: "Old Local Device",
-    platform: "windows"
+    platform: "windows",
+    online: true
   });
 
   const cloudAdapter = makeAdapter({
