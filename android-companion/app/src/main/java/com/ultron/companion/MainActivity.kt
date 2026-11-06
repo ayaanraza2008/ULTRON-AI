@@ -356,6 +356,7 @@ class MainActivity : Activity() {
             if (result == TextToSpeech.ERROR && resumeWake) resumeWakeWordAfterCommand()
         } catch (_: RuntimeException) {
             // Keep the recognised response visible even when the device TTS engine fails.
+            if (resumeWake) resumeWakeWordAfterCommand()
         }
     }
 
