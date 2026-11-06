@@ -12,6 +12,7 @@ Requirements: Java 17, Android SDK 35, and Gradle 8.9. From this directory run `
 
 - Android 12 or newer is required.
 - An on-device English speech model must already be installed; the app does not download models or fall back to cloud recognition.
+- Replies to commands captured in the Voice screen use the Android device's installed Text-to-Speech engine and selected input language where supported. Typed Compose Chat remains text-only. This Android TTS path is separate from the web browser voice selector and does not guarantee the ULTRON Kokoro `am_onyx` voice.
 - Keep the ongoing listening notification visible and use its Stop action to disable the microphone.
 - The foreground service requests a best-effort restart if Android reclaims its process. Android controls background microphone access and battery optimization; listening is not guaranteed after force-stop, reboot, deep sleep, or OEM restrictions. After reboot, open the companion and enable listening again.
 - Wake notifications do not bypass the lock screen or device authentication.
