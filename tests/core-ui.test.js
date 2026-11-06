@@ -30,6 +30,13 @@ test("backend stays API-only while the interface proxy serves an explicit static
   assert.ok(proxySource.includes("ultron-core-shell-"));
 });
 
+
+test("mobile image attachment requests the rear camera when available", async () => {
+  const html = await readFile(new URL("../public/index.html", import.meta.url), "utf8");
+  assert.match(html, /id="image-input"[^>]*capture="environment"/);
+  assert.match(html, /aria-label="Capture or attach an image"/);
+});
+
 test("center-only shell keeps the core as the only visible application surface", async () => {
   const html = await readFile(new URL("../public/index.html", import.meta.url), "utf8");
   const css = await readFile(new URL("../public/core-only.css", import.meta.url), "utf8");
