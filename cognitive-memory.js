@@ -192,8 +192,11 @@ export function recallCognitiveMemoryGraph(items, query, {
   );
   if (!scoped.length) return [];
 
-  const byId = new Map(scoped.map(item => [item.id, item]));
-  const rankedSeeds = rankCognitiveMemories(scoped, query, { now, limit: Math.max(limit, 1) });
+  // Apply the same expiry/decay eligibility rules to every graph node, not only
+  // the initial query match. A relationship must never resurrect stale inferred memory.
+  const eligibleMemories = rankCognitiveMemories(scoped, query, { now, limit: Math.min(32, scoped.length) });
+  const byId = new Map(eligibleMemories.map(item => [item.id, item]));
+  const rankedSeeds = eligibleMemories;
   // Start from the strongest semantic match; related rows are discovered via graph edges,
   // rather than being mislabeled as depth-zero seeds just because their text overlaps.
   const queue = rankedSeeds.slice(0, 1).map(item => ({ id: item.id, depth: 0, relation: "query_match" }));
