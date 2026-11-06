@@ -64,6 +64,16 @@ body {
   isolation: isolate;
   -webkit-tap-highlight-color: transparent;
 }
+.core-wrap::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  inset: 16%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(119, 54, 190, .30) 0%, rgba(116, 34, 105, .17) 38%, rgba(0, 0, 0, 0) 72%);
+  filter: blur(22px);
+  pointer-events: none;
+}
 .energy-core {
   position: relative;
   z-index: 1;
@@ -78,9 +88,13 @@ body {
 .core-center {
   display: none !important;
 }
-.core-wrap:focus,
-.core-wrap:focus-visible {
+.core-wrap:focus {
   outline: none;
+}
+.core-wrap:focus-visible {
+  outline: 1px solid rgba(190, 137, 255, .72);
+  outline-offset: 10px;
+  border-radius: 50%;
 }
 .auth-screen:not([hidden]) {
   display: flex;
