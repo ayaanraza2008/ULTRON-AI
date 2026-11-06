@@ -394,6 +394,12 @@ function positivePort(value, fallback) {
   return Number.isInteger(port) && port >= 1 && port <= 65535 ? port : fallback;
 }
 
+export function resolveAnalysisRoot(configuredRoot, packageRoot) {
+  return typeof configuredRoot === "string" && configuredRoot.trim()
+    ? configuredRoot.trim()
+    : resolve(packageRoot, "targets");
+}
+
 
 function safeDiagnosticCode(value) {
   return typeof value === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(value) ? value : null;
@@ -443,6 +449,7 @@ export async function startGateway(env = process.env) {
   if (publicPort === childPort) throw new Error("PORT and REA_CHILD_PORT must be different.");
 
   const packageRoot = dirname(fileURLToPath(import.meta.url));
+  const analysisRoot = resolveAnalysisRoot(env.REA_ANALYSIS_ROOT, packageRoot);
   const cli = resolve(packageRoot, "node_modules", "rea-agents", "scripts", "rea.mjs");
   let mcpReady = false;
   const child = spawn(process.execPath, [
@@ -481,7 +488,7 @@ export async function startGateway(env = process.env) {
       if (!(await tcpReady(childPort, 1000))) {
         result = { ok: false, stage: "upstream_not_listening", reason: "tcp_not_ready" };
       } else {
-        result = await runReaMcpSelfTest({ upstreamPort: childPort, analysisRoot: env.REA_ANALYSIS_ROOT });
+        result = await runReaMcpSelfTest({ upstreamPort: childPort, analysisRoot });
       }
       if (result.ok) {
         mcpReady = true;
