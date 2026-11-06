@@ -55,6 +55,7 @@ const settingsDrawer = $("#settings-drawer");
 const activityDrawer = $("#activity-drawer");
 const coreTrigger = $("#core-trigger");
 const coreInteraction = $("#core-wrap");
+const voiceOutputSelect = $("#voice-output-select");
 
 function apiErrorMessage(error, fallback = "The request could not be completed.") {
   const message = error?.payload?.error?.message || error?.payload?.message || error?.message;
@@ -466,6 +467,37 @@ async function sendMessage(rawText, attachments = []) {
   }
 }
 
+function populateVoiceOutputOptions() {
+  if (!voiceOutputSelect) return;
+  const speech = window.speechSynthesis;
+  if (!speech || typeof speech.getVoices !== "function") {
+    voiceOutputSelect.disabled = true;
+    return;
+  }
+  const voices = speech.getVoices();
+  const savedVoiceUri = (() => {
+    try { return window.localStorage.getItem("ultron-output-voice-uri") || ""; } catch { return ""; }
+  })();
+  voiceOutputSelect.replaceChildren();
+  const defaultOption = document.createElement("option");
+  defaultOption.value = "";
+  defaultOption.textContent = "System default";
+  voiceOutputSelect.append(defaultOption);
+
+  for (const voice of voices.slice().sort((a, b) =>
+    a.lang.localeCompare(b.lang) || a.name.localeCompare(b.name)
+  )) {
+    const option = document.createElement("option");
+    option.value = voice.voiceURI;
+    option.textContent = voice.name + " · " + voice.lang;
+    voiceOutputSelect.append(option);
+  }
+
+  voiceOutputSelect.value = voices.some(voice => voice.voiceURI === savedVoiceUri)
+    ? savedVoiceUri
+    : "";
+}
+
 function speak(text) {
   if (!("speechSynthesis" in window) || !("SpeechSynthesisUtterance" in window)) {
     toast("Spoken output is not supported by this browser.");
@@ -477,9 +509,14 @@ function speak(text) {
   utterance.pitch = state.persona === "naya" ? 1.0 : 0.88;
   utterance.volume = 0.92;
   const voices = window.speechSynthesis.getVoices();
+  const preferredVoiceUri = voiceOutputSelect?.value || "";
+  const selectedVoice = preferredVoiceUri
+    ? voices.find(voice => voice.voiceURI === preferredVoiceUri)
+    : null;
   const locale = state.preferences.voice_input_locale === "hi-IN" ? "hi-IN" : "en-IN";
-  const matching = voices.find(voice => voice.lang.toLowerCase() === locale.toLowerCase())
+  const localeVoice = voices.find(voice => voice.lang.toLowerCase() === locale.toLowerCase())
     || voices.find(voice => voice.lang.toLowerCase().startsWith(locale.slice(0, 2).toLowerCase()));
+  const matching = selectedVoice || localeVoice;
   if (matching) utterance.voice = matching;
   utterance.onstart = () => {
     state.speaking = true;
@@ -1195,6 +1232,9 @@ $("#locale-select").addEventListener("change", event => {
   if (state.recognition) state.recognition.stop();
   void savePreferences();
 });
+voiceOutputSelect.addEventListener("change", () => {
+  try { window.localStorage.setItem("ultron-output-voice-uri", voiceOutputSelect.value); } catch {}
+});
 $("#memory-toggle").addEventListener("click", () => {
   state.preferences.memory_enabled = !state.preferences.memory_enabled;
   setSwitch($("#memory-toggle"), state.preferences.memory_enabled);
@@ -1213,5 +1253,11 @@ $("#document-upload").addEventListener("click", () => $("#document-input").click
 $("#document-input").addEventListener("change", event => void uploadDocument(event.target.files));
 
 setMode(state.mode);
+if ("speechSynthesis" in window) {
+  window.speechSynthesis.onvoiceschanged = populateVoiceOutputOptions;
+  populateVoiceOutputOptions();
+} else {
+  voiceOutputSelect.disabled = true;
+}
 setStatus("standby", "ULTRON is initializing.", "Establishing secure connection");
 void bootstrap();
