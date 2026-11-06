@@ -502,7 +502,7 @@ test("createMultiDevicePersistenceAdapter wires authenticated Supabase REST and 
     assert.equal(calls.length, 1);
     assert.match(calls[0].url, /\/rest\/v1\/ultron_multidevice_state\?on_conflict=key$/);
     assert.equal(calls[0].init.method, "POST");
-    assert.equal(calls[0].init.headers.get("apikey"), "server-only-test-key");
+    assert.equal(calls[0].init.headers.get("apikey"), "eyJ.test.signature");
     assert.equal(calls[0].init.headers.get("Authorization"), "Bearer eyJ.test.signature");
     assert.match(calls[0].init.headers.get("Prefer"), /resolution=merge-duplicates/);
   } finally {
