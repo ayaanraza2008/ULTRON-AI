@@ -160,6 +160,10 @@ export function createDevicePairingRouter({
     throw new TypeError("createDevicePairingRouter requires authenticated Supabase user middleware.");
   }
 
+  // This runtime is intentionally a single-owner personal AI instance.
+  // Paired-device bearer tokens must obey the same owner boundary as signed-in routes.
+  const configuredOwnerUserId = String(env.ULTRON_OWNER_USER_ID || env.ULTRON_INTEGRATION_OWNER_USER_ID || "").trim();
+
   const router = express.Router();
   const claimAttempts = new Map();
 
@@ -243,6 +247,23 @@ export function createDevicePairingRouter({
       const verified = await verifyPairedDeviceToken({ token, env, fetchImpl, logger });
       if (!verified) {
         return res.status(401).json({ error: { code: "INVALID_DEVICE_TOKEN", message: "The device token is invalid, expired, or revoked." } });
+      }
+      if (!configuredOwnerUserId) {
+        return res.status(503).json({
+          error: {
+            code: "ULTRON_OWNER_NOT_CONFIGURED",
+            message: "Paired-device access is disabled until the ULTRON owner user ID is configured."
+          }
+        });
+      }
+      const verifiedOwnerUserId = String(verified.ownerUserId || verified.owner_user_id || "").trim();
+      if (!verifiedOwnerUserId || verifiedOwnerUserId !== configuredOwnerUserId) {
+        return res.status(403).json({
+          error: {
+            code: "ULTRON_OWNER_ONLY",
+            message: "This paired device does not belong to the configured ULTRON owner."
+          }
+        });
       }
       const device = deviceHubInstance.importPairedDevice({ ...verified, authToken: token });
       if (!device) {
