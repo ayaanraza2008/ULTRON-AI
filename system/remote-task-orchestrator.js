@@ -22,6 +22,9 @@ export class RemoteTaskOrchestrator {
     this.processedIdempotencyKeys = new Map();
     this.taskHistory = [];
     this.maxHistory = 100;
+    this.idempotencyWindowMs = Number.isFinite(options.idempotencyWindowMs)
+      ? Math.max(1, Math.min(10 * 60 * 1000, options.idempotencyWindowMs))
+      : 30_000;
   }
 
   /**
@@ -78,12 +81,6 @@ export class RemoteTaskOrchestrator {
       startedAt: new Date().toISOString()
     };
     this.processedIdempotencyKeys.set(idKey, idempotencyRecord);
-    const timer = setTimeout(() => {
-      if (this.processedIdempotencyKeys.get(idKey) === idempotencyRecord) {
-        this.processedIdempotencyKeys.delete(idKey);
-      }
-    }, 30000);
-    if (typeof timer.unref === "function") timer.unref();
     const taskRecord = {
       id: taskId,
       callerId,
@@ -95,6 +92,17 @@ export class RemoteTaskOrchestrator {
       result: null
     };
     this.taskQueue.set(taskId, taskRecord);
+
+    // Keep RUNNING records until work actually finishes. Start the retry
+    // retention window only after a terminal result, so slow tasks are not duplicated.
+    const scheduleIdempotencyExpiry = () => {
+      const timer = setTimeout(() => {
+        if (this.processedIdempotencyKeys.get(idKey) === idempotencyRecord) {
+          this.processedIdempotencyKeys.delete(idKey);
+        }
+      }, this.idempotencyWindowMs);
+      if (typeof timer.unref === "function") timer.unref();
+    };
 
     const reportStep = (stepDescription) => {
       const step = { description: stepDescription, timestamp: new Date().toISOString() };
@@ -319,6 +327,7 @@ export class RemoteTaskOrchestrator {
       idempotencyRecord.result = executionResult;
       idempotencyRecord.error = isSuccess ? null : (executionResult?.error || "TASK_FAILED");
       idempotencyRecord.completedAt = taskRecord.completedAt;
+      scheduleIdempotencyExpiry();
 
       this.taskHistory.unshift(taskRecord);
       if (this.taskHistory.length > this.maxHistory) this.taskHistory.pop();
@@ -341,6 +350,7 @@ export class RemoteTaskOrchestrator {
       idempotencyRecord.error = String(err?.message || "TASK_FAILED");
       idempotencyRecord.result = { success: false, error: idempotencyRecord.error };
       idempotencyRecord.completedAt = taskRecord.completedAt;
+      scheduleIdempotencyExpiry();
       this.taskQueue.delete(taskId);
       this.taskHistory.unshift(taskRecord);
       if (this.taskHistory.length > this.maxHistory) this.taskHistory.pop();
