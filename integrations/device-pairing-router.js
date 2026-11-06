@@ -14,7 +14,7 @@ function isDeviceRecentlySeen(lastSeenAt, platform, now = Date.now()) {
   if (!Number.isFinite(lastSeen)) return false;
   const ageMs = now - lastSeen;
   if (ageMs < 0) return false;
-  const maxAgeMs = platform === "android" || platform === "ios"
+  const maxAgeMs = platform === "android"
     ? ANDROID_HEARTBEAT_MAX_AGE_MS
     : DESKTOP_HEARTBEAT_MAX_AGE_MS;
   return ageMs <= maxAgeMs;
