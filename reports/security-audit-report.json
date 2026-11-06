@@ -1,8 +1,8 @@
 {
   "metadata": {
-    "generatedAt": "2026-11-06T11:12:11.903Z",
+    "generatedAt": "2026-11-06T15:08:55.530Z",
     "targetRepository": "C:\\Users\\Ali Raza Zaidi\\.gemini\\antigravity\\scratch\\ULTRON-AI",
-    "elapsedSeconds": 11.27,
+    "elapsedSeconds": 17.07,
     "summary": {
       "confirmedVulnerabilitiesCount": 0,
       "potentialRisksCount": 0,
@@ -14,8 +14,8 @@
   },
   "metrics": {
     "sast": {
-      "filesScanned": 281,
-      "linesScanned": 125618,
+      "filesScanned": 283,
+      "linesScanned": 126803,
       "findingsCount": 0,
       "severityBreakdown": {
         "CRITICAL": 0,
@@ -40,7 +40,7 @@
       }
     },
     "secrets": {
-      "filesScanned": 1882,
+      "filesScanned": 1900,
       "commitsScanned": 30,
       "findingsCount": 0
     }
