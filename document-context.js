@@ -128,12 +128,12 @@ function queryTerms(query) {
 
 function makeChunks(text, maxChars = 1800, overlap = 250) {
   const chunks = [];
-  const step = maxChars - overlap;
-  for (let start = 0; start < text.length; start += step) {
+  let start = 0;
+  while (start < text.length) {
     let end = Math.min(text.length, start + maxChars);
     if (end < text.length) {
       const boundary = Math.max(
-        text.lastIndexOf("\n", end),
+        text.lastIndexOf("\\n", end),
         text.lastIndexOf(". ", end),
         text.lastIndexOf("? ", end),
         text.lastIndexOf("! ", end)
@@ -143,7 +143,7 @@ function makeChunks(text, maxChars = 1800, overlap = 250) {
     const content = text.slice(start, end).trim();
     if (content) chunks.push({ content, start });
     if (end >= text.length) break;
-    start = Math.max(start, end - overlap);
+    start = Math.max(start + 1, end - overlap);
   }
   return chunks;
 }
