@@ -1,0 +1,37 @@
+name: ULTRON Interface CI
+
+on:
+  push:
+    branches:
+      - feature/ultron-live-core-interface-20261029
+    paths:
+      - "public/**"
+      - "tests/interface-voice-output.test.js"
+      - ".github/workflows/interface-ci.yml"
+  pull_request:
+    paths:
+      - "public/**"
+      - "tests/interface-voice-output.test.js"
+      - ".github/workflows/interface-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ultron-interface-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Validate frontend JavaScript syntax
+        run: node --check public/app.js
+      - name: Run focused voice-output tests
+        run: node --test --test-timeout=30000 --test-force-exit tests/interface-voice-output.test.js
