@@ -816,7 +816,12 @@ export function createMultiDevicePersistenceAdapter(options = {}) {
         }
         const headers = new Headers(init.headers || {});
         headers.set("apikey", serviceRoleKey);
-        headers.set("Authorization", "Bearer " + serviceRoleKey);
+        if (serviceRoleKey.startsWith("eyJ")) {
+          headers.set("Authorization", "Bearer " + serviceRoleKey);
+        } else {
+          // New sb_secret_* keys are API keys, not JWTs; do not send them as Bearer tokens.
+          headers.delete("Authorization");
+        }
         return fetchImpl(target.toString(), { ...init, headers });
       }
     };
