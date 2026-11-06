@@ -144,6 +144,8 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .drawer-submit--secondary { margin-bottom: 8px; background: rgba(255,255,255,.025); }
 .conversation-list, .memory-list, .document-list { display: flex; flex-direction: column; gap: 8px; }
 .conversation-entry, .memory-entry, .document-entry { display: flex; flex-direction: column; gap: 5px; padding: 9px 0; border-bottom: 1px solid rgba(204, 178, 255, .07); }
+.document-entry--selected { border-bottom-color: rgba(160, 106, 255, .38); }
+.document-entry--selected .inline-actions button:first-child { color: #e5caff; }
 .conversation-entry button { padding: 0; border: 0; background: transparent; color: #d9cbe7; text-align: left; font-size: 11px; cursor: pointer; }
 .conversation-entry button:hover { color: #f0dcff; }
 .conversation-entry span, .memory-entry__meta, .document-entry__meta { color: #81748d; font-size: 9px; }
