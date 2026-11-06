@@ -933,7 +933,16 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
     if (!configured) return res.status(503).json({ authenticated: false, configured: false });
     if (hasValidSession(req)) return res.json({ authenticated: true, configured: true, authType: "access_gate" });
     const user = await getSupabaseUser(req, res);
-    res.json({ authenticated: Boolean(user), configured: true, authType: user ? "supabase" : null, email: user?.email || null });
+    if (!user) return res.json({ authenticated: false, configured: true, authType: null, email: null });
+    const ownerError = ownerAuthorizationError(user.id);
+    if (ownerError) {
+      return res.status(ownerError.status).json({
+        authenticated: false,
+        configured: true,
+        error: ownerError.body.error.code
+      });
+    }
+    return res.json({ authenticated: true, configured: true, authType: "supabase", email: user.email || null });
   });
 
   const authRateLimiter = createAuthRateLimiter();
