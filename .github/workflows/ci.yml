@@ -67,6 +67,14 @@ jobs:
         run: |
           python -m py_compile tools/model-lab/ultron_model_lab.py
           python -m unittest discover -s tools/model-lab -p 'test_*.py'
+      - name: Install and audit REA Gateway production dependencies
+        working-directory: rea-gateway
+        run: |
+          npm install --omit=dev
+          npm ls zod --all
+          node --input-type=module -e "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url); const path = require.resolve('zod/package.json', { paths: [require.resolve('rea-agents/package.json')] }); const zod = require(path); if (zod.version !== '4.6.7') throw new Error('Expected REA nested zod 4.6.7, got ' + zod.version); console.log('REA nested Zod version:', zod.version);"
+          npm audit --omit=dev --audit-level=high
+          npm run check
       - run: npm install --ignore-scripts
       - name: Report high-severity runtime dependency advisories
         run: |
