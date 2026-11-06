@@ -48,6 +48,12 @@ The connected ULTRON Supabase project was inspected without changing its schema:
 
 No production schema change was applied during this work. Applying pending migrations remains behind the explicit release authorization boundary.
 
+## Connected Supabase security review (read-only)
+
+The connected Supabase project is active in the Mumbai region under the `free` organization plan. Its security advisor reports `auth_leaked_password_protection` as **WARN / Disabled**. Supabase's current password-security documentation states that leaked-password protection is available on Pro and above. No paid upgrade was authorized, so this remains an explicitly documented plan-level limitation rather than an unapproved cost.
+
+Reference: [Supabase password security](https://supabase.com/docs/guides/auth/password-security).
+
 ## Deployment boundary
 
 Do not merge PR #478 into `main`, because the Render backend tracks `main` for automatic deployment. Do not manually deploy, synchronize a production Blueprint, alter production environment variables, or apply production database migrations without the owner's explicit `DEPLOY` authorization.
