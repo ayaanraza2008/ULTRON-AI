@@ -141,13 +141,13 @@ test("Cerebro-style graph recall follows related memories only inside the owner'
     },
     {
       id: "linked", user_id: "owner-a", kind: "project_fact",
-      title: "Voice provider", content: "Use the selected voice provider consistently.",
+      title: "Speech vendor", content: "Use the chosen synthesis vendor consistently.",
       source: "user_approved", updated_at: new Date(NOW).toISOString(),
       metadata: { relatedMemoryIds: ["third-hop"] }
     },
     {
       id: "third-hop", user_id: "owner-a", kind: "project_fact",
-      title: "Voice latency", content: "Measure voice latency on the companion.",
+      title: "Response timing", content: "Measure response timing on the companion.",
       source: "user_approved", updated_at: new Date(NOW).toISOString(),
       metadata: {}
     },
