@@ -26,7 +26,19 @@ test("backend stays API-only while the interface proxy serves an explicit static
   assert.match(proxySource, /STATIC_ASSETS/);
   assert.match(proxySource, /serveAsset/);
   assert.ok(proxySource.includes('"/particle-swarm-engine.js"'));
+  assert.ok(proxySource.includes('"/core-only.css"'));
   assert.ok(serverSource.includes("ultron-core-shell-"));
+});
+
+test("center-only shell keeps the core as the only visible application surface", async () => {
+  const html = await readFile(new URL("../public/index.html", import.meta.url), "utf8");
+  const css = await readFile(new URL("../public/core-only.css", import.meta.url), "utf8");
+  assert.ok(html.includes('href="/core-only.css"'));
+  assert.ok(html.includes('id="core-wrap"'));
+  assert.ok(html.includes('id="energy-core"'));
+  assert.ok(css.includes(".topbar") && css.includes("display: none !important"));
+  assert.ok(css.includes(".interaction-dock"));
+  assert.ok(css.includes("width: min(88vmin, 920px)"));
 });
 
 test("interface root and API proxy health are both available", async t => {
@@ -50,6 +62,7 @@ test("required core interface assets are served locally without reaching the API
     ["/index.html", "text/html"],
     ["/app.js", "javascript"],
     ["/styles.css", "text/css"],
+    ["/core-only.css", "text/css"],
     ["/particle-swarm-engine.js", "javascript"],
     ["/favicon.svg", "image/svg+xml"]
   ];
