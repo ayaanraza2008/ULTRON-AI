@@ -397,7 +397,7 @@ export class DatabasePersistenceAdapter extends BaseMultiDevicePersistenceAdapte
     // 1. In-memory mock database (used in unit test suites without external daemons)
     if (this.inMemoryMockDb) {
       this.inMemoryMockDb.set("multidevice_state", JSON.stringify(serialized));
-      return { success: true, backend: "database", note: "mock_pg_saved" };
+      return { success: true, backend: "database", cloudPersisted: false, note: "mock_pg_saved" };
     }
 
     // Encrypt at rest before storing in database if encryption key is configured
@@ -430,7 +430,7 @@ export class DatabasePersistenceAdapter extends BaseMultiDevicePersistenceAdapte
           await client.query(SQL_UPSERT_ROOT_STATE, [serializedJson]);
           await client.query("COMMIT");
           this.isOnline = true;
-          return { success: true, backend: "database" };
+          return { success: true, backend: "database", cloudPersisted: true };
         } catch (queryErr) {
           await client.query("ROLLBACK").catch(() => {});
           throw queryErr;
@@ -642,7 +642,7 @@ export class DatabasePersistenceAdapter extends BaseMultiDevicePersistenceAdapte
         updatedAt: new Date().toISOString()
       };
       this.inMemoryMockDb.set(stateRowKey, JSON.stringify(stateObj));
-      return { success: true, version: nextVersion, backend: "database" };
+      return { success: true, version: nextVersion, backend: "database", cloudPersisted: false };
     }
 
     // PostgreSQL branch
@@ -671,7 +671,7 @@ export class DatabasePersistenceAdapter extends BaseMultiDevicePersistenceAdapte
           const statePayloadJson = JSON.stringify({ payload, originDeviceId, version: nextVersion });
           await client.query(SQL_UPSERT_NAMED_STATE, [stateRowKey, statePayloadJson, nextVersion]);
           await client.query("COMMIT");
-          return { success: true, version: nextVersion, backend: "database" };
+          return { success: true, version: nextVersion, backend: "database", cloudPersisted: true };
         } catch (err) {
           await client.query("ROLLBACK").catch(() => {});
           throw err;
@@ -762,7 +762,7 @@ export class DatabasePersistenceAdapter extends BaseMultiDevicePersistenceAdapte
       }
       const filtered = queue.filter(item => item.deliveryId !== deliveryId);
       this.inMemoryMockDb.set(qKey, JSON.stringify(filtered));
-      return { success: true, backend: "database", remainingCount: filtered.length };
+      return { success: true, backend: "database", cloudPersisted: false, remainingCount: filtered.length };
     }
 
     const current = await this.load();

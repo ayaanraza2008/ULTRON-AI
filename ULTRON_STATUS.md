@@ -20,6 +20,9 @@ ULTRON is a private personal AI software ecosystem for Windows, Android and brow
 - Exposed local-file fallback as `cloudPersisted: false` rather than claiming cloud durability.
 - Added `20261106120000_ultron_multidevice_state.sql` because the REST adapter reads/writes this table, but the prior candidate migrations did not create it.
 - Extended the migration-ledger test to enforce the new migration and its service-role-only/RLS access posture.
+- Implemented 6-point durable persistence verification (write, read, version update, revocation, unauthorized rejection, restart recovery) and explicitly distinguished mock/local fallback from cloud durability.
+- Added protected live-inference acceptance test (tests/live-inference-acceptance.test.js) guaranteeing zero secret leakage and genuine fallback.
+- Updated .github/workflows/model-live-acceptance.yml to enable manual execution directly on the candidate branch.
 
 ## Live infrastructure observations
 

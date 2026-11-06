@@ -615,3 +615,150 @@ test("createMultiDevicePersistenceAdapter does not send sb_secret keys as JWT be
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
   }
 });
+
+test("Durable cloud persistence 6-point verification: write, read, version update, revocation, unauthorized rejection, and restart recovery", async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ultron-6point-persist-"));
+  const fallbackStore = path.join(tmpDir, "fallback-state.json");
+  const masterSecret = "ultron_test_master_secret_key_32_bytes_len!";
+
+  const remoteTable = new Map();
+  let simulateUnauthorized = false;
+
+  const mockRestFetch = async (requestPath, init = {}) => {
+    if (simulateUnauthorized) {
+      return { ok: false, status: 401, json: async () => ({ message: "Unauthorized" }) };
+    }
+    const url = new URL(requestPath, "https://mock.supabase.co");
+    const keyParam = url.searchParams.get("key");
+    const targetKey = keyParam ? keyParam.replace(/^eq\./, "") : null;
+
+    if (init.method === "GET") {
+      if (targetKey && remoteTable.has(targetKey)) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => [{ key: targetKey, value: remoteTable.get(targetKey).value, version: remoteTable.get(targetKey).version }]
+        };
+      }
+      return { ok: true, status: 200, json: async () => [] };
+    }
+
+    if (init.method === "POST") {
+      const body = JSON.parse(init.body);
+      remoteTable.set(body.key, { value: body.value, version: body.version || 1 });
+      return { ok: true, status: 204 };
+    }
+
+    return { ok: false, status: 405 };
+  };
+
+  try {
+    const adapter1 = createMultiDevicePersistenceAdapter({
+      storagePath: fallbackStore,
+      masterSecret,
+      supabaseUrl: "https://mock.supabase.co",
+      supabaseServiceRoleKey: "eyJ_mock_service_role_key_for_test",
+      fetchImpl: mockRestFetch
+    });
+
+    assert.ok(adapter1 instanceof DatabasePersistenceAdapter);
+
+    // 1. Write a state record
+    const writeResult = await adapter1.saveSharedState({
+      stateKey: "workspace_config",
+      payload: { theme: "ultron_dark", gridCols: 4 },
+      expectedVersion: 0
+    });
+    assert.equal(writeResult.success, true);
+    assert.equal(writeResult.version, 1);
+    assert.equal(writeResult.cloudPersisted, true);
+    assert.equal(writeResult.backend, "supabase_rest");
+
+    await adapter1.save({
+      devices: [["dev-phone", { id: "dev-phone", name: "Owner Phone", platform: "android" }]],
+      sharedState: [["workspace_config", { version: 1 }]],
+      pendingDeliveries: [["dev-phone", [{ deliveryId: "del-1" }]]],
+      revokedDevices: []
+    });
+
+    // 2. Read it back
+    const loadedState1 = await adapter1.load();
+    assert.ok(loadedState1);
+    assert.equal(loadedState1.devices.length, 1);
+    assert.equal(loadedState1.devices[0][0], "dev-phone");
+    assert.equal(loadedState1.pendingDeliveries[0][1][0].deliveryId, "del-1");
+
+    // 3. Update its version
+    const updateResult = await adapter1.saveSharedState({
+      stateKey: "workspace_config",
+      payload: { theme: "ultron_cyber", gridCols: 6 },
+      expectedVersion: 1
+    });
+    assert.equal(updateResult.success, true);
+    assert.equal(updateResult.version, 2);
+    assert.equal(updateResult.cloudPersisted, true);
+
+    const staleConflict = await adapter1.saveSharedState({
+      stateKey: "workspace_config",
+      payload: { theme: "light_mode" },
+      expectedVersion: 1
+    });
+    assert.equal(staleConflict.success, false);
+    assert.equal(staleConflict.error, "VERSION_CONFLICT");
+    assert.equal(staleConflict.currentVersion, 2);
+
+    // 4. Revoke a paired device
+    const revokeResult = await adapter1.revokeDevice("dev-phone");
+    assert.equal(revokeResult.success, true);
+    assert.equal(revokeResult.cloudPersisted, true);
+
+    const stateAfterRevoke = await adapter1.load();
+    assert.ok(stateAfterRevoke.revokedDevices.includes("dev-phone"));
+    assert.equal(stateAfterRevoke.pendingDeliveries.some(([id]) => id === "dev-phone"), false);
+
+    // 5. Reject unauthorized access
+    assert.throws(() => {
+      createMultiDevicePersistenceAdapter({
+        supabaseUrl: "http://insecure-supabase.example.com",
+        supabaseServiceRoleKey: "some_key",
+        fetchImpl: mockRestFetch
+      });
+    }, /SUPABASE_URL_MUST_USE_HTTPS/);
+
+    simulateUnauthorized = true;
+    const unauthResult = await adapter1.saveSharedState({
+      stateKey: "unauth_test",
+      payload: { data: 123 }
+    });
+    assert.equal(unauthResult.success, true);
+    assert.equal(unauthResult.cloudPersisted, false);
+    assert.equal(unauthResult.warning, "SUPABASE_REST_READ_FAILED");
+    simulateUnauthorized = false;
+
+    // 6. Restart the application and verify persistence
+    const adapter2 = createMultiDevicePersistenceAdapter({
+      storagePath: fallbackStore,
+      masterSecret,
+      supabaseUrl: "https://mock.supabase.co",
+      supabaseServiceRoleKey: "eyJ_mock_service_role_key_for_test",
+      fetchImpl: mockRestFetch
+    });
+
+    const recoveredState = await adapter2.load();
+    assert.ok(recoveredState, "Recovered state must exist after application restart");
+    assert.equal(recoveredState.devices[0][0], "dev-phone");
+    assert.ok(recoveredState.revokedDevices.includes("dev-phone"), "Revoked device list must survive application restart");
+    assert.equal(recoveredState.pendingDeliveries.length, 0, "Purged queues must remain purged after restart");
+
+    const postRestartUpdate = await adapter2.saveSharedState({
+      stateKey: "workspace_config",
+      payload: { theme: "ultron_matrix", gridCols: 8 },
+      expectedVersion: 2
+    });
+    assert.equal(postRestartUpdate.success, true);
+    assert.equal(postRestartUpdate.version, 3);
+    assert.equal(postRestartUpdate.cloudPersisted, true);
+  } finally {
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+  }
+});

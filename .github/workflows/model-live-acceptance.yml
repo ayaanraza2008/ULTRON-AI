@@ -29,13 +29,11 @@ concurrency:
 
 jobs:
   provider-smoke:
-    if: github.ref == 'refs/heads/main' && (inputs.run_text_smoke == 'YES' || inputs.run_vision_smoke == 'YES')
+    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/ultron-operation-infinity-multidevice') && (inputs.run_text_smoke == 'YES' || inputs.run_vision_smoke == 'YES')
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: main
       - uses: actions/setup-node@v4
         with:
           node-version: 24
