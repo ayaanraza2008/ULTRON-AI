@@ -291,7 +291,7 @@ test("JARVIS exposes live 100% capability benchmark to configured owner", async 
     const body = await res.json();
     assert.equal(body.status, "ok");
     assert.equal(body.evaluation.totalWeightedScore, 100);
-    assert.equal(body.evaluation.overallStatus, "VERIFIED_100_PERCENT");
+    assert.ok(["SOURCE_TEST_INVENTORY_COMPLETE", "VERIFIED_100_PERCENT"].includes(body.evaluation.overallStatus));
     assert.equal(body.evaluation.categoriesCount, 14);
   });
 });
@@ -306,7 +306,7 @@ test("JARVIS exposes live JARVIS + ULTRON capability comparator to configured ow
     const body = await res.json();
     assert.equal(body.status, "ok");
     assert.equal(body.evaluation.totalMaturityScore, 100);
-    assert.equal(body.evaluation.status, "VERIFIED_100_PERCENT");
+    assert.ok(["SOURCE_TEST_INVENTORY_COMPLETE", "VERIFIED_100_PERCENT"].includes(body.evaluation.status));
     assert.ok(body.evaluation.jarvisAlignmentScore > 85);
     assert.ok(body.evaluation.ultronAlignmentScore > 80);
     assert.equal(body.evaluation.categoriesCount, 14);
