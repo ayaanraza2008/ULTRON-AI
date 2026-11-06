@@ -717,7 +717,11 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
     return String(env.ULTRON_OWNER_USER_ID || env.ULTRON_INTEGRATION_OWNER_USER_ID || "").trim();
   }
   function personalAiModeEnabled() {
-    return ["true", "1"].includes(String(env.ULTRON_PERSONAL_AI_MODE || "").toLowerCase()) ||
+    // ULTRON is a private single-owner service in production by default.
+    // Missing owner configuration must never silently turn a production instance
+    // into a public multi-account service.
+    return String(env.NODE_ENV || "").toLowerCase() === "production" ||
+      ["true", "1"].includes(String(env.ULTRON_PERSONAL_AI_MODE || "").toLowerCase()) ||
       ["true", "1"].includes(String(env.ULTRON_SINGLE_OWNER || "").toLowerCase()) ||
       ["true", "1"].includes(String(env.ULTRON_DISABLE_PUBLIC_SIGNUP || "").toLowerCase());
   }
