@@ -637,7 +637,7 @@ export class MultiDeviceManager {
       ownerUserId: String(deviceMeta.ownerUserId || "").trim() || null,
       capabilities: Array.isArray(deviceMeta.capabilities) ? deviceMeta.capabilities : ["notifications"],
       screenLocked: deviceMeta.screenLocked ?? true,
-      online: deviceMeta.online ?? false,
+      online: deviceMeta.online ?? true,
       battery: deviceMeta.battery || { percent: 100, isCharging: false },
       lastSeenAt: deviceMeta.lastSeenAt || new Date().toISOString(),
       heartbeatTimeoutMs: deviceMeta.heartbeatTimeoutMs || ((deviceMeta.platform || "android") === "android" ? 35 * 60 * 1000 : 90_000),
