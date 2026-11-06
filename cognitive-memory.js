@@ -199,7 +199,21 @@ export function recallCognitiveMemoryGraph(items, query, {
   const rankedSeeds = eligibleMemories;
   // Start from the strongest semantic match; related rows are discovered via graph edges,
   // rather than being mislabeled as depth-zero seeds just because their text overlaps.
-  const queue = rankedSeeds.slice(0, Math.min(4, Math.max(1, Math.trunc(limit) || 1))).map(item => ({ id: item.id, depth: 0, relation: "query_match" }));
+  // Preserve several independent direct matches, then expand linked context.
+  // Zero-overlap rows should be discovered through graph edges, not promoted to
+  // unrelated query seeds. If the query has no Latin tokens, keep one safe fallback.
+  const queryTokens = tokens(query);
+  const directMatches = queryTokens.size
+    ? rankedSeeds.filter(item => {
+      const memoryTokens = tokens((item.title || "") + " " + item.content);
+      for (const token of queryTokens) if (memoryTokens.has(token)) return true;
+      return false;
+    })
+    : rankedSeeds.slice(0, 1);
+  const seedCandidates = directMatches.length ? directMatches : rankedSeeds.slice(0, 1);
+  const queue = seedCandidates
+    .slice(0, Math.min(4, Math.max(1, Math.trunc(limit) || 1)))
+    .map(item => ({ id: item.id, depth: 0, relation: "query_match" }));
   const visited = new Map();
   const depthLimit = Math.max(0, Math.min(3, Math.trunc(maxDepth) || 0));
 
