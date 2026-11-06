@@ -289,6 +289,7 @@ export class DeviceWebSocketGateway {
 
     const clientSession = {
       socket,
+      closed: false,
       device: device || null,
       deviceId: device?.id || null,
       authenticated: Boolean(device),
@@ -314,6 +315,7 @@ export class DeviceWebSocketGateway {
     });
 
     socket.on("close", () => {
+      clientSession.closed = true;
       if (clientSession.authTimeout) {
         clearTimeout(clientSession.authTimeout);
         clientSession.authTimeout = null;
@@ -358,6 +360,7 @@ export class DeviceWebSocketGateway {
     // If client already connected, clean up previous
     if (this.clients.has(deviceId)) {
       const old = this.clients.get(deviceId);
+      old.closed = true;
       try { old.socket.destroy(); } catch {}
       clearInterval(old.pingTimer);
     }
@@ -391,6 +394,7 @@ export class DeviceWebSocketGateway {
     const client = this.clients.get(deviceId);
     if (!client || (expectedSession && client !== expectedSession)) return false;
 
+    client.closed = true;
     clearInterval(client.pingTimer);
     clearTimeout(client.authTimeout);
 
@@ -421,10 +425,10 @@ export class DeviceWebSocketGateway {
   async handleSocketData(clientSession, chunk) {
     // A superseded or explicitly closed socket must not process bytes that
     // were already queued by the runtime before its close event was delivered.
-    if (clientSession.socket?.destroyed) return;
+    if (clientSession.closed || clientSession.socket?.destroyed) return;
     clientSession.buffer = Buffer.concat([clientSession.buffer, chunk]);
 
-    while (clientSession.buffer.length > 0 && !clientSession.socket?.destroyed) {
+    while (clientSession.buffer.length > 0 && !clientSession.closed && !clientSession.socket?.destroyed) {
       let frame;
       try {
         frame = parseFrame(clientSession.buffer);
