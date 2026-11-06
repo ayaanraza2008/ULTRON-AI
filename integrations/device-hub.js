@@ -444,7 +444,7 @@ export class DeviceHub {
 
     for (const dev of this.pairedDevices.values()) {
       if (dev.status === "revoked") continue;
-      if (safeTimingCompare(dev.tokenHash, incomingHash) || (dev.authToken && dev.authToken === token)) {
+      if (safeTimingCompare(dev.tokenHash, incomingHash)) {
         dev.lastSeenAt = new Date().toISOString();
         return dev;
       }
@@ -460,7 +460,7 @@ export class DeviceHub {
     if (!device || device.status === "revoked") return null;
 
     const incomingHash = hashToken(token);
-    const isMatch = safeTimingCompare(device.tokenHash, incomingHash) || (device.authToken && device.authToken === token);
+    const isMatch = safeTimingCompare(device.tokenHash, incomingHash);
     if (!isMatch) return null;
 
     device.lastSeenAt = new Date().toISOString();
