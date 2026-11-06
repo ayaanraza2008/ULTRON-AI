@@ -470,7 +470,7 @@ export class DeviceHub {
   /**
    * Revoke a paired device.
    */
-  revokeDevice(deviceId, ownerUserId) {
+  revokeDevice(deviceId, ownerUserId, { authoritativeExternal = false } = {}) {
     const device = this.pairedDevices.get(deviceId);
     if (!device) return { success: false, error: "DEVICE_NOT_FOUND" };
     if (ownerUserId && device.ownerUserId !== ownerUserId) {
@@ -483,15 +483,21 @@ export class DeviceHub {
     device.revokedAt = new Date().toISOString();
     this.revokedDevices.add(deviceId);
     this.commandQueue.delete(deviceId);
-    const persisted = this._persistOrRollback(() => {
+    const persisted = !this.isPersistent || this.saveToDisk();
+    if (!persisted && !authoritativeExternal) {
       Object.assign(device, previousDevice);
       this.revokedDevices.delete(deviceId);
       if (previousQueue) this.commandQueue.set(deviceId, previousQueue);
-    });
-    if (!persisted.success) return persisted;
+      return { success: false, error: "DEVICE_PERSISTENCE_FAILED" };
+    }
     this.emitEvent({ type: "DEVICE_REVOKED", deviceId, ownerUserId: device.ownerUserId });
 
-    return { success: true, deviceId, status: "revoked" };
+    return {
+      success: true,
+      deviceId,
+      status: "revoked",
+      ...(!persisted ? { localPersistenceWarning: "AUTHORITATIVE_EXTERNAL_REVOCATION_APPLIED" } : {})
+    };
   }
 
   /**
