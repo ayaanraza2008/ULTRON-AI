@@ -224,13 +224,17 @@ export class TelephonyBrain {
               message: "The multi-device manager is not configured."
             };
         const unlockedCount = Number.isFinite(mobileResult?.unlockedCount) ? mobileResult.unlockedCount : 0;
-        const totalTargeted = Number.isFinite(mobileResult?.totalTargeted) ? mobileResult.totalTargeted : null;
-        const succeeded = mobileResult?.success === true && unlockedCount > 0;
-        const spokenResponse = mobileResult?.success === false
-          ? "I could not unlock the mobile devices. " + (mobileResult.message || mobileResult.error || "The device operation failed.")
-          : unlockedCount > 0 && totalTargeted !== null
-            ? `ULTRON unlocked ${unlockedCount} of ${totalTargeted} targeted mobile devices.`
-            : "No mobile devices confirmed an unlock.";
+        const totalTargeted = Number.isFinite(mobileResult?.targetedCount)
+          ? mobileResult.targetedCount
+          : Number.isFinite(mobileResult?.totalTargeted)
+            ? mobileResult.totalTargeted
+            : unlockedCount;
+        const succeeded = unlockedCount > 0;
+        const spokenResponse = unlockedCount === 0
+          ? "No mobile devices confirmed an unlock. " + (mobileResult?.message || mobileResult?.error || "")
+          : unlockedCount < totalTargeted
+            ? `ULTRON unlocked ${unlockedCount} of ${totalTargeted} targeted mobile devices. The remaining devices did not confirm the action.`
+            : `ULTRON unlocked ${unlockedCount} mobile devices.`;
         return {
           permitted: true,
           intent: classification.intent,
@@ -251,14 +255,21 @@ export class TelephonyBrain {
               message: "The multi-device manager is not configured."
             };
         const playingDevices = Number.isFinite(mediaResult?.playingDevices) ? mediaResult.playingDevices : 0;
-        const succeeded = mediaResult?.success === true && playingDevices > 0;
+        const targetedCount = Number.isFinite(mediaResult?.targetedCount)
+          ? mediaResult.targetedCount
+          : Array.isArray(mediaResult?.devices)
+            ? mediaResult.devices.length
+            : playingDevices;
+        const executed = playingDevices > 0;
         return {
           permitted: true,
           intent: classification.intent,
-          executed: succeeded,
-          spokenResponse: succeeded
-            ? `Media playback started on ${playingDevices} devices.`
-            : "I could not confirm media playback on any connected device.",
+          executed,
+          spokenResponse: playingDevices === 0
+            ? "I could not confirm media playback on any connected device."
+            : playingDevices < targetedCount
+              ? `Media playback started on ${playingDevices} of ${targetedCount} targeted devices. Some devices did not confirm playback.`
+              : `Media playback started on ${playingDevices} devices.`,
           details: mediaResult
         };
       }

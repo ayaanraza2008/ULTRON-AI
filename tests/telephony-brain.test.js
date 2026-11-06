@@ -78,7 +78,7 @@ test("TelephonyBrain: Dispatches simultaneous unlock across all 3 mobile devices
   const brain = new TelephonyBrain();
   let mobileUnlocked = false;
   const mockMdm = {
-    unlockMobileDevices: async () => { mobileUnlocked = true; return { success: true, unlockedCount: 3, totalTargeted: 3 }; }
+    unlockMobileDevices: async () => { mobileUnlocked = true; return { success: true, unlockedCount: 3, targetedCount: 3 }; }
   };
 
   const outcome = await brain.processCallerUtterance({
@@ -289,4 +289,53 @@ test("TelephonyBrain: Does not fabricate a conversational answer when every AI p
   assert.equal(outcome.executed, false);
   assert.match(outcome.spokenResponse, /could not reach a working AI inference provider/i);
   assert.equal(outcome.details.error, "ALL_PROVIDERS_UNAVAILABLE");
+});
+
+
+test("TelephonyBrain: Reports partial mobile unlocks without claiming all devices succeeded", async () => {
+  const brain = new TelephonyBrain();
+  const outcome = await brain.processCallerUtterance({
+    callId: "call_partial_unlock",
+    isOwner: true,
+    speechText: "unlock all three mobile devices",
+    multiDeviceManager: {
+      async unlockMobileDevices() {
+        return {
+          success: false,
+          targetedCount: 3,
+          unlockedCount: 2,
+          failedCount: 1,
+          error: "ANDROID_UNLOCK_PARTIAL_FAILURE"
+        };
+      }
+    }
+  });
+
+  assert.equal(outcome.executed, true);
+  assert.match(outcome.spokenResponse, /unlocked 2 of 3/i);
+  assert.match(outcome.spokenResponse, /remaining devices did not confirm/i);
+});
+
+test("TelephonyBrain: Reports partial media playback truthfully", async () => {
+  const brain = new TelephonyBrain();
+  const outcome = await brain.processCallerUtterance({
+    callId: "call_partial_media",
+    isOwner: true,
+    speechText: "play music on all devices",
+    multiDeviceManager: {
+      async playMediaAcrossDevices() {
+        return {
+          success: false,
+          targetedCount: 3,
+          playingDevices: 1,
+          failedCount: 2,
+          error: "ANDROID_MEDIA_PARTIAL_FAILURE"
+        };
+      }
+    }
+  });
+
+  assert.equal(outcome.executed, true);
+  assert.match(outcome.spokenResponse, /started on 1 of 3/i);
+  assert.match(outcome.spokenResponse, /some devices did not confirm/i);
 });
