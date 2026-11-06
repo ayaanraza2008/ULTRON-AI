@@ -458,16 +458,27 @@ export class DatabasePersistenceAdapter extends BaseMultiDevicePersistenceAdapte
         });
         if (resp.ok) {
           this.isOnline = true;
-          return { success: true, backend: "supabase_rest" };
+          return { success: true, backend: "supabase_rest", cloudPersisted: true };
         }
+        this.isOnline = false;
+        if (this.logger?.warn) {
+          this.logger.warn("DatabasePersistenceAdapter: Supabase REST write returned a non-success status", { status: resp.status });
+        }
+        return {
+          success: true,
+          backend: "fallback_file",
+          cloudPersisted: false,
+          warning: "SUPABASE_REST_WRITE_FAILED",
+          status: resp.status
+        };
       } catch (restErr) {
         this.isOnline = false;
-        return { success: true, backend: "fallback_file", warning: "SUPABASE_REST_WRITE_FAILED", error: restErr?.message };
+        return { success: true, backend: "fallback_file", cloudPersisted: false, warning: "SUPABASE_REST_WRITE_FAILED", error: restErr?.message };
       }
     }
 
-    // Default: Fallback file was already written
-    return { success: true, backend: "fallback_file", note: "no_db_configured" };
+    // Default: local fallback only; this is not cloud durability.
+    return { success: true, backend: "fallback_file", cloudPersisted: false, note: "no_db_configured" };
   }
 
   async load() {
@@ -528,6 +539,12 @@ export class DatabasePersistenceAdapter extends BaseMultiDevicePersistenceAdapte
             }
             this.isOnline = true;
             return decrypted;
+          }
+          this.isOnline = true;
+        } else {
+          this.isOnline = false;
+          if (this.logger?.warn) {
+            this.logger.warn("DatabasePersistenceAdapter: Supabase REST read returned a non-success status", { status: resp.status });
           }
         }
       } catch (restErr) {
@@ -715,10 +732,24 @@ export class DatabasePersistenceAdapter extends BaseMultiDevicePersistenceAdapte
       return { success: true, backend: "database", remainingCount: filtered.length };
     }
 
-    if (this.fallbackAdapter) {
-      return await this.fallbackAdapter.acknowledgeDelivery(deviceId, deliveryId);
+    const current = await this.load();
+    if (!current) return { success: false, error: "NO_PERSISTED_STATE" };
+    const pendingMap = new Map(current.pendingDeliveries || []);
+    const queue = pendingMap.get(deviceId) || [];
+    const filtered = queue.filter(item => item.deliveryId !== deliveryId);
+    if (filtered.length === queue.length) {
+      return { success: false, error: "DELIVERY_NOT_FOUND", remainingCount: queue.length };
     }
-    return { success: true, backend: "noop" };
+    pendingMap.set(deviceId, filtered);
+    current.pendingDeliveries = Array.from(pendingMap.entries());
+    const persisted = await this.save(current);
+    return {
+      success: persisted.success === true,
+      backend: persisted.backend,
+      cloudPersisted: persisted.cloudPersisted,
+      remainingCount: filtered.length,
+      ...(persisted.warning ? { warning: persisted.warning } : {})
+    };
   }
 
   async revokeDevice(deviceId) {
@@ -726,10 +757,21 @@ export class DatabasePersistenceAdapter extends BaseMultiDevicePersistenceAdapte
       this.inMemoryMockDb.set("revoked:" + String(deviceId), "true");
       this.inMemoryMockDb.delete("queue:" + String(deviceId));
     }
-    if (this.fallbackAdapter) {
-      return await this.fallbackAdapter.revokeDevice(deviceId);
-    }
-    return { success: true, backend: "database" };
+
+    const current = await this.load() || { devices: [], sharedState: [], pendingDeliveries: [], revokedDevices: [] };
+    const revokedSet = new Set(current.revokedDevices || []);
+    revokedSet.add(deviceId);
+    current.revokedDevices = Array.from(revokedSet);
+    const pendingMap = new Map(current.pendingDeliveries || []);
+    pendingMap.delete(deviceId);
+    current.pendingDeliveries = Array.from(pendingMap.entries());
+    const persisted = await this.save(current);
+    return {
+      success: persisted.success === true,
+      backend: persisted.backend,
+      cloudPersisted: persisted.cloudPersisted,
+      ...(persisted.warning ? { warning: persisted.warning } : {})
+    };
   }
 }
 
