@@ -252,11 +252,15 @@ class MainActivity : Activity() {
         // The user's explicit wake-word opt-in is retained for a later restart.
         stopService(Intent(this, WakeWordService::class.java))
         if (!DeviceTokenStore.isPaired(this)) {
-            status.text = "Pair this Android device first. Wake-word detection stays local until then."
+            getSharedPreferences(WAKE_PREFERENCES, MODE_PRIVATE)
+                .edit().putBoolean(WAKE_ENABLED_KEY, false).apply()
+            status.text = "Pair this Android device first, then enable local wake word again."
             return
         }
         if (!SpeechRecognizer.isOnDeviceRecognitionAvailable(this)) {
-            status.text = "On-device speech recognition is unavailable. The command was not recorded or uploaded."
+            getSharedPreferences(WAKE_PREFERENCES, MODE_PRIVATE)
+                .edit().putBoolean(WAKE_ENABLED_KEY, false).apply()
+            status.text = "On-device speech recognition is unavailable. The command was not recorded or uploaded; wake word was disabled."
             return
         }
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
@@ -481,7 +485,9 @@ class MainActivity : Activity() {
             ) {
                 startOnDeviceCommandRecognition()
             } else {
-                status.text = "Microphone permission is required. No command was captured."
+                getSharedPreferences(WAKE_PREFERENCES, MODE_PRIVATE)
+                    .edit().putBoolean(WAKE_ENABLED_KEY, false).apply()
+                status.text = "Microphone permission is required. No command was captured and wake-word listening was disabled."
             }
             return
         }
@@ -490,12 +496,16 @@ class MainActivity : Activity() {
             it == PackageManager.PERMISSION_GRANTED
         }
         if (!allGranted) {
+            getSharedPreferences(WAKE_PREFERENCES, MODE_PRIVATE)
+                .edit().putBoolean(WAKE_ENABLED_KEY, false).apply()
             status.text = "Microphone and visible-notification permissions are required. Wake word remains off."
             return
         }
         if (SpeechRecognizer.isOnDeviceRecognitionAvailable(this)) {
             startWakeWordService()
         } else {
+            getSharedPreferences(WAKE_PREFERENCES, MODE_PRIVATE)
+                .edit().putBoolean(WAKE_ENABLED_KEY, false).apply()
             status.text = "On-device speech recognition is unavailable. Wake word remains off."
         }
     }
@@ -506,7 +516,8 @@ class MainActivity : Activity() {
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED ||
             !SpeechRecognizer.isOnDeviceRecognitionAvailable(this)
         ) {
-            status.text = "Wake-word listening remains enabled, but Android permission or the offline speech model is unavailable. Tap Enable local wake word after fixing it."
+            preferences.edit().putBoolean(WAKE_ENABLED_KEY, false).apply()
+            status.text = "Wake-word listening was disabled because microphone permission or the offline speech model is unavailable."
             return
         }
         status.postDelayed({
