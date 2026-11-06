@@ -55,7 +55,8 @@ test("destructive rollback scripts and obsolete worker scaffold are kept outside
     readdirSync(rollbackDirectory).filter(name => name.endsWith(".rollback.sql")).sort(),
     [
       "20261101180000_durable_paired_devices.rollback.sql",
-      "20261104110000_paired_device_telemetry.rollback.sql"
+      "20261104110000_paired_device_telemetry.rollback.sql",
+      "20261106130000_atomic_multidevice_state_writes.rollback.sql"
     ]
   );
   assert.ok(existsSync(legacyWorkerScaffold), "Keep the historical worker scaffold archived for auditability");

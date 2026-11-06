@@ -282,6 +282,69 @@ test("DatabasePersistenceAdapter: Supabase REST HTTP failure reports successful 
   assert.equal(outcome.status, 503);
 });
 
+test("DatabasePersistenceAdapter: Supabase root snapshot write rejects stale versions across instances", async () => {
+  const calls = [];
+  const adapter = new DatabasePersistenceAdapter({
+    fallbackAdapter: { async save() { return true; }, async load() { return null; } },
+    supabaseRest: {
+      async fetch(url, init = {}) {
+        calls.push({ url, init });
+        if (init.method === "GET") {
+          return { ok: true, json: async () => [{ key: "root", version: 4 }] };
+        }
+        return {
+          ok: true,
+          json: async () => [{ success: false, version: 5, error_code: "VERSION_CONFLICT" }]
+        };
+      }
+    }
+  });
+
+  const outcome = await adapter.save({
+    devices: [], sharedState: [], pendingDeliveries: [], revokedDevices: []
+  });
+
+  assert.equal(outcome.success, false);
+  assert.equal(outcome.cloudPersisted, false);
+  assert.equal(outcome.error, "VERSION_CONFLICT");
+  assert.equal(outcome.currentVersion, 5);
+  assert.equal(outcome.expectedVersion, 4);
+  assert.match(calls[1].url, /rpc\/save_ultron_multidevice_state$/);
+  assert.equal(JSON.parse(calls[1].init.body).p_expected_version, 4);
+});
+
+test("DatabasePersistenceAdapter: Supabase shared-state version check uses one atomic RPC", async () => {
+  const calls = [];
+  const adapter = new DatabasePersistenceAdapter({
+    supabaseRest: {
+      async fetch(url, init = {}) {
+        calls.push({ url, init });
+        return {
+          ok: true,
+          json: async () => [{ success: true, version: 3, error_code: null }]
+        };
+      }
+    }
+  });
+
+  const outcome = await adapter.saveSharedState({
+    stateKey: "theme",
+    payload: { mode: "dark" },
+    expectedVersion: 2
+  });
+
+  assert.equal(outcome.success, true);
+  assert.equal(outcome.version, 3);
+  assert.equal(outcome.cloudPersisted, true);
+  assert.equal(calls.length, 1, "Atomic RPC must replace the race-prone GET-then-POST sequence.");
+  assert.match(calls[0].url, /rpc\/save_ultron_multidevice_state$/);
+  assert.deepEqual(JSON.parse(calls[0].init.body), {
+    p_key: "state:theme",
+    p_value: { payload: { mode: "dark" }, originDeviceId: null },
+    p_expected_version: 2
+  });
+});
+
 test("createMultiDevicePersistenceAdapter factory instantiates correct backend", () => {
   // Default without DB returns FilePersistenceAdapter
   const fileAdapter = createMultiDevicePersistenceAdapter({ storagePath: "./test.json" });
