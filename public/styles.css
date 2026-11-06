@@ -88,8 +88,8 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .core-trigger__halo { position: absolute; inset: -9px; border: 1px solid rgba(184, 132, 236, .15); border-radius: 50%; }
 .core-trigger__mic { width: 22px !important; height: 22px !important; color: #e9d9fb; }
 .core-trigger__stop { display: none; width: 13px; height: 13px; border: 1px solid #ffd6e4; border-radius: 3px; background: #ec4a7d; box-shadow: 0 0 13px rgba(236, 74, 125, .5); }
-.app[data-state="listening"] .core-trigger__mic { display: none; }
-.app[data-state="listening"] .core-trigger__stop { display: block; }
+.app[data-state="listening"] .core-trigger__mic, .app[data-state="thinking"] .core-trigger__mic, .app[data-state="executing"] .core-trigger__mic { display: none; }
+.app[data-state="listening"] .core-trigger__stop, .app[data-state="thinking"] .core-trigger__stop, .app[data-state="executing"] .core-trigger__stop { display: block; }
 .dock-actions { position: absolute; right: 2px; bottom: 23px; display: flex; align-items: center; gap: 4px; }
 .icon-button--dock { border-color: rgba(211, 184, 243, .1); background: rgba(18, 13, 25, .5); }
 .icon-button--dock.is-muted { color: var(--danger); border-color: rgba(255, 102, 139, .3); }

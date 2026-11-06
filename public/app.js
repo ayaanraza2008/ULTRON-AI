@@ -23,6 +23,7 @@ const state = {
   muted: false,
   speaking: false,
   busy: false,
+  requestController: null,
   health: null,
   pollId: 0
 };
@@ -90,7 +91,7 @@ function setStatus(status, mainText, subText) {
   if (mainText !== undefined) $("#assistant-line-main").textContent = mainText;
   if (subText !== undefined) $("#assistant-line-sub").textContent = subText;
   engine.setState(state.status);
-  coreTrigger.setAttribute("aria-label", state.status === "listening" ? "Stop voice input" : "Start voice input");
+  coreTrigger.setAttribute("aria-label", state.busy ? "Stop current request" : state.status === "listening" ? "Stop voice input" : state.speaking ? "Stop voice output" : "Start voice input");
 }
 
 function setConnection(online, label) {
@@ -140,6 +141,7 @@ function showAuth(message = "") {
   state.authenticated = false;
   authScreen.hidden = false;
   app.setAttribute("aria-hidden", "true");
+  app.inert = true;
   authMessage.textContent = message;
   setStatus("standby", "Authentication required", "Sign in to connect to your private system");
 }
@@ -147,6 +149,7 @@ function showAuth(message = "") {
 function hideAuth() {
   authScreen.hidden = true;
   app.removeAttribute("aria-hidden");
+  app.inert = false;
 }
 
 function setAuthMode(mode) {
@@ -316,13 +319,15 @@ function setBusy(busy) {
   state.busy = busy;
   $("#send-button").disabled = busy;
   messageInput.disabled = busy;
-  coreTrigger.disabled = busy && state.status !== "listening";
+  coreTrigger.disabled = false;
+  coreTrigger.setAttribute("aria-label", busy ? "Stop current request" : state.status === "listening" ? "Stop voice input" : "Start voice input");
   $("#send-button").setAttribute("aria-busy", String(busy));
 }
 
 async function sendMessage(rawText, attachments = []) {
   const text = String(rawText || "").trim();
   if ((!text && attachments.length === 0) || state.busy) return;
+  state.requestController = new AbortController();
   setBusy(true);
   setStatus("thinking", "Processing your request.", "Connecting to the ULTRON intelligence runtime");
   const userText = text || "Please analyze the attached image.";
@@ -335,6 +340,7 @@ async function sendMessage(rawText, attachments = []) {
   try {
     const result = await api("/api/chat", {
       method: "POST",
+      signal: state.requestController.signal,
       body: {
         messages: state.history.slice(-40).map(item => ({ role: item.role, content: item.content })),
         stream: false,
@@ -352,12 +358,17 @@ async function sendMessage(rawText, attachments = []) {
     setStatus("standby", "Response received.", source || "ULTRON ready");
     if (state.mode === "voice" && state.preferences.voice_enabled && !state.muted) speak(answer);
   } catch (error) {
-    const message = apiErrorMessage(error, "ULTRON could not complete the request.");
-    state.history.push({ role: "assistant", content: message });
-    addMessage("assistant", message, "error");
-    setStatus("error", "Request could not be completed.", error.code || "Check connection and try again");
-    toast(message, "error");
+    if (error?.name === "AbortError") {
+      setStatus("standby", "Request stopped.", "You can send another message");
+    } else {
+      const message = apiErrorMessage(error, "ULTRON could not complete the request.");
+      state.history.push({ role: "assistant", content: message });
+      addMessage("assistant", message, "error");
+      setStatus("error", "Request could not be completed.", error.code || "Check connection and try again");
+      toast(message, "error");
+    }
   } finally {
+    state.requestController = null;
     setBusy(false);
     $("#image-input").value = "";
     state.attachments = [];
@@ -436,6 +447,11 @@ function createRecognition() {
 }
 
 function toggleVoiceInput() {
+  if (state.busy) {
+    state.requestController?.abort();
+    setStatus("thinking", "Stopping request.", "Cancelling the in-flight chat request");
+    return;
+  }
   if (state.recognition) {
     state.recognition.stop();
     return;
@@ -445,7 +461,6 @@ function toggleVoiceInput() {
     setStatus("standby", "Playback stopped.", "Ready when you are");
     return;
   }
-  if (state.busy) return;
   const recognition = createRecognition();
   if (!recognition) {
     toast("Speech recognition is unavailable in this browser. Switch to Text mode.");
