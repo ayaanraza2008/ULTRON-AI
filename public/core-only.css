@@ -2,6 +2,8 @@
 :root {
   color-scheme: dark;
   background: #000;
+  font-family: Arial, "Segoe UI", Helvetica, sans-serif !important;
+  font-synthesis: none;
 }
 html,
 body {
@@ -14,6 +16,10 @@ body {
 }
 body {
   min-height: 100svh;
+  font-family: Arial, "Segoe UI", Helvetica, sans-serif !important;
+}
+button, input, textarea, select {
+  font-family: Arial, "Segoe UI", Helvetica, sans-serif !important;
 }
 .ambient,
 .topbar,
