@@ -378,6 +378,9 @@ test("shared-state credential guard blocks nested token variants and invalid JSO
   const bigint = mdm.syncStateAcrossDevices({ stateKey: "bigint-payload", payload: { count: 1n } });
   assert.equal(bigint.success, false);
   assert.equal(bigint.error, "STATE_PAYLOAD_INVALID");
+  const nonJson = mdm.syncStateAcrossDevices({ stateKey: "function-payload", payload: () => true });
+  assert.equal(nonJson.success, false);
+  assert.equal(nonJson.error, "STATE_PAYLOAD_INVALID");
 });
 
 test("6. Device revocation isolates device and drops active delivery", () => {
