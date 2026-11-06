@@ -160,7 +160,7 @@ export class DeviceHub {
       lastSeenAt: record.lastSeenAt || record.last_seen_at || previous?.lastSeenAt || null,
       battery: previous?.battery || null,
       // A durable pairing record proves identity, not current connectivity.
-      // Only an authenticated heartbeat may mark the companion online.
+      // Only a live authenticated heartbeat or WebSocket session marks it online.
       online: false,
       source: "supabase"
     };
