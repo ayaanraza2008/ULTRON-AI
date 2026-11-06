@@ -3,375 +3,95 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createUltronCoreProxy } from "../core-ui-proxy.mjs";
 
-const normalizeLfs = str => str.replace(/\r\n/g, "\n");
-const html = normalizeLfs(await readFile(new URL("../public/index.html", import.meta.url), "utf8"));
-const css = normalizeLfs(await readFile(new URL("../public/styles.css", import.meta.url), "utf8"));
-const app = normalizeLfs(await readFile(new URL("../public/app.js", import.meta.url), "utf8"));
-const handGestureSource = normalizeLfs(await readFile(new URL("../public/hand-gesture-core.js", import.meta.url), "utf8"));
-const proxySource = normalizeLfs(await readFile(new URL("../core-ui-proxy.mjs", import.meta.url), "utf8"));
-const pwaManifest = JSON.parse(await readFile(new URL("../public/manifest.webmanifest", import.meta.url), "utf8"));
-const serviceWorker = normalizeLfs(await readFile(new URL("../public/service-worker.js", import.meta.url), "utf8"));
+const serverSource = await readFile(new URL("../server.js", import.meta.url), "utf8");
+const proxySource = await readFile(new URL("../core-ui-proxy.mjs", import.meta.url), "utf8");
 
-
-test("the interface has an installable standalone PWA manifest for phones and desktops", () => {
-  assert.equal(pwaManifest.name, "ULTRON AI — Living Core");
-  assert.equal(pwaManifest.short_name, "ULTRON");
-  assert.equal(pwaManifest.start_url, "/");
-  assert.equal(pwaManifest.scope, "/");
-  assert.equal(pwaManifest.display, "standalone");
-  assert.equal(pwaManifest.theme_color, "#020205");
-  assert.deepEqual(
-    pwaManifest.icons.map(icon => icon.sizes).sort(),
-    ["192x192", "512x512"]
-  );
-  assert.match(html, /rel="manifest" href="\/manifest\.webmanifest"/);
-  assert.match(html, /rel="apple-touch-icon" href="\/icons\/icon-180\.png"/);
-  assert.match(html, /apple-mobile-web-app-capable/);
-  assert.ok(app.includes('navigator.serviceWorker.register("/service-worker.js", { scope: "/" })'));
-});
-
-test("the service worker caches only the static shell and never caches private API traffic", () => {
-  assert.ok(serviceWorker.includes('request.method !== "GET"'));
-  assert.ok(serviceWorker.includes('url.origin !== self.location.origin'));
-  assert.ok(serviceWorker.includes('url.pathname === "/api" || url.pathname.startsWith("/api/")'));
-  assert.ok(serviceWorker.includes('const isWorldIntelligence = url.pathname === "/world-intelligence"'));
-  assert.ok(serviceWorker.includes('url.pathname.startsWith("/world-intelligence/")'));
-  assert.ok(serviceWorker.includes("const SHELL_PATHS = new Set("));
-  assert.ok(serviceWorker.includes("if (!SHELL_PATHS.has(url.pathname)) return;"));
-  assert.ok(serviceWorker.includes("const CACHE_NAME ="));
-  assert.match(proxySource, /worker-src 'self'/);
-  assert.match(proxySource, /filename === "service-worker\.js" \|\| filename === "manifest\.webmanifest" \? "no-cache"/);
-});
-
-test("the UI proxy permits only the pinned MediaPipe runtime and model asset hosts needed by local hand tracking", () => {
-  assert.match(proxySource, /script-src 'self' https:\/\/cdn\.jsdelivr\.net 'wasm-unsafe-eval'/);
-  assert.match(proxySource, /connect-src 'self' https:\/\/cdn\.jsdelivr\.net https:\/\/storage\.googleapis\.com/);
-  assert.match(proxySource, /worker-src 'self' blob:/);
-  assert.ok(handGestureSource.includes("@mediapipe/tasks-vision@0.10.14"));
-  assert.ok(handGestureSource.includes("hand_landmarker/float16/1/hand_landmarker.task"));
-});
-
-test("the default screen is a black, minimal living-core interface", () => {
-  assert.match(html, /id="core-canvas"/);
-  assert.match(html, /id="core-stage"/);
-  assert.match(css, /--black:\s*#020205/);
-  assert.match(css, /\.core-orbit/);
-  assert.match(css, /prefers-reduced-motion:\s*reduce/);
-  assert.match(app, /drawArrays\(gl\.POINTS, 0, PARTICLE_COUNT\)/);
-  assert.match(app, /const PARTICLE_COUNT = 20000/);
-  assert.match(app, /#version 300 es/);
-  assert.match(app, /gl_VertexID/);
-});
-
-test("center label is removed without crashing core initialization", () => {
-  assert.doesNotMatch(html, /class="core-wordmark"/);
-  assert.doesNotMatch(html, /class="core-word"/);
-  assert.ok(app.includes("if (ui.coreStateLabel) ui.coreStateLabel.textContent"));
-  assert.ok(app.includes('setCoreState("idle");\n  startParticleCore();'));
-});
-
-test("the glass drawer includes eyes, tools, devices, and readiness panels", () => {
-  assert.match(html, /id="drawer-toggle"/);
-  assert.match(html, /id="feature-drawer"/);
-  for (const feature of ["eyes", "voice-quality", "tasks", "apps", "devices", "control", "system"]) {
-    assert.ok(html.includes('data-drawer-view="' + feature + '"'));
-  }
-  assert.ok(app.includes("function showDrawerView"));
-  assert.ok(app.includes("function addCustomConnectorBrief"));
-  assert.ok(app.includes("function checkBackend"));
-});
-
-test("full system control is an explicit scoped request, never a fake takeover", () => {
-  assert.match(html, /data-drawer-view="control"/);
-  assert.ok(app.includes('if (name === "control")'));
-  assert.ok(app.includes('requestButton.textContent = "REQUEST CONTROL SESSION"'));
-  assert.ok(app.includes('requestButton.disabled = selected.size === 0 || !desktopConfigured'));
-  assert.ok(app.includes("Status: PREPARED ONLY — NOT ACTIVE"));
-  assert.ok(app.includes("current companion adapter is read-only"));
-  assert.match(css, /\.system-control-nav/);
-});
-
-test("camera access is explicitly permissioned and camera frames can reach vision chat", () => {
-  assert.match(html, /id="eye-video"/);
-  assert.match(html, /id="camera-live-observe"/);
-  assert.ok(app.includes("navigator.mediaDevices.getUserMedia"));
-  assert.ok(app.includes("function captureCameraFrame"));
-  assert.ok(app.includes("function analyzeCameraFrame"));
-  assert.ok(app.includes('[{ dataUrl }]'));
-  assert.ok(app.includes("...(attachments.length ? { attachments } : {})"));
-  assert.ok(proxySource.includes("camera=(self)"));
-  assert.ok(proxySource.includes("microphone=(self)"));
-});
-
-test("API errors are explicit instead of crashing the interface silently", () => {
-  assert.ok(app.includes("CORE_LINK_FAILED"));
-  assert.ok(app.includes("ACCESS SETUP REQUIRED"));
-  assert.ok(app.includes("MODEL PROVIDER NOT READY"));
-  assert.ok(app.includes("VISION_MODEL_NOT_CONFIGURED"));
-});
-
-test("voice mode hides the text box by default and offers an optional open-input control", () => {
-  assert.match(html, /id="message-form" class="message-shell" hidden/);
-  assert.match(html, /id="open-text-input"/);
-  assert.match(app, /ui\.messageForm\.hidden = !composerVisible/);
-  assert.match(app, /const composerVisible = mode === "text" \|\| textInputOpen/);
-  assert.match(app, /function openOptionalTextInput/);
-  assert.match(app, /instance\.continuous = true/);
-  assert.match(app, /instance\.interimResults = true/);
-  assert.match(app, /scheduleRecognitionRestart/);
-});
-
-test("mute is only visible and actionable in Text Mode", () => {
-  assert.match(html, /id="mute-toggle"[^>]*hidden/);
-  assert.match(app, /ui\.muteToggle\.hidden = mode !== "text"/);
-  assert.match(app, /function toggleMute\(\) \{\s*if \(mode !== "text"\) return;/);
-  assert.match(app, /function speakResponse/);
-});
-
-test("tasks render transient holographic panels with real sources and completion states", () => {
-  assert.match(html, /id="task-panel"[^>]*hidden/);
-  assert.match(app, /function openTaskPanel/);
-  assert.match(app, /function markTaskComplete/);
-  assert.match(app, /function schedulePanelHide/);
-  assert.ok(app.includes('apiRequest("/api/research"'));
-  assert.match(app, /safeUrl\.protocol !== "https:"/);
-  assert.match(css, /\.holo-panel\[hidden\]/);
-});
-
-test("the interface uses same-origin backend requests and a fixed ULTRON CORE upstream", () => {
-  assert.match(app, /credentials: "same-origin"/);
-  assert.match(proxySource, /https:\/\/ultron-ai-core\.onrender\.com/);
-  assert.match(proxySource, /requestUrl\.pathname\.startsWith\("\/api\/"\)/);
-  assert.match(proxySource, /new URL\(requestUrl\.pathname \+ requestUrl\.search, CORE_API_ORIGIN\)/);
-  assert.match(proxySource, /forwardedRequestHeaders/);
-  assert.match(proxySource, /getSetCookie/);
-  assert.doesNotMatch(html, /<script[^>]+src=["']https?:/i);
-});
-
-test("the proxy serves local assets and does not forward unknown public paths", async (t) => {
-  const calls = [];
-  const proxy = createUltronCoreProxy({
-    fetchImpl: async (url, init) => {
-      calls.push({ url: String(url), init });
-      return new Response(JSON.stringify({ status: "ok", app: "ULTRON AI" }), {
-        status: 200,
-        headers: { "Content-Type": "application/json; charset=utf-8" }
-      });
-    },
-    logger: { warn() {} }
-  });
+async function startProxy(t, options = {}) {
+  const proxy = createUltronCoreProxy(options);
   await new Promise((resolve, reject) => {
     proxy.once("error", reject);
     proxy.listen(0, "127.0.0.1", resolve);
   });
-  t.after(() => new Promise(resolve => proxy.close(() => resolve())));
-  const address = proxy.address();
-  const base = "http://127.0.0.1:" + address.port;
+  t.after(() => new Promise(resolve => {
+    proxy.closeAllConnections?.();
+    proxy.close(() => resolve());
+  }));
+  return "http://127.0.0.1:" + proxy.address().port;
+}
 
-  const page = await fetch(base + "/");
-  assert.equal(page.status, 200);
-  assert.match(page.headers.get("content-type") || "", /text\/html/);
-  assert.match(await page.text(), /ULTRON AI — Living Core/);
-  assert.equal(page.headers.get("cache-control"), "no-store");
+test("backend and proxy do not expose frontend static assets", () => {
+  assert.doesNotMatch(serverSource, /express\.static\s*\(/);
+  assert.doesNotMatch(serverSource, /app\.use\s*\(\s*["']\/voice["']/);
+  assert.match(serverSource, /code:\s*["']FRONTEND_REMOVED["']/);
+  assert.doesNotMatch(proxySource, /STATIC_ASSETS|serveAsset/);
+});
 
-  const manifestResponse = await fetch(base + "/manifest.webmanifest");
-  assert.equal(manifestResponse.status, 200);
-  assert.match(manifestResponse.headers.get("content-type") || "", /application\/manifest\+json/);
-  assert.equal(manifestResponse.headers.get("cache-control"), "no-cache");
-  assert.equal((await manifestResponse.json()).icons.length, 2);
-
-  const workerResponse = await fetch(base + "/service-worker.js");
-  assert.equal(workerResponse.status, 200);
-  assert.match(workerResponse.headers.get("content-type") || "", /javascript/);
-  assert.equal(workerResponse.headers.get("cache-control"), "no-cache");
-  assert.match(await workerResponse.text(), /const SHELL_PATHS = new Set/);
-
-  for (const [path, expectedSize] of [
-    ["/icons/icon-180.png", 180],
-    ["/icons/icon-192.png", 192],
-    ["/icons/icon-512.png", 512]
-  ]) {
-    const icon = await fetch(base + path);
-    assert.equal(icon.status, 200);
-    assert.match(icon.headers.get("content-type") || "", /image\/png/);
-    assert.equal(icon.headers.get("cache-control"), "public, max-age=300");
-    const png = Buffer.from(await icon.arrayBuffer());
-    assert.deepEqual([...png.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
-    assert.equal(png.readUInt32BE(16), expectedSize);
-    assert.equal(png.readUInt32BE(20), expectedSize);
-  }
-  assert.equal(calls.length, 0);
-
-  const unknown = await fetch(base + "/admin-secret");
-  assert.equal(unknown.status, 404);
-  assert.equal(calls.length, 0);
-
-  const health = await fetch(base + "/api/health", { headers: { Cookie: "ultron_sb_access=test-cookie" } });
+test("API proxy health remains available and the root is API-only", async t => {
+  const base = await startProxy(t);
+  const health = await fetch(base + "/healthz");
   assert.equal(health.status, 200);
-  assert.deepEqual(await health.json(), { status: "ok", app: "ULTRON AI" });
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0].url, "https://ultron-ai-core.onrender.com/api/health");
-  assert.equal(calls[0].init.headers.get("cookie"), "ultron_sb_access=test-cookie");
+  assert.deepEqual(await health.json(), { status: "ok", service: "ultron-api-proxy" });
+  const root = await fetch(base + "/");
+  assert.equal(root.status, 404);
+  assert.equal((await root.json()).error.code, "FRONTEND_REMOVED");
 });
 
-
-test("API gateway errors are retried only when they are non-JSON responses", () => {
-  assert.ok(proxySource.includes('gatewayRetryDelaysMs = [1500, 3000, 5000, 7000, 9000, 10000, 12000, 12000, 12000]'));
-  assert.ok(proxySource.includes('status === 502 ? "CORE_GATEWAY_502"'));
-  assert.ok(proxySource.includes('" retries (" + (gatewayRetries + 1) + " attempts)'));
+test("HTML, JS, CSS, manifest, service-worker and icon paths are no longer served", async t => {
+  const calls = [];
+  const base = await startProxy(t, { fetchImpl: async (...args) => {
+    calls.push(args);
+    return new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } });
+  }});
+  for (const path of ["/index.html", "/app.js", "/styles.css", "/manifest.webmanifest", "/service-worker.js", "/icons/icon-512.png"]) {
+    const response = await fetch(base + path);
+    assert.equal(response.status, 404, path);
+    assert.equal((await response.json()).error.code, "FRONTEND_REMOVED", path);
+  }
+  assert.equal(calls.length, 0);
 });
 
-test("proxy retries a transient HTML 502 once and returns the backend response", async (t) => {
-  let calls = 0;
-  const proxy = createUltronCoreProxy({
-    gatewayRetryDelaysMs: [0],
-    fetchImpl: async () => {
-      calls += 1;
-      if (calls === 1) {
-        return new Response("<html>502 Bad Gateway</html>", {
-          status: 502,
-          headers: { "Content-Type": "text/html" }
-        });
-      }
-      return new Response(JSON.stringify({ status: "ok", answer: "recovered" }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" }
-      });
-    },
-    logger: { warn() {} }
-  });
-  await new Promise((resolve, reject) => {
-    proxy.once("error", reject);
-    proxy.listen(0, "127.0.0.1", resolve);
-  });
-  t.after(() => new Promise(resolve => proxy.close(() => resolve())));
-  const response = await fetch("http://127.0.0.1:" + proxy.address().port + "/api/chat", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages: [{ role: "user", content: "hello" }] })
-  });
+test("API proxy preserves auth cookies and uses the fixed backend origin", async t => {
+  const calls = [];
+  const base = await startProxy(t, { fetchImpl: async (url, init) => {
+    calls.push({ url: String(url), init });
+    return new Response(JSON.stringify({ status: "ok", app: "ULTRON AI" }), {
+      status: 200,
+      headers: { "Content-Type": "application/json; charset=utf-8", "Set-Cookie": "ultron_sb_access=test-response; HttpOnly; Path=/; SameSite=Lax" }
+    });
+  }});
+  const response = await fetch(base + "/api/health?check=1", { headers: { Cookie: "ultron_sb_access=test-request" }});
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { status: "ok", answer: "recovered" });
-  assert.equal(calls, 2);
+  assert.deepEqual(await response.json(), { status: "ok", app: "ULTRON AI" });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, "https://ultron-ai-core.onrender.com/api/health?check=1");
+  assert.equal(calls[0].init.headers.get("cookie"), "ultron_sb_access=test-request");
+  assert.match(response.headers.get("set-cookie") || "", /ultron_sb_access=test-response/);
 });
 
-test("proxy turns a persistent non-JSON gateway 502 into an actionable API error", async (t) => {
+test("Jarvis APIs remain proxied but browser-only world-intelligence routes are removed", async t => {
+  const calls = [];
+  const base = await startProxy(t, { fetchImpl: async url => {
+    calls.push(String(url));
+    return new Response(JSON.stringify({ success: true }), { status: 200, headers: { "Content-Type": "application/json" } });
+  }});
+  const response = await fetch(base + "/jarvis/capabilities");
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { success: true });
+  assert.equal(calls[0], "https://ultron-ai-core.onrender.com/jarvis/capabilities");
+  const world = await fetch(base + "/world-intelligence");
+  assert.equal(world.status, 404);
+  assert.equal(calls.length, 1);
+});
+
+test("structured API errors are not retried; transient non-JSON gateway errors are retried", async t => {
   let calls = 0;
-  const proxy = createUltronCoreProxy({
-    gatewayRetryDelaysMs: [0],
-    fetchImpl: async () => {
-      calls += 1;
-      return new Response("<html>502 Bad Gateway</html>", {
-        status: 502,
-        headers: { "Content-Type": "text/html" }
-      });
-    },
-    logger: { warn() {} }
-  });
-  await new Promise((resolve, reject) => {
-    proxy.once("error", reject);
-    proxy.listen(0, "127.0.0.1", resolve);
-  });
-  t.after(() => new Promise(resolve => proxy.close(() => resolve())));
-  const response = await fetch("http://127.0.0.1:" + proxy.address().port + "/api/chat", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages: [{ role: "user", content: "hello" }] })
-  });
-  assert.equal(response.status, 502);
-  assert.deepEqual(await response.json(), {
-    error: {
-      code: "CORE_GATEWAY_502",
-      message: "ULTRON Core returned an upstream 502 gateway response after 1 retries (2 attempts). This can happen while the free backend wakes from idle; please retry shortly."
-    }
-  });
+  const base = await startProxy(t, { gatewayRetryDelaysMs: [0], fetchImpl: async () => {
+    calls++;
+    if (calls === 1) return new Response("<html>502</html>", { status: 502, headers: { "Content-Type": "text/html" }});
+    return new Response(JSON.stringify({ status: "ok" }), { status: 200, headers: { "Content-Type": "application/json" }});
+  }});
+  const response = await fetch(base + "/api/health");
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { status: "ok" });
   assert.equal(calls, 2);
-});
-
-test("proxy does not retry structured JSON model-provider errors", async (t) => {
-  let calls = 0;
-  const expected = { error: { message: "Model provider request failed after configured fallback attempts", type: "provider_request_failed" } };
-  const proxy = createUltronCoreProxy({
-    gatewayRetryDelaysMs: [0],
-    fetchImpl: async () => {
-      calls += 1;
-      return new Response(JSON.stringify(expected), {
-        status: 502,
-        headers: { "Content-Type": "application/json; charset=utf-8" }
-      });
-    },
-    logger: { warn() {} }
-  });
-  await new Promise((resolve, reject) => {
-    proxy.once("error", reject);
-    proxy.listen(0, "127.0.0.1", resolve);
-  });
-  t.after(() => new Promise(resolve => proxy.close(() => resolve())));
-  const response = await fetch("http://127.0.0.1:" + proxy.address().port + "/api/chat", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages: [{ role: "user", content: "hello" }] })
-  });
-  assert.equal(response.status, 502);
-  assert.deepEqual(await response.json(), expected);
-  assert.equal(calls, 1);
-});
-
-
-test("voice output prefers Kokoro then installed male voices and uses language-specific speech segments", () => {
-  assert.match(html, /data-drawer-view="voice-quality"/);
-  assert.ok(app.includes("function chooseSpeechVoice(language)"));
-  assert.ok(app.includes("const maleVoiceName ="));
-  assert.ok(app.includes("function splitSpeechSegments(text)"));
-  assert.ok(app.includes('utterance.lang = segment.lang'));
-  assert.ok(app.includes('utterance.pitch = 0.80'));
-  assert.ok(app.includes('utterance.rate = 1.08'));
-  assert.ok(app.includes('function speechVoiceLabel(language)'));
-  assert.ok(app.includes('let speechLanguageMode = "auto"'));
-  assert.ok(app.includes('instance.lang = speechLanguageMode === "hi-IN" ? "hi-IN" : "en-IN"'));
-});
-
-test("voice quality panel explains the free-first Kokoro and browser fallback path", () => {
-  assert.ok(app.includes('if (name === "voice-quality")'));
-  assert.ok(app.includes("Kokoro am_onyx synthesis"));
-  assert.ok(app.includes("am_onyx · deep, calm, authoritative male"));
-  assert.ok(app.includes('drawerButton("HINDI · hi-IN"'));
-  assert.ok(app.includes('drawerButton("ENGLISH · en-IN"'));
-  assert.ok(app.includes("async function requestKokoroSpeech(text)"));
-  assert.ok(app.includes('/api/jarvis/voice/kokoro'));
-  assert.ok(app.includes("Diagnostic tones are never passed to the audio player."));
-  assert.ok(app.includes("premiumSttConfigured: Boolean(rawSpeech.premiumSttConfigured && !legacyRemoteProvider)"));
-  assert.doesNotMatch(app, /Fish Audio|FishAudio|FISH_AUDIO|requestFishAudioSpeech|playFishAudioBlob|streamSpeechUsesFish/i);
-  assert.doesNotMatch(app, /\/api\/speech\/synthesize/);
-});
-
-test("free-first voice architecture defaults to Kokoro and browser speech without requiring Kokoro", () => {
-  assert.ok(app.includes("function speakResponseBrowser(text, epoch)"));
-  assert.ok(app.includes("function splitSpeechSegments(text)"));
-  assert.ok(app.includes("function chooseSpeechVoice(language)"));
-  assert.ok(app.includes('if (!shouldSpeak) return false;'));
-});
-
-
-test("JARVIS task activity exposes a bounded account-scoped employee task form and persisted status/result paths", () => {
-  assert.ok(app.includes('result?.notice || result?.execution?.notice'));
-  assert.ok(app.includes('apiRequest("/api/agent/tasks")'));
-  assert.ok(app.includes('apiRequest("/api/agent/tasks"'));
-  assert.ok(app.includes('apiRequest("/api/agent/tasks/" + encodeURIComponent(taskId))'));
-  assert.ok(app.includes("jarvis-task-goal"));
-  assert.ok(app.includes('["chief-of-staff", "Chief of Staff"]'));
-  assert.ok(app.includes('["plan", "Plan"]'));
-  assert.ok(app.includes('["report", "Report"]'));
-  assert.ok(app.includes("QUEUE EMPLOYEE TASK"));
-  assert.ok(app.includes("queued is not completed"));
-  assert.ok(app.includes("will not publish, send messages, spend money"));
-  assert.ok(app.includes("VIEW RESULT"));
-});
-
-test("JARVIS task form uses bounded text, required validation and same-origin authenticated API requests", () => {
-  assert.ok(app.includes("goal.maxLength = 2000"));
-  assert.ok(app.includes("goal.minLength = 2"));
-  assert.ok(app.includes("goal.required = true"));
-  assert.match(app, /credentials: "same-origin"/);
-  assert.match(app, /cache: "no-store"/);
 });

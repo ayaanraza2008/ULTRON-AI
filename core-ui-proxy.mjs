@@ -1,30 +1,10 @@
 import { createServer } from "node:http";
-import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Readable } from "node:stream";
 
-const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "public");
 const CORE_API_ORIGIN = process.env.CORE_API_ORIGIN || "https://ultron-ai-core.onrender.com";
 const MAX_REQUEST_BYTES = 12 * 1024 * 1024;
-const STATIC_ASSETS = new Map([
-  ["/", ["index.html", "text/html; charset=utf-8"]],
-  ["/index.html", ["index.html", "text/html; charset=utf-8"]],
-  ["/styles.css", ["styles.css", "text/css; charset=utf-8"]],
-  ["/app.js", ["app.js", "text/javascript; charset=utf-8"]],
-  ["/favicon.svg", ["favicon.svg", "image/svg+xml; charset=utf-8"]],
-  ["/manifest.webmanifest", ["manifest.webmanifest", "application/manifest+json; charset=utf-8"]],
-  ["/service-worker.js", ["service-worker.js", "text/javascript; charset=utf-8"]],
-  ["/hand-gesture-core.js", ["hand-gesture-core.js", "text/javascript; charset=utf-8"]],
-  ["/spatial-viewer.js", ["spatial-viewer.js", "text/javascript; charset=utf-8"]],
-  ["/mobile-control.js", ["mobile-control.js", "text/javascript; charset=utf-8"]],
-  ["/hud-dashboard.html", ["hud-dashboard.html", "text/html; charset=utf-8"]],
-  ["/hud-dashboard.js", ["hud-dashboard.js", "text/javascript; charset=utf-8"]],
-  ["/hud-style.css", ["hud-style.css", "text/css; charset=utf-8"]],
-  ["/icons/icon-180.png", ["icons/icon-180.png", "image/png"]],
-  ["/icons/icon-192.png", ["icons/icon-192.png", "image/png"]],
-  ["/icons/icon-512.png", ["icons/icon-512.png", "image/png"]]
-]);
 const ALLOWED_PROXY_METHODS = new Set(["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"]);
 const RESPONSE_HEADERS = [
   "cache-control", "content-type", "content-disposition", "location",
@@ -68,24 +48,6 @@ function sendJson(res, statusCode, payload) {
   res.end(body);
 }
 
-async function serveAsset(req, res, asset) {
-  const [filename, contentType] = asset;
-  let bytes;
-  try {
-    bytes = await readFile(path.join(ROOT, filename));
-  } catch {
-    sendJson(res, 404, { error: { code: "ASSET_NOT_FOUND", message: "This interface asset is missing." } });
-    return;
-  }
-  securityHeaders(res);
-  res.statusCode = 200;
-  res.setHeader("Content-Type", contentType);
-  res.setHeader("Cache-Control", filename === "index.html" ? "no-store" : filename === "service-worker.js" || filename === "manifest.webmanifest" ? "no-cache" : "public, max-age=300");
-  res.setHeader("Content-Length", String(bytes.length));
-  if (req.method === "HEAD") res.end();
-  else res.end(bytes);
-}
-
 function forwardedRequestHeaders(req) {
   const headers = new Headers();
   const input = req.headers;
@@ -124,28 +86,28 @@ export function createUltronCoreProxy({ fetchImpl = fetch, logger = console, gat
   return createServer(async (req, res) => {
     let requestUrl;
     try {
-      requestUrl = new URL(req.url || "/", "http://ultron-core-interface.local");
+      requestUrl = new URL(req.url || "/", "http://ultron-api-proxy.local");
     } catch {
       sendJson(res, 400, { error: { code: "INVALID_URL", message: "Request URL is invalid." } });
       return;
     }
 
     if (requestUrl.pathname === "/healthz" && (req.method === "GET" || req.method === "HEAD")) {
-      sendJson(res, 200, { status: "ok", service: "ultron-core-interface" });
-      return;
-    }
-
-    const asset = STATIC_ASSETS.get(requestUrl.pathname);
-    if (asset && (req.method === "GET" || req.method === "HEAD")) {
-      await serveAsset(req, res, asset);
+      sendJson(res, 200, { status: "ok", service: "ultron-api-proxy" });
       return;
     }
 
     const isApiPath = requestUrl.pathname === "/api" || requestUrl.pathname.startsWith("/api/");
     const isJarvisPath = requestUrl.pathname === "/jarvis" || requestUrl.pathname.startsWith("/jarvis/");
-    const isWorldIntelligencePath = requestUrl.pathname === "/world-intelligence" || requestUrl.pathname.startsWith("/world-intelligence/");
-    if (!isApiPath && !isJarvisPath && !isWorldIntelligencePath) {
-      sendJson(res, 404, { error: { code: "NOT_FOUND", message: "No interface route matches this path." } });
+    if (!isApiPath && !isJarvisPath) {
+      sendJson(res, 404, {
+        error: {
+          code: requestUrl.pathname === "/" || requestUrl.pathname === "/index.html" ||
+            /\.(?:html?|js|css|svg|png|webmanifest|ico)$/i.test(requestUrl.pathname)
+            ? "FRONTEND_REMOVED" : "NOT_FOUND",
+          message: "This host is API-only. The ULTRON web frontend and static assets have been removed."
+        }
+      });
       return;
     }
     if (!ALLOWED_PROXY_METHODS.has(req.method || "")) {

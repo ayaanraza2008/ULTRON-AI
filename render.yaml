@@ -1,5 +1,5 @@
 # ULTRON AI — Render workspace "Ultron core"
-# This Blueprint maps the four existing live services in that workspace.
+# This Blueprint maps the three backend and integration services; the web frontend is removed in that workspace.
 # It is a candidate configuration only. Do not sync it until the service/secret
 # diff has been reviewed in Render Dashboard.
 
@@ -21,7 +21,6 @@ services:
         - "**/*.mjs"
         - "package.json"
         - "package-lock.json"
-        - "public/**"
         - "supabase/migrations/**"
       ignoredPaths:
         - "tests/**"
@@ -32,7 +31,6 @@ services:
         - "DEVELOPMENT_STATE.md"
         - ".env.example"
         - ".gitignore"
-        - "public/world-intelligence-bridge.js"
     envVars:
       - key: NODE_ENV
         value: production
@@ -153,31 +151,7 @@ services:
       - key: GEO_SLEUTH_ROOT
         value: .runtime/geo-sleuth/skills/geo-sleuth
 
-  # 2. ULTRON Living Core interface + same-origin API proxy
-  # Preserve the separately deployed live UI branch; do not move this service to backend main.
-  - type: web
-    name: ultron-core-interface
-    runtime: node
-    plan: free
-    region: singapore
-    branch: feature/ultron-live-core-interface-20261029
-    buildCommand: npm install --ignore-scripts
-    startCommand: node core-ui-proxy.mjs
-    healthCheckPath: /healthz
-    autoDeployTrigger: commit
-    buildFilter:
-      paths:
-        - "core-ui-proxy.mjs"
-        - "public/**"
-        - "package.json"
-        - "package-lock.json"
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: NODE_VERSION
-        value: 24.14.0
-
-  # 3. Browser Use bridge — read-only public HTTPS navigation only
+  # 2. Browser Use bridge — read-only public HTTPS navigation only
   - type: web
     name: ultron-browser-use-core
     runtime: python
@@ -206,7 +180,7 @@ services:
       - key: ULTRON_ENABLE_CDP_BROWSER_AGENT
         value: "NO"
 
-  # 4. REA authenticated MCP gateway
+  # 3. REA authenticated MCP gateway
   - type: web
     name: ultron-rea-gateway
     runtime: node
