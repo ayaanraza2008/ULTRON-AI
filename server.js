@@ -1559,17 +1559,45 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
     const allowedLocales = ["en-IN", "hi-IN", "hinglish"];
     const locale = req.body?.voice_input_locale;
     if (!allowedLocales.includes(locale)) return res.status(400).json({ error: { code: "INVALID_PREFERENCE", message: "Choose English, Hindi, or Hinglish for voice input." } });
+    const voiceOutputName = req.body?.voice_output_name;
+    const voiceOutputLang = req.body?.voice_output_lang;
+    if (voiceOutputName !== undefined && (typeof voiceOutputName !== "string" || voiceOutputName.length > 120 || /[\\u0000-\\u001f]/.test(voiceOutputName))) {
+      return res.status(400).json({ error: { code: "INVALID_PREFERENCE", message: "Voice output name is invalid." } });
+    }
+    if (voiceOutputLang !== undefined && (typeof voiceOutputLang !== "string" || voiceOutputLang.length > 40 || (voiceOutputLang !== "" && !/^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(voiceOutputLang)))) {
+      return res.status(400).json({ error: { code: "INVALID_PREFERENCE", message: "Voice output language is invalid." } });
+    }
     const language = locale === "hi-IN" ? "hi" : locale === "hinglish" ? "hinglish" : "en";
     const voiceEnabled = typeof req.body?.voice_enabled === "boolean" ? req.body.voice_enabled : true;
     const memoryEnabled = typeof req.body?.memory_enabled === "boolean" ? req.body.memory_enabled : true;
     try {
-      const rows = await supabaseRest(req, "user_preferences", "POST", "?on_conflict=user_id&select=language,voice_enabled,voice_input_locale,memory_enabled,history_retention_days,preferences", {
+      const payload = {
         user_id: req.supabaseUser.id,
         language,
         voice_enabled: voiceEnabled,
         voice_input_locale: locale,
         memory_enabled: memoryEnabled
-      }, "resolution=merge-duplicates,return=representation");
+      };
+      if (voiceOutputName !== undefined || voiceOutputLang !== undefined) {
+        const currentRows = await supabaseRest(req, "user_preferences", "GET",
+          "?select=preferences&user_id=eq." + encodeURIComponent(req.supabaseUser.id) + "&limit=1");
+        const existing = Array.isArray(currentRows) && currentRows[0]?.preferences &&
+          typeof currentRows[0].preferences === "object" && !Array.isArray(currentRows[0].preferences)
+          ? currentRows[0].preferences : {};
+        const preferences = { ...existing };
+        if (voiceOutputName !== undefined) {
+          const normalizedName = voiceOutputName.trim();
+          if (normalizedName) preferences.voice_output_name = normalizedName;
+          else delete preferences.voice_output_name;
+        }
+        if (voiceOutputLang !== undefined) {
+          const normalizedLang = voiceOutputLang.trim();
+          if (normalizedLang) preferences.voice_output_lang = normalizedLang;
+          else delete preferences.voice_output_lang;
+        }
+        payload.preferences = preferences;
+      }
+      const rows = await supabaseRest(req, "user_preferences", "POST", "?on_conflict=user_id&select=language,voice_enabled,voice_input_locale,memory_enabled,history_retention_days,preferences", payload, "resolution=merge-duplicates,return=representation");
       if (!Array.isArray(rows) || !rows[0]) return res.status(502).json({ error: { code: "PREFERENCES_WRITE_FAILED", message: "Supabase did not return the saved preferences." } });
       res.json({ preferences: rows[0] });
     } catch (error) { res.status(error.status || 502).json({ error: { code: "PREFERENCES_WRITE_FAILED", message: error.message } }); }
