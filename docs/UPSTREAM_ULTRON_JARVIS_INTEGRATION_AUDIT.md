@@ -16,13 +16,13 @@ This is a source-level compatibility and safety audit of two public repositories
 
 | Upstream capability | Existing ULTRON overlap | Decision |
 |---|---|---|
-| Cerebro semantic graph / multi-hop recall | `cognitive-memory.js`, agentmemory integration, existing persistence and Supabase boundaries | Adapt graph semantics and relationship traversal behind the current memory interface. Do not introduce a second independent user-memory database or bypass owner/account isolation. |
+| Cerebro semantic graph / multi-hop recall | `cognitive-memory.js`, agentmemory integration, existing persistence and Supabase boundaries | Adapt graph semantics and relationship traversal behind the current memory interface. The live agent retrieval now fetches row IDs and user IDs under the existing Supabase user filter, then performs bounded two-hop recall only within that owner scope. Do not introduce a second independent user-memory database or bypass owner/account isolation. |
 | OpenCV hand gesture control | `vision/`, Android companion and Windows companion/device command protocol | Reimplement as an opt-in, local companion capability. Require explicit camera permission, visible active state, cooldown, calibration, and a kill switch. Never map a gesture directly to destructive or security-sensitive actions. |
 | Prometheus self-evolving tool generation | `self-improvement/`, `autonomy-policy.js`, task/agent runtime | Reuse the concept only. Generated code must be quarantined, statically checked, reviewed, tested in a sandbox, and explicitly approved before activation. No unrestricted hot-loading or self-granted permissions. |
-| Chronos proactive context engine | Existing task scheduler, workers, autonomy runtime | Adapt event-driven suggestions and bounded proactive tasks; do not add an always-on polling daemon that drains the 8 GB target machine. |
+| Chronos proactive context engine | Existing task scheduler, workers, autonomy runtime | ULTRON already has a lightweight `system/proactive-daemon.js` for battery/RAM alerts and a durable scheduled-task worker. Extend those existing services only where useful; do not add a second polling daemon or unsolicited conversational speech loop. |
 | Offline voice / wake word | Existing ULTRON voice stack and Windows wake companion | Keep the exact wake phrase **Ultron**. Reuse only detector design patterns after latency, false-positive, privacy, and CPU tests. No silent mic capture or automatic model downloads. |
-| Tauri floating orb, system tray, global hotkey | Existing black energy-core web HUD and .NET Windows companion | Treat as optional desktop-shell enhancement, not a replacement UI. First implement a narrow authenticated IPC bridge or native companion overlay; preserve current web HUD and pairing protocol. |
-| JARVIS persistent task memory | Existing history, cognitive memory, task state | Map active-task summaries into the existing persistence layer. Do not create a second source of truth. |
+| Tauri floating orb, system tray, global hotkey | Existing black energy-core web HUD and .NET Windows companion | The existing `system/desktop-companion-manager.js` already provides orb position persistence, display-boundary clamping, HUD anchoring, tray actions, hotkey metadata, emergency stop, and native companion lifecycle. Reuse this implementation; do not add a second Tauri shell or duplicate orb. |
+| JARVIS persistent task memory | Existing history, cognitive memory, task state | Already covered by ULTRON’s durable `agent_tasks` queue, worker leases, task status transitions, and existing conversation/memory persistence. Do not add JARVIS’s separate local JSON task store as a competing source of truth. |
 | Windows system actions | Existing paired-device queue and signed allowlisted command executor | Reuse the existing authenticated command queue. Do not import arbitrary shell execution. |
 
 ## Security findings that block blind copying
@@ -49,10 +49,10 @@ This is a source-level compatibility and safety audit of two public repositories
 - [x] Source tree and README files inspected.
 - [x] Selected source modules inspected.
 - [x] Existing ULTRON package stack and Windows companion boundaries inspected.
-- [ ] No upstream source code has been copied or merged in this audit commit.
+- [x] Cerebro-inspired bounded multi-hop recall is wired into the live agent memory retrieval path; existing Supabase user scoping remains mandatory.\n- [x] JARVIS-style desktop orb/tray/position and durable task capabilities were confirmed to exist already in ULTRON; no duplicate runtime was added.\n- [ ] No AbuZar source code/assets copied (no published license at audited revision).
 - [ ] No runtime tests or device acceptance have been run for either upstream project.
 - [ ] No deployment performed.
 
 ## Attribution
 
-If MIT-licensed JARVIS code is copied in a later implementation, retain its MIT license and copyright notice. The AbuZar repository requires written permission or a published license before copying its source or assets.
+JARVIS-ULTIMATE is MIT-licensed. Its desktop companion concepts are already referenced by the existing ULTRON companion implementation; `THIRD_PARTY_NOTICES.md` retains the upstream copyright and MIT permission notice. The AbuZar repository requires written permission or a published license before copying its source or assets.
