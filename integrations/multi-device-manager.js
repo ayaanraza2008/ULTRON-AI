@@ -634,12 +634,13 @@ export class MultiDeviceManager {
       name: String(deviceMeta.name || "Connected Device").slice(0, 80),
       type: deviceMeta.type || DEVICE_TYPES.ANDROID_SMARTPHONE,
       platform: deviceMeta.platform || "android",
+      ownerUserId: String(deviceMeta.ownerUserId || "").trim() || null,
       capabilities: Array.isArray(deviceMeta.capabilities) ? deviceMeta.capabilities : ["notifications"],
       screenLocked: deviceMeta.screenLocked ?? true,
-      online: deviceMeta.online ?? true,
+      online: deviceMeta.online ?? false,
       battery: deviceMeta.battery || { percent: 100, isCharging: false },
       lastSeenAt: deviceMeta.lastSeenAt || new Date().toISOString(),
-      heartbeatTimeoutMs: deviceMeta.heartbeatTimeoutMs || 90_000,
+      heartbeatTimeoutMs: deviceMeta.heartbeatTimeoutMs || ((deviceMeta.platform || "android") === "android" ? 35 * 60 * 1000 : 90_000),
       currentMedia: null
     };
 
@@ -661,13 +662,12 @@ export class MultiDeviceManager {
     const dev = typeof deviceOrId === "string" ? this.devices.get(deviceOrId) : deviceOrId;
     if (!dev || this.revokedDevices.has(dev.id) || dev.status === "revoked") return false;
     if (dev.online !== true) return false;
-    if (dev.lastSeenAt) {
-      const elapsed = Date.now() - new Date(dev.lastSeenAt).getTime();
-      const timeout = dev.heartbeatTimeoutMs || 90_000;
-      if (elapsed > timeout) {
-        dev.online = false;
-        return false;
-      }
+    const timeout = dev.heartbeatTimeoutMs || (dev.platform === "android" ? 35 * 60 * 1000 : 90_000);
+    const lastSeen = Date.parse(dev.lastSeenAt || "");
+    const ageMs = Date.now() - lastSeen;
+    if (!Number.isFinite(lastSeen) || ageMs < 0 || ageMs > timeout) {
+      dev.online = false;
+      return false;
     }
     return true;
   }
@@ -884,6 +884,9 @@ export class MultiDeviceManager {
       };
     }
     if (telemetry.vitals) dev.vitals = telemetry.vitals;
+    if (Number.isFinite(telemetry.heartbeatTimeoutMs) && telemetry.heartbeatTimeoutMs >= 1_000 && telemetry.heartbeatTimeoutMs <= 60 * 60 * 1000) {
+      dev.heartbeatTimeoutMs = telemetry.heartbeatTimeoutMs;
+    }
     dev.lastSeenAt = new Date().toISOString();
     if (this.isPersistent && !deferPersistence && !this.saveToDisk()) return { success: false, error: "DEVICE_PERSISTENCE_FAILED" };
     return { success: true, deviceId, online: dev.online, lastSeenAt: dev.lastSeenAt };
