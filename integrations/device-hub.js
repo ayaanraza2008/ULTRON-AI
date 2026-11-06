@@ -537,10 +537,11 @@ export class DeviceHub {
     }
     return list.map(dev => ({
       id: dev.id,
+      ownerUserId: dev.ownerUserId,
       name: dev.name,
       platform: dev.platform,
       status: dev.status || "active",
-      online: dev.online,
+      online: this.isDeviceOnline(dev.id),
       battery: dev.battery,
       pairedAt: dev.pairedAt,
       lastSeenAt: dev.lastSeenAt,
