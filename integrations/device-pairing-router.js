@@ -526,11 +526,6 @@ export function createDevicePairingRouter({
       // Revoke the in-memory identity and close authenticated WebSocket/SSE
       // sessions immediately; database rejection alone affects only reconnects.
       deviceHubInstance.revokeDevice(rows[0].id, ownerId);
-      deviceHubInstance.emitEvent?.({
-        type: "DEVICE_REVOKED",
-        deviceId: rows[0].id,
-        ownerUserId: ownerId
-      });
 
       res.json({ ok: true, revoked: true, deviceId: rows[0].id });
     } catch (error) {
