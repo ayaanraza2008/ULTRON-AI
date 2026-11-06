@@ -148,8 +148,10 @@ export class RemoteTaskOrchestrator {
           reportStep("Step 2: Querying Windows PC storage and hardware headroom...");
           if (this.windowsDesktopAgent) {
             const vitals = await this.windowsDesktopAgent.getSystemVitals();
-            const storageAvailableGb = Number(vitals?.storageAvailableGb);
-            const storageCheckAvailable = Number.isFinite(storageAvailableGb) && storageAvailableGb >= 0;
+            const rawStorageAvailableGb = vitals?.storageAvailableGb;
+            const storageCheckAvailable = typeof rawStorageAvailableGb === "number" &&
+              Number.isFinite(rawStorageAvailableGb) && rawStorageAvailableGb >= 0;
+            const storageAvailableGb = storageCheckAvailable ? rawStorageAvailableGb : null;
             const canRun = storageCheckAvailable ? storageAvailableGb > 10 : null;
             executionResult = {
               success: true,
