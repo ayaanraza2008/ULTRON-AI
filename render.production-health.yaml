@@ -7,7 +7,11 @@ services:
     plan: free
     region: singapore
     branch: main
-    buildCommand: npm install --ignore-scripts
+    buildCommand: >-
+      npm install --ignore-scripts &&
+      npm run check &&
+      node --test --test-timeout=30000 --test-force-exit
+      tests/preferences-api.test.js tests/rea-gateway.test.js
     startCommand: npm start
     healthCheckPath: /api/health
     autoDeployTrigger: commit
@@ -35,7 +39,12 @@ services:
     plan: free
     region: singapore
     branch: main
-    buildCommand: pip install -r browser-use-bridge/requirements.txt
+    buildCommand: >-
+      pip install -r browser-use-bridge/requirements.txt &&
+      python -m py_compile browser-use-bridge/main.py
+      browser-use-bridge/navigation_policy.py browser-use-bridge/startup_smoke.py &&
+      python browser-use-bridge/test_navigation_policy.py &&
+      python browser-use-bridge/test_startup_smoke.py
     startCommand: cd browser-use-bridge && uvicorn main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     autoDeployTrigger: commit
@@ -49,7 +58,14 @@ services:
     plan: free
     region: singapore
     branch: main
-    buildCommand: cd rea-gateway && npm install --omit=dev && npm ls zod glob minimatch --all && npm audit --omit=dev --audit-level=low
+    buildCommand: >-
+      cd rea-gateway &&
+      npm install --omit=dev &&
+      npm ls zod glob minimatch --all &&
+      npm audit --omit=dev --audit-level=low &&
+      npm run check &&
+      cd .. &&
+      node --test --test-timeout=30000 --test-force-exit tests/rea-gateway.test.js
     startCommand: cd rea-gateway && npm start
     healthCheckPath: /healthz
     autoDeployTrigger: commit
@@ -63,7 +79,11 @@ services:
     plan: free
     region: singapore
     branch: feature/ultron-live-core-interface-20261029
-    buildCommand: npm install --ignore-scripts
+    buildCommand: >-
+      npm install --ignore-scripts &&
+      node --check public/app.js &&
+      node --test --test-timeout=30000 --test-force-exit
+      tests/interface-voice-output.test.js
     startCommand: node core-ui-proxy.mjs
     healthCheckPath: /healthz
     autoDeployTrigger: commit
