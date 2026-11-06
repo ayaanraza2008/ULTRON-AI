@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { execFileSync } from "node:child_process";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -15,7 +16,8 @@ test("personal AI product surface contains no robot runtime or API routes", () =
   assert.doesNotMatch(router, /from\s+["']\.\/robotics\//i);
   assert.doesNotMatch(deviceManager, /ROBOT_NODE|robot_node/i);
   assert.doesNotMatch(toolRegistry, /robotic|robotics|simready|actuation/i);
-  assert.equal(fs.existsSync(path.join(root, "robotics")), false);
+  const trackedRobotFiles = execFileSync("git", ["ls-files", "--", "robotics"], { cwd: root, encoding: "utf8" }).trim();
+  assert.equal(trackedRobotFiles, "", "No robot runtime files may be tracked in the personal AI product.");
 });
 
 test("robot-only simulation and hardware test suites are absent", () => {
