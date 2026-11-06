@@ -26,7 +26,7 @@ const SENSITIVE_SYNC_KEY_NAMES = new Set([
   "apikey", "accesstoken", "refreshtoken", "devicetoken", "sessiontoken",
   "authtoken", "tokenhash", "password", "passwordhash", "passwd",
   "secret", "secretkey", "clientsecret", "privatekey", "authorization",
-  "cookie", "credentials", "servicerolekey", "supabasekey", "signingsecret"
+  "cookie", "credential", "credentials", "servicerolekey", "supabasekey", "signingsecret"
 ]);
 
 function containsSensitiveSyncData(value, seen = new WeakSet()) {
