@@ -158,7 +158,8 @@ export function createJarvisRouter({
   };
 
   const syncPairedDeviceIntoFleet = async pairedDevice => {
-    const manager = multiDeviceManagerInstance;
+    try {
+      const manager = multiDeviceManagerInstance;
     if (!manager || typeof manager.getDevice !== "function" || !pairedDevice?.id || !pairedDevice?.ownerUserId) return true;
     if (await manager.ready === false) return true;
 
@@ -219,7 +220,16 @@ export function createJarvisRouter({
         });
       }
     }
-    return true;
+      return true;
+    } catch (error) {
+      logger.warn?.("Paired device fleet synchronization failed", {
+        deviceId: pairedDevice?.id || null,
+        name: error?.name || "Error"
+      });
+      // Authentication remains authoritative in the paired-device registry;
+      // a fleet metadata write failure must not invalidate a valid device token.
+      return true;
+    }
   };
 
   const authenticateOwnerOrDevice = async (req, res, next) => {
