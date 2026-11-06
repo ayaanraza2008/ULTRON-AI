@@ -183,6 +183,7 @@ test("REA startup smoke test sends only supported analysis tool arguments", () =
   assert.deepEqual(buildDemoAnalysisArguments("/tmp/rea-targets/demo-app"), {
     input_path: "/tmp/rea-targets/demo-app",
     format: "directory",
-    integrity_policy: "fail"
+    integrity_policy: "fail",
+    detail: "complete"
   });
 });

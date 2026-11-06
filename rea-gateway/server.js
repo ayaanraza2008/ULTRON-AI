@@ -401,9 +401,9 @@ export function resolveAnalysisRoot(configuredRoot, packageRoot) {
 }
 
 export function buildDemoAnalysisArguments(targetPath) {
-  // Full Evidence is the default. The strict MCP schema does not accept
-  // an explicit "complete" detail value.
-  return { input_path: targetPath, format: "directory", integrity_policy: "fail" };
+  // The deployed REA 6.8.0 MCP wrapper requires an explicit complete detail
+  // mode for this readiness probe, despite the upstream domain schema omitting it.
+  return { input_path: targetPath, format: "directory", integrity_policy: "fail", detail: "complete" };
 }
 
 
