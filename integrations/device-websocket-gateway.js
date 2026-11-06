@@ -623,6 +623,29 @@ export class DeviceWebSocketGateway {
   handleDeviceHubEvent(event) {
     if (!event) return;
 
+    if ((event.type === "DEVICE_REVOKED" || event.type === "DEVICE_CREDENTIALS_ROTATED") &&
+        event.deviceId && event.ownerUserId) {
+      const client = this.clients.get(event.deviceId);
+      if (client?.device?.ownerUserId === event.ownerUserId) {
+        this.disconnectClient(
+          event.deviceId,
+          1008,
+          event.type === "DEVICE_REVOKED" ? "Device access revoked" : "Device credentials rotated"
+        );
+      }
+
+      // SSE streams are authenticated only when opened, so terminate them
+      // immediately when the device is revoked or its credential is rotated.
+      const streams = this.sseClients.get(event.deviceId);
+      if (streams) {
+        for (const res of streams) {
+          try { res.end(); } catch {}
+        }
+        this.sseClients.delete(event.deviceId);
+      }
+      return;
+    }
+
     if (event.type === "COMMAND_DISPATCH" && event.targetDeviceId && event.command) {
       this.dispatchCommand(event.targetDeviceId, event.command);
     } else if (event.type === "COMMAND_COMPLETE" && event.deviceId) {
