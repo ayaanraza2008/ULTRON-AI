@@ -583,7 +583,7 @@ export class ToolRegistry {
       id: "emergency_kill_switch",
       name: "Global Emergency Stop & Freeze",
       category: TOOL_CATEGORIES.AUTONOMOUS_OPERATIONS,
-      description: "Immediately halts all running agents, background workers, and robotic/system actuation.",
+      description: "Immediately halts all running agents, background workers, and active system-control tasks.",
       capabilities: ["kill_switch", "fail_closed", "emergency_halt"],
       permissionLevel: PERMISSION_LEVELS.LEVEL_4_CRITICAL,
       requiresConfirmation: true,
