@@ -33,7 +33,10 @@ for (const eventType of ["DEVICE_CREDENTIALS_ROTATED", "DEVICE_REVOKED"]) {
       end() { sseEnded = true; }
     }]));
 
-    hub.emitEvent({ type: eventType, deviceId, ownerUserId });
+    const mutation = eventType === "DEVICE_REVOKED"
+      ? hub.revokeDevice(deviceId, ownerUserId)
+      : hub.rotateDeviceToken(deviceId, ownerUserId);
+    assert.equal(mutation.success, true);
 
     assert.equal(socketEnded, true);
     assert.equal(sseEnded, true);
