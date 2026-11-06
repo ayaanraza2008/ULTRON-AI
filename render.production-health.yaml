@@ -56,9 +56,6 @@ services:
     buildFilter:
       paths:
         - "rea-gateway/**"
-    buildFilter:
-      paths:
-        - "rea-gateway/**"
 
   - type: web
     name: ultron-core-interface
