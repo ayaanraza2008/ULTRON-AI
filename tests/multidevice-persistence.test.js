@@ -482,7 +482,7 @@ test("createMultiDevicePersistenceAdapter wires authenticated Supabase REST and 
     const adapter = createMultiDevicePersistenceAdapter({
       storagePath: path.join(tmpDir, "fallback.json"),
       supabaseUrl: "https://ultron-test.supabase.co",
-      supabaseServiceRoleKey: "server-only-test-key",
+      supabaseServiceRoleKey: "eyJ.test.signature",
       fetchImpl: async (url, init) => {
         calls.push({ url: String(url), init });
         return { ok: true, status: 204, json: async () => [] };
@@ -503,7 +503,7 @@ test("createMultiDevicePersistenceAdapter wires authenticated Supabase REST and 
     assert.match(calls[0].url, /\/rest\/v1\/ultron_multidevice_state\?on_conflict=key$/);
     assert.equal(calls[0].init.method, "POST");
     assert.equal(calls[0].init.headers.get("apikey"), "server-only-test-key");
-    assert.equal(calls[0].init.headers.get("Authorization"), "Bearer server-only-test-key");
+    assert.equal(calls[0].init.headers.get("Authorization"), "Bearer eyJ.test.signature");
     assert.match(calls[0].init.headers.get("Prefer"), /resolution=merge-duplicates/);
   } finally {
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
@@ -588,6 +588,29 @@ test("DatabasePersistenceAdapter: missing Supabase state table is reported as lo
     assert.equal(result.warning, "SUPABASE_REST_READ_FAILED");
     assert.equal(result.status, 404);
     assert.equal(adapter.isOnline, false);
+  } finally {
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+  }
+});
+
+
+test("createMultiDevicePersistenceAdapter does not send sb_secret keys as JWT bearer tokens", async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ultron-supabase-secret-key-"));
+  let capturedHeaders;
+  try {
+    const adapter = createMultiDevicePersistenceAdapter({
+      storagePath: path.join(tmpDir, "fallback.json"),
+      supabaseUrl: "https://ultron-test.supabase.co",
+      supabaseServiceRoleKey: "sb_secret_test_key",
+      fetchImpl: async (_url, init) => {
+        capturedHeaders = init.headers;
+        return { ok: true, status: 204, json: async () => [] };
+      }
+    });
+    const outcome = await adapter.save({ devices: [], sharedState: [], pendingDeliveries: [], revokedDevices: [] });
+    assert.equal(outcome.backend, "supabase_rest");
+    assert.equal(capturedHeaders.get("apikey"), "sb_secret_test_key");
+    assert.equal(capturedHeaders.has("Authorization"), false);
   } finally {
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
   }
