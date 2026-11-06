@@ -44,7 +44,7 @@ describe("JARVIS Capability Benchmark Suite", () => {
 
     assert.ok(markdown.includes("# ULTRON AI — JARVIS CAPABILITY BENCHMARK SCORECARD"));
     assert.ok(markdown.includes("TOTAL SOURCE/TEST INVENTORY COVERAGE:"));
-    assert.ok(markdown.includes("Runtime Verification:** NOT EVALUATED"));
+    assert.ok(markdown.includes("Runtime Verification:** **NOT_EVALUATED**"));
     assert.ok(markdown.includes("Core AI intelligence and reasoning"));
     assert.ok(markdown.includes("Voice and conversational intelligence"));
     assert.ok(markdown.includes("Computer and OS assistance"));

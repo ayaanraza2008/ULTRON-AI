@@ -805,10 +805,16 @@ test("Durable cloud persistence 6-point verification: write, read, version updat
       return { ok: true, status: 200, json: async () => [] };
     }
 
-    if (init.method === "POST") {
+    if (url.pathname.endsWith("/rpc/save_ultron_multidevice_state") && init.method === "POST") {
       const body = JSON.parse(init.body);
-      remoteTable.set(body.key, { value: body.value, version: body.version || 1 });
-      return { ok: true, status: 204 };
+      const currentVersion = remoteTable.get(body.p_key)?.version || 0;
+      if (body.p_expected_version !== null && body.p_expected_version !== undefined &&
+          Number(body.p_expected_version) !== currentVersion) {
+        return { ok: true, status: 200, json: async () => [{ success: false, version: currentVersion, error_code: "VERSION_CONFLICT" }] };
+      }
+      const nextVersion = currentVersion + 1;
+      remoteTable.set(body.p_key, { value: body.p_value, version: nextVersion });
+      return { ok: true, status: 200, json: async () => [{ success: true, version: nextVersion, error_code: null }] };
     }
 
     return { ok: false, status: 405 };
@@ -894,7 +900,7 @@ test("Durable cloud persistence 6-point verification: write, read, version updat
     });
     assert.equal(unauthResult.success, true);
     assert.equal(unauthResult.cloudPersisted, false);
-    assert.equal(unauthResult.warning, "SUPABASE_REST_READ_FAILED");
+    assert.equal(unauthResult.warning, "SUPABASE_REST_WRITE_FAILED");
     simulateUnauthorized = false;
 
     // 6. Restart the application and verify persistence
