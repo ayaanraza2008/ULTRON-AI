@@ -25,6 +25,8 @@ import { deviceWebSocketGateway } from "./integrations/device-websocket-gateway.
 import { deviceNetworkingManager } from "./integrations/device-networking.js";
 import { proactiveDaemon } from "./system/proactive-daemon.js";
 
+const LEGACY_SERVICE_WORKER_RETIREMENT_SCRIPT = "self.addEventListener(\"install\", event => event.waitUntil(self.skipWaiting()));\nself.addEventListener(\"activate\", event => {\n  event.waitUntil((async () => {\n    const openClients = await self.clients.matchAll({ type: \"window\", includeUncontrolled: true });\n    await self.registration.unregister();\n    const cacheKeys = await caches.keys();\n    await Promise.all(cacheKeys.filter(key => key.startsWith(\"ultron-core-shell-\")).map(key => caches.delete(key)));\n    await Promise.all(openClients.map(client => client.navigate(client.url).catch(() => null)));\n  })());\n});\n";
+
 const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
 const SESSION_COOKIE = "ultron_session";
 
@@ -2141,6 +2143,13 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
   app.get("/api/world-intelligence/status", (_req, res) => {
     res.setHeader("Cache-Control", "no-store");
     res.json({ workspace: "world-intelligence", mounted: Boolean(worldIntelligenceUrl), serviceUrl: worldIntelligenceUrl, upstream: "bilawalsidhu/gods-eye-view", pinnedCommit: "7be5937fc3e3b10cdfa8d3f833536167268768ad", aiToolBridge: "allowlisted_actions_v1" });
+  });
+  // Retire older installed ULTRON PWAs: unregister the worker and clear only ULTRON-owned shell caches.
+  app.get("/service-worker.js", (_req, res) => {
+    res.setHeader("Content-Type", "application/javascript; charset=utf-8");
+    res.setHeader("Cache-Control", "no-store, max-age=0");
+    res.setHeader("Service-Worker-Allowed", "/");
+    return res.status(200).send(LEGACY_SERVICE_WORKER_RETIREMENT_SCRIPT);
   });
   app.get("/", (_req, res) => {
     res.setHeader("Cache-Control", "no-store");
