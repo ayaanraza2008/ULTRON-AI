@@ -517,3 +517,51 @@ test("createMultiDevicePersistenceAdapter rejects remote Supabase URLs without H
     fetchImpl: async () => ({ ok: true })
   }), /SUPABASE_URL_MUST_USE_HTTPS/);
 });
+
+
+test("DatabasePersistenceAdapter: delivery ACK and device revocation persist through Supabase REST", async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ultron-supabase-queue-"));
+  let stored = {
+    version: "2.0.0",
+    devices: [["device-a", { id: "device-a" }]],
+    sharedState: [],
+    pendingDeliveries: [["device-a", [{ deliveryId: "delivery-a" }, { deliveryId: "delivery-b" }]]],
+    revokedDevices: []
+  };
+  const calls = [];
+  const adapter = new DatabasePersistenceAdapter({
+    storagePath: path.join(tmpDir, "fallback.json"),
+    supabaseRest: {
+      fetch: async (url, init = {}) => {
+        calls.push({ url, init });
+        if (init.method === "GET") {
+          return { ok: true, json: async () => [{ key: "root", value: stored }] };
+        }
+        if (init.method === "POST") {
+          const body = JSON.parse(init.body);
+          stored = body.value;
+          return { ok: true, status: 204 };
+        }
+        return { ok: false, status: 405 };
+      }
+    }
+  });
+
+  try {
+    const ack = await adapter.acknowledgeDelivery("device-a", "delivery-a");
+    assert.equal(ack.success, true);
+    assert.equal(ack.backend, "supabase_rest");
+    assert.equal(ack.cloudPersisted, true);
+    assert.deepEqual(stored.pendingDeliveries[0][1].map(item => item.deliveryId), ["delivery-b"]);
+
+    const revoked = await adapter.revokeDevice("device-a");
+    assert.equal(revoked.success, true);
+    assert.equal(revoked.backend, "supabase_rest");
+    assert.equal(revoked.cloudPersisted, true);
+    assert.ok(stored.revokedDevices.includes("device-a"));
+    assert.equal(stored.pendingDeliveries.some(([deviceId]) => deviceId === "device-a"), false);
+    assert.ok(calls.some(call => call.init.method === "POST"));
+  } finally {
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+  }
+});
