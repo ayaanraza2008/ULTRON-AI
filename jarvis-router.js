@@ -208,7 +208,10 @@ export function createJarvisRouter({
       }
 
       const shouldBindOwner = !existing.ownerUserId;
-      const shouldRefreshPresence = online && typeof manager.isDeviceOnline === "function" && !manager.isDeviceOnline(pairedDevice.id);
+      const managerOnline = typeof manager.isDeviceOnline === "function"
+        ? manager.isDeviceOnline(pairedDevice.id)
+        : existing.online === true;
+      const shouldRefreshPresence = managerOnline !== online;
       if (shouldBindOwner || shouldRefreshPresence) {
         const presence = {
           ownerUserId: pairedDevice.ownerUserId,
