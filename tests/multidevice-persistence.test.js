@@ -565,3 +565,30 @@ test("DatabasePersistenceAdapter: delivery ACK and device revocation persist thr
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
   }
 });
+
+
+test("DatabasePersistenceAdapter: missing Supabase state table is reported as local-only fallback", async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ultron-supabase-missing-table-"));
+  try {
+    const fallback = new FilePersistenceAdapter({ storagePath: path.join(tmpDir, "fallback.json") });
+    const adapter = new DatabasePersistenceAdapter({
+      fallbackAdapter: fallback,
+      supabaseRest: {
+        fetch: async () => ({ ok: false, status: 404 })
+      }
+    });
+    const result = await adapter.saveSharedState({
+      stateKey: "ui-theme",
+      payload: { mode: "dark" },
+      expectedVersion: 0
+    });
+    assert.equal(result.success, true);
+    assert.equal(result.backend, "file");
+    assert.equal(result.cloudPersisted, false);
+    assert.equal(result.warning, "SUPABASE_REST_READ_FAILED");
+    assert.equal(result.status, 404);
+    assert.equal(adapter.isOnline, false);
+  } finally {
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+  }
+});
