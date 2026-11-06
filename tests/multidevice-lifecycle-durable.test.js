@@ -231,6 +231,7 @@ test("Binding a DeviceHub to a database-backed manager imports only after cloud 
   const binding = await manager.bindWithDeviceHub({
     listPairedDevices: () => [{
       id: "paired-browser-1",
+      ownerUserId: "owner-test-user-id",
       name: "Owner Browser",
       platform: "browser",
       capabilities: { notifications: true, telemetry: true },

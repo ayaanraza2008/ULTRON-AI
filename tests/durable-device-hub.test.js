@@ -177,6 +177,8 @@ test("DeviceHub enforces owner boundaries for explicit targets and task history"
   const ownerAPc = pair("owner-a", "A PC");
   const ownerAPhone = pair("owner-a", "A Phone", "android");
   const ownerBPc = pair("owner-b", "B PC");
+  hub.heartbeat(ownerAPc.deviceId, ownerAPc.authToken);
+  hub.heartbeat(ownerBPc.deviceId, ownerBPc.authToken);
 
   const crossOwner = hub.routeCommand({
     callerDeviceId: ownerBPc.deviceId,

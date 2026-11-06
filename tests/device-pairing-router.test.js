@@ -337,7 +337,7 @@ test("device-pairing migration installs an atomic single-use claim function rest
   const presenceMigration = await readFile(new URL("../supabase/migrations/20261106130200_paired_device_online_requires_heartbeat.sql", import.meta.url), "utf8");
   assert.match(presenceMigration, /alter column last_seen_at drop not null/i);
   assert.match(presenceMigration, /alter column last_seen_at drop default/i);
-  assert.match(presenceMigration, /last_seen_at\s*\)[\s\S]*?null\s*,/i);
+  assert.match(presenceMigration, /last_seen_at\s*\)[\s\S]*?null\s*[\),]/i);
 });
 
 
