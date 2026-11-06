@@ -187,6 +187,13 @@ test("device registry isolates owners and rotates/revokes per-device tokens", as
     })).json();
     deviceId = claim.deviceId;
     oldToken = claim.deviceToken;
+    assert.ok(hub.importPairedDevice({
+      id: deviceId,
+      ownerUserId: OWNER_A,
+      name: "A Workstation",
+      platform: "windows",
+      authToken: oldToken
+    }));
 
     const ownList = await fetch(base + "/devices", { headers: { "x-test-owner": OWNER_A } });
     assert.equal(ownList.status, 200);
@@ -217,6 +224,8 @@ test("device registry isolates owners and rotates/revokes per-device tokens", as
     assert.equal(statusAfterRotation.status, 200);
     const statusPayload = await statusAfterRotation.json();
     assert.equal(statusPayload.devices[0].online, false);
+    assert.equal(hub.pairedDevices.get(deviceId).authToken, rotated.deviceToken);
+    assert.equal(hub.pairedDevices.get(deviceId).online, false);
     assert.ok(deviceEvents.some(event =>
       event.type === "DEVICE_CREDENTIALS_ROTATED" && event.deviceId === deviceId && event.ownerUserId === OWNER_A
     ));
@@ -226,6 +235,7 @@ test("device registry isolates owners and rotates/revokes per-device tokens", as
     });
     assert.equal(revoke.status, 200);
     assert.equal(db.devices.get(deviceId).status, "revoked");
+    assert.equal(hub.pairedDevices.get(deviceId).status, "revoked");
     assert.ok(deviceEvents.some(event =>
       event.type === "DEVICE_REVOKED" && event.deviceId === deviceId && event.ownerUserId === OWNER_A
     ));
