@@ -15,7 +15,8 @@ const SIGNING_SECRET = "device-pairing-test-secret-that-is-32-chars-minimum";
 const ENV = {
   SUPABASE_URL: "https://opdjfhwepmcprbqojpat.supabase.co",
   SUPABASE_SERVICE_ROLE_KEY: "test-service-role-key",
-  ULTRON_DEVICE_SIGNING_SECRET: SIGNING_SECRET
+  ULTRON_DEVICE_SIGNING_SECRET: SIGNING_SECRET,
+  ULTRON_INTEGRATION_OWNER_USER_ID: OWNER_A
 };
 
 function ownerMiddleware(req, res, next) {
@@ -75,7 +76,8 @@ function makeDatabase() {
         token_hash: pairing.token_hash,
         token_prefix: pairing.token_prefix,
         status: "active",
-        last_seen_at: new Date().toISOString(),
+        // A claimed pairing is not proof that the companion has connected.
+        last_seen_at: null,
         paired_at: new Date().toISOString(),
         revoked_at: null
       };
@@ -114,6 +116,24 @@ function makeDatabase() {
     throw new Error("Unexpected mocked Supabase request " + method + " " + url.pathname);
   };
   return { fetchImpl, pending, devices, requests };
+}
+
+function seedPairedDevice(db, { id, ownerUserId, name, platform, token }) {
+  const deviceId = id || crypto.randomUUID();
+  const authToken = token || "ultron_dev_" + crypto.randomBytes(32).toString("hex");
+  db.devices.set(deviceId, {
+    id: deviceId,
+    owner_user_id: ownerUserId,
+    device_name: name || "Seeded Companion",
+    platform: platform || "windows",
+    token_hash: crypto.createHash("sha256").update(authToken).digest("hex"),
+    token_prefix: authToken.slice(0, 20),
+    status: "active",
+    last_seen_at: null,
+    paired_at: new Date().toISOString(),
+    revoked_at: null
+  });
+  return { deviceId, deviceToken: authToken };
 }
 
 test("device pairing creates a five-minute owner-approved code and consumes it exactly once", async () => {
@@ -170,6 +190,9 @@ test("device pairing creates a five-minute owner-approved code and consumes it e
 
 test("device registry isolates owners and rotates/revokes per-device tokens", async () => {
   const db = makeDatabase();
+  const hub = new DeviceHub({ env: { ULTRON_DEVICE_SIGNING_SECRET: SIGNING_SECRET } });
+  const deviceEvents = [];
+  hub.registerEventListener(event => deviceEvents.push(event));
   let deviceId;
   let oldToken;
   await withRouter(db.fetchImpl, async base => {
@@ -183,6 +206,13 @@ test("device registry isolates owners and rotates/revokes per-device tokens", as
     })).json();
     deviceId = claim.deviceId;
     oldToken = claim.deviceToken;
+    assert.ok(hub.importPairedDevice({
+      id: deviceId,
+      ownerUserId: OWNER_A,
+      name: "A Workstation",
+      platform: "windows",
+      authToken: oldToken
+    }));
 
     const ownList = await fetch(base + "/devices", { headers: { "x-test-owner": OWNER_A } });
     assert.equal(ownList.status, 200);
@@ -191,7 +221,8 @@ test("device registry isolates owners and rotates/revokes per-device tokens", as
     assert.equal(ownPayload.devices[0].id, deviceId);
 
     const otherList = await fetch(base + "/devices", { headers: { "x-test-owner": OWNER_B } });
-    assert.equal((await otherList.json()).devices.length, 0);
+    assert.equal(otherList.status, 403);
+    assert.equal((await otherList.json()).error.code, "ULTRON_OWNER_ONLY");
 
     const rotatedResponse = await fetch(base + "/devices/" + deviceId + "/rotate-token", {
       method: "POST", headers: { "Content-Type": "application/json", "x-test-owner": OWNER_A },
@@ -204,18 +235,37 @@ test("device registry isolates owners and rotates/revokes per-device tokens", as
 
     const rotatedDevice = db.devices.get(deviceId);
     assert.equal(rotatedDevice.token_hash, crypto.createHash("sha256").update(rotated.deviceToken).digest("hex"));
+    // Rotating a credential does not prove that the companion is connected.
+    // Presence becomes online only after the new token sends a real heartbeat.
+    assert.equal(rotatedDevice.last_seen_at, null);
+    const statusAfterRotation = await fetch(base + "/devices/me", {
+      headers: { "x-device-token": rotated.deviceToken }
+    });
+    assert.equal(statusAfterRotation.status, 200);
+    const statusPayload = await statusAfterRotation.json();
+    assert.equal(statusPayload.devices[0].online, false);
+    assert.equal(hub.pairedDevices.get(deviceId).authToken, rotated.deviceToken);
+    assert.equal(hub.pairedDevices.get(deviceId).online, false);
+    assert.ok(deviceEvents.some(event =>
+      event.type === "DEVICE_CREDENTIALS_ROTATED" && event.deviceId === deviceId && event.ownerUserId === OWNER_A
+    ));
 
     const revoke = await fetch(base + "/devices/" + deviceId, {
       method: "DELETE", headers: { "x-test-owner": OWNER_A }
     });
     assert.equal(revoke.status, 200);
     assert.equal(db.devices.get(deviceId).status, "revoked");
+    assert.equal(hub.pairedDevices.get(deviceId).status, "revoked");
+    assert.ok(deviceEvents.some(event =>
+      event.type === "DEVICE_REVOKED" && event.deviceId === deviceId && event.ownerUserId === OWNER_A
+    ));
 
     const wrongOwnerRevoke = await fetch(base + "/devices/" + deviceId, {
       method: "DELETE", headers: { "x-test-owner": OWNER_B }
     });
-    assert.equal(wrongOwnerRevoke.status, 404);
-  });
+    assert.equal(wrongOwnerRevoke.status, 403);
+    assert.equal((await wrongOwnerRevoke.json()).error.code, "ULTRON_OWNER_ONLY");
+  }, ENV, hub);
 });
 
 test("paired-device token verifier accepts only active token hashes and never returns the token", async () => {
@@ -283,6 +333,11 @@ test("device-pairing migration installs an atomic single-use claim function rest
   assert.match(telemetryMigration, /add column if not exists battery_percent smallint/i);
   assert.match(telemetryMigration, /battery_percent between 0 and 100/i);
   assert.match(telemetryMigration, /add column if not exists is_charging boolean/i);
+
+  const presenceMigration = await readFile(new URL("../supabase/migrations/20261106130200_paired_device_online_requires_heartbeat.sql", import.meta.url), "utf8");
+  assert.match(presenceMigration, /alter column last_seen_at drop not null/i);
+  assert.match(presenceMigration, /alter column last_seen_at drop default/i);
+  assert.match(presenceMigration, /last_seen_at\s*\)[\s\S]*?null\s*[\),]/i);
 });
 
 
@@ -308,7 +363,12 @@ test("paired device self status and heartbeat are owner-scoped and update durabl
 
     const android = await pair(OWNER_A, "Owner Android", "android");
     const windows = await pair(OWNER_A, "Owner Windows", "windows");
-    await pair(OWNER_B, "Other Owner Windows", "windows");
+    seedPairedDevice(db, {
+      id: "00000000-0000-4000-8000-000000000099",
+      ownerUserId: OWNER_B,
+      name: "Other Owner Windows",
+      platform: "windows"
+    });
 
     const statusResponse = await fetch(base + "/devices/me", {
       headers: { "x-device-token": android.deviceToken }
@@ -319,6 +379,8 @@ test("paired device self status and heartbeat are owner-scoped and update durabl
     assert.equal(status.devices.length, 2);
     assert.ok(status.devices.some(device => device.id === windows.deviceId));
     assert.equal(status.devices.some(device => device.name === "Other Owner Windows"), false);
+    assert.equal(status.devices.find(device => device.id === android.deviceId).online, false);
+    assert.equal(status.devices.find(device => device.id === windows.deviceId).online, false);
 
     const heartbeatResponse = await fetch(base + "/devices/me/heartbeat", {
       method: "POST",
@@ -330,6 +392,15 @@ test("paired device self status and heartbeat are owner-scoped and update durabl
     const stored = db.devices.get(android.deviceId);
     assert.equal(stored.battery_percent, 73);
     assert.equal(stored.is_charging, true);
+    assert.ok(stored.last_seen_at);
+
+    const refreshedStatusResponse = await fetch(base + "/devices/me", {
+      headers: { "x-device-token": android.deviceToken }
+    });
+    assert.equal(refreshedStatusResponse.status, 200);
+    const refreshedStatus = await refreshedStatusResponse.json();
+    assert.equal(refreshedStatus.devices.find(device => device.id === android.deviceId).online, true);
+    assert.equal(refreshedStatus.devices.find(device => device.id === windows.deviceId).online, false);
     assert.equal(hub.pairedDevices.size, 1);
   }, ENV, hub);
 });
@@ -411,4 +482,162 @@ test("device pairing endpoints fail closed with a clear 503 while durable storag
     assert.equal(deviceStatus.status, 503);
     assert.equal((await deviceStatus.json()).error.code, "DEVICE_STORAGE_NOT_READY");
   }, ENV);
+});
+
+test("device online freshness matches Android periodic sync and the Windows companion heartbeat cadence", async () => {
+  const db = makeDatabase();
+  const hub = new DeviceHub({ env: { ULTRON_DEVICE_SIGNING_SECRET: SIGNING_SECRET } });
+
+  await withRouter(db.fetchImpl, async base => {
+    const pair = async (deviceName, platform) => {
+      const create = await fetch(base + "/devices/pairings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-test-owner": OWNER_A },
+        body: JSON.stringify({ deviceName, platform })
+      });
+      assert.equal(create.status, 201);
+      const pending = await create.json();
+
+      const claim = await fetch(base + "/devices/pairings/claim", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: pending.pairingCode })
+      });
+      assert.equal(claim.status, 200);
+      return claim.json();
+    };
+
+    const android = await pair("Owner Android", "android");
+    const windows = await pair("Owner Windows", "windows");
+
+    // Android WorkManager is scheduled at 15-minute intervals; Windows sends
+    // a bounded 25-second heartbeat while its remote companion is connected.
+    const twentyMinutesAgo = new Date(Date.now() - 20 * 60 * 1000).toISOString();
+    db.devices.get(android.deviceId).last_seen_at = twentyMinutesAgo;
+    db.devices.get(windows.deviceId).last_seen_at = twentyMinutesAgo;
+
+    const response = await fetch(base + "/devices/me", {
+      headers: { "x-device-token": android.deviceToken }
+    });
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.devices.find(device => device.id === android.deviceId).online, true);
+    assert.equal(payload.devices.find(device => device.id === windows.deviceId).online, false);
+
+    // The Windows tray companion sends an authenticated heartbeat with an
+    // empty JSON body because it has no battery payload in this code path.
+    const windowsHeartbeat = await fetch(base + "/devices/me/heartbeat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-device-token": windows.deviceToken },
+      body: "{}"
+    });
+    assert.equal(windowsHeartbeat.status, 200);
+    assert.equal((await windowsHeartbeat.json()).success, true);
+
+    const afterWindowsHeartbeat = await fetch(base + "/devices/me", {
+      headers: { "x-device-token": android.deviceToken }
+    });
+    assert.equal(afterWindowsHeartbeat.status, 200);
+    const windowsRefresh = await afterWindowsHeartbeat.json();
+    assert.equal(windowsRefresh.devices.find(device => device.id === windows.deviceId).online, true);
+
+    db.devices.get(android.deviceId).last_seen_at =
+      new Date(Date.now() - 36 * 60 * 1000).toISOString();
+    const staleResponse = await fetch(base + "/devices/me", {
+      headers: { "x-device-token": android.deviceToken }
+    });
+    assert.equal(staleResponse.status, 200);
+    const stalePayload = await staleResponse.json();
+    assert.equal(stalePayload.devices.find(device => device.id === android.deviceId).online, false);
+
+    db.devices.get(android.deviceId).last_seen_at =
+      new Date(Date.now() + 60 * 1000).toISOString();
+    const futureResponse = await fetch(base + "/devices/me", {
+      headers: { "x-device-token": android.deviceToken }
+    });
+    assert.equal(futureResponse.status, 200);
+    const futurePayload = await futureResponse.json();
+    assert.equal(futurePayload.devices.find(device => device.id === android.deviceId).online, false);
+  }, ENV, hub);
+});
+
+test("canonical paired-device API rejects valid tokens issued to a different owner", async () => {
+  const db = makeDatabase();
+  const foreign = seedPairedDevice(db, {
+    id: "00000000-0000-4000-8000-000000000098",
+    ownerUserId: OWNER_B,
+    name: "Foreign Owner Device",
+    platform: "android"
+  });
+  await withRouter(db.fetchImpl, async base => {
+    const response = await fetch(base + "/devices/me", {
+      headers: { "x-device-token": foreign.deviceToken }
+    });
+    assert.equal(response.status, 403);
+    assert.equal((await response.json()).error.code, "ULTRON_OWNER_ONLY");
+  });
+});
+
+test("canonical device APIs fail closed when the configured owner ID is missing", async () => {
+  const db = makeDatabase();
+  const unconfiguredEnv = { ...ENV, ULTRON_INTEGRATION_OWNER_USER_ID: "" };
+  const ownerDevice = seedPairedDevice(db, {
+    id: "00000000-0000-4000-8000-000000000097",
+    ownerUserId: OWNER_A,
+    name: "Owner Android",
+    platform: "android"
+  });
+  await withRouter(db.fetchImpl, async base => {
+    const response = await fetch(base + "/devices/me", {
+      headers: { "x-device-token": ownerDevice.deviceToken }
+    });
+    assert.equal(response.status, 503);
+    assert.equal((await response.json()).error.code, "ULTRON_OWNER_NOT_CONFIGURED");
+
+    const signedInList = await fetch(base + "/devices", {
+      headers: { "x-test-owner": OWNER_A }
+    });
+    assert.equal(signedInList.status, 503);
+    assert.equal((await signedInList.json()).error.code, "ULTRON_OWNER_NOT_CONFIGURED");
+
+    const pairingRequest = await fetch(base + "/devices/pairings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-test-owner": OWNER_A },
+      body: JSON.stringify({ deviceName: "New Android", platform: "android" })
+    });
+    assert.equal(pairingRequest.status, 503);
+    assert.equal((await pairingRequest.json()).error.code, "ULTRON_OWNER_NOT_CONFIGURED");
+  }, unconfiguredEnv);
+});
+
+test("device management routes reject a signed-in non-owner before touching storage", async () => {
+  const db = makeDatabase();
+  const seeded = seedPairedDevice(db, {
+    id: "00000000-0000-4000-8000-000000000096",
+    ownerUserId: OWNER_A,
+    name: "Owner Windows",
+    platform: "windows"
+  });
+  await withRouter(db.fetchImpl, async base => {
+    const cases = [
+      ["GET", "/devices", undefined],
+      ["POST", "/devices/pairings", { deviceName: "Foreign Device", platform: "android" }],
+      ["POST", "/devices/" + seeded.deviceId + "/rotate-token", {}],
+      ["DELETE", "/devices/" + seeded.deviceId, {}]
+    ];
+    const before = db.requests.length;
+    for (const [method, route, body] of cases) {
+      const response = await fetch(base + route, {
+        method,
+        headers: {
+          "x-test-owner": OWNER_B,
+          ...(body === undefined ? {} : { "Content-Type": "application/json" })
+        },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) })
+      });
+      assert.equal(response.status, 403, method + " " + route);
+      assert.equal((await response.json()).error.code, "ULTRON_OWNER_ONLY");
+    }
+    assert.equal(db.requests.length, before, "rejected non-owner requests must not reach Supabase storage");
+  });
 });

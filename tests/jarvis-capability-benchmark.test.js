@@ -1,8 +1,7 @@
 /**
  * ULTRON AI — JARVIS Capability Benchmark Test Suite
  *
- * Validates that all 14 categories defined in the JARVIS Capability Benchmark
- * achieve 100% verified status against testable engineering criteria.
+ * Validates that source/test path inventory is reported separately from runtime verification.
  */
 
 import { test, describe } from "node:test";
@@ -18,19 +17,24 @@ describe("JARVIS Capability Benchmark Suite", () => {
     assert.equal(totalWeight, 100, "Category weights must sum to exactly 100%");
   });
 
-  test("Evaluation runs and returns full scorecard with 100% verified weighted score", async () => {
+  test("Evaluation reports file inventory without claiming runtime verification", async () => {
     const report = await benchmark.evaluate();
     assert.equal(report.categoriesCount, 14);
     assert.equal(report.maxPossibleScore, 100);
-    assert.equal(report.totalWeightedScore, 100, "Must achieve 100% verified score across all categories");
-    assert.equal(report.overallStatus, "VERIFIED_100_PERCENT");
+    assert.ok(report.totalInventoryCoveragePercent >= 0 && report.totalInventoryCoveragePercent <= 100);
+    assert.ok(["SOURCE_TEST_INVENTORY_COMPLETE", "SOURCE_TEST_INVENTORY_INCOMPLETE"].includes(report.overallStatus));
+    assert.equal(report.runtimeVerificationStatus, "NOT_EVALUATED");
+    assert.equal(report.liveIntegrationStatus, "NOT_EVALUATED");
+    assert.equal(Object.hasOwn(report, "totalWeightedScore"), false);
 
-    // Every single category must have score: 100 and status: 'VERIFIED'
     for (const cat of report.categories) {
-      assert.equal(cat.score, 100, `Category ${cat.name} must score 100%`);
-      assert.equal(cat.status, "VERIFIED", `Category ${cat.name} must be VERIFIED`);
-      assert.ok(cat.subsystems.every(s => s.exists), `All subsystems in ${cat.name} must exist`);
-      assert.ok(cat.testFiles.every(t => t.exists), `All test files in ${cat.name} must exist`);
+      const evidence = [...cat.subsystems, ...cat.testFiles];
+      const present = evidence.filter(item => item.exists).length;
+      assert.equal(cat.inventoryCoveragePercent, Number((present / evidence.length * 100).toFixed(1)));
+      assert.equal(cat.evidencePathsPresent, present);
+      assert.equal(cat.evidencePathsTotal, evidence.length);
+      assert.notEqual(cat.status, "VERIFIED");
+      assert.equal(cat.acceptanceCriteriaStatus, "NOT_EVALUATED");
     }
   });
 
@@ -39,7 +43,8 @@ describe("JARVIS Capability Benchmark Suite", () => {
     const markdown = benchmark.generateMarkdownReport(report);
 
     assert.ok(markdown.includes("# ULTRON AI — JARVIS CAPABILITY BENCHMARK SCORECARD"));
-    assert.ok(markdown.includes("TOTAL WEIGHTED SCORE:** **100%**"));
+    assert.ok(markdown.includes("TOTAL SOURCE/TEST INVENTORY COVERAGE:"));
+    assert.ok(markdown.includes("Runtime Verification:** **NOT_EVALUATED**"));
     assert.ok(markdown.includes("Core AI intelligence and reasoning"));
     assert.ok(markdown.includes("Voice and conversational intelligence"));
     assert.ok(markdown.includes("Computer and OS assistance"));

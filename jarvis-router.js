@@ -3,15 +3,6 @@ import { evaluateNotificationWindow, loadNotificationPolicy } from "./system/not
 import { ultronAutonomy } from "./autonomy/ultron-autonomy.js";
 import { genesisEngine } from "./genesis/genesis-engine.js";
 import { forgeEngine } from "./forge/forge-engine.js";
-import { RobotDigitalTwin, simToRealGate } from "./robotics/robot-digital-twin.js";
-import {
-  SIMREADY_ASSET_CATALOG,
-  TRAINING_SCENARIOS,
-  simReadyEngine,
-  playbackEngine,
-  hilBridge,
-  simReadyCentralExplorer
-} from "./robotics/simready-simulation-engine.js";
 import { ultronVision } from "./vision/ultron-vision.js";
 import { ultronEyesManager, SESSION_STATES } from "./vision/ultron-eyes-manager.js";
 import { ultronCyberCore, CYBER_AGENTS } from "./security/cyber-core.js";
@@ -57,7 +48,6 @@ import { kokoroEngine } from "./voice/kokoro-engine.js";
 import { proactiveDaemon } from "./system/proactive-daemon.js";
 import { proactiveCommunicationEngine } from "./system/proactive-communication.js";
 import { screenObserver } from "./vision/screen-observer.js";
-import { robotController } from "./robotics/robot-controller.js";
 import { connectionController } from "./system/connection-controller.js";
 import { knowledgeEngine } from "./knowledge/knowledge-engine.js";
 import { cyberSecurityIntel } from "./security/cyber-intel.js";
@@ -89,6 +79,7 @@ export function createJarvisRouter({
   privilegedSupabaseRest = supabaseRest,
   logger = console,
   deviceHub: deviceHubInstance = deviceHub,
+  multiDeviceManager: multiDeviceManagerInstance = multiDeviceManager,
   authenticateDeviceToken = null,
   fetchImpl = safePinnedFetch
 } = {}) {
@@ -96,7 +87,7 @@ export function createJarvisRouter({
     throw new TypeError("createJarvisRouter requires the authenticated Supabase user middleware.");
   }
 
-  const ownerUserId = String(env.ULTRON_INTEGRATION_OWNER_USER_ID || "").trim();
+  const ownerUserId = String(env.ULTRON_OWNER_USER_ID || env.ULTRON_INTEGRATION_OWNER_USER_ID || "").trim();
   const requireTelephonyWebhook = createTelephonyWebhookGuard({ env });
   const configuredOwnerNumbers = String(env.ULTRON_OWNER_PHONE_NUMBERS || "")
     .split(",")
@@ -145,6 +136,112 @@ export function createJarvisRouter({
     return null;
   };
 
+  const authorizePairedDeviceOwner = (pairedDevice, res) => {
+    if (!ownerUserId) {
+      return res.status(503).json({
+        error: {
+          code: "ULTRON_OWNER_NOT_CONFIGURED",
+          message: "Paired-device access remains disabled until the ULTRON owner user ID is configured."
+        }
+      });
+    }
+    const pairedOwnerId = String(pairedDevice?.ownerUserId || pairedDevice?.owner_user_id || "").trim();
+    if (!pairedOwnerId || pairedOwnerId !== ownerUserId) {
+      return res.status(403).json({
+        error: {
+          code: "ULTRON_OWNER_ONLY",
+          message: "This paired device does not belong to the configured ULTRON owner."
+        }
+      });
+    }
+    return null;
+  };
+
+  const syncPairedDeviceIntoFleet = async pairedDevice => {
+    try {
+      const manager = multiDeviceManagerInstance;
+      if (!manager || typeof manager.getDevice !== "function" || !pairedDevice?.id || !pairedDevice?.ownerUserId) return true;
+      if (await manager.ready === false) return true;
+
+      const platform = String(pairedDevice.platform || "unknown").toLowerCase();
+      const heartbeatTimeoutMs = platform === "android" ? 35 * 60 * 1000 : 90 * 1000;
+      const online = typeof deviceHubInstance.isDeviceOnline === "function"
+        ? deviceHubInstance.isDeviceOnline(pairedDevice.id)
+        : pairedDevice.online === true;
+      const existing = manager.getDevice(pairedDevice.id);
+      if (existing?.ownerUserId && existing.ownerUserId !== pairedDevice.ownerUserId) return false;
+
+      const type = platform === "windows"
+        ? "windows_pc"
+        : platform === "android"
+          ? "android_smartphone"
+          : platform === "browser"
+            ? "web_browser"
+            : "generic_companion";
+      const capabilities = Array.isArray(pairedDevice.capabilities)
+        ? pairedDevice.capabilities
+        : Object.keys(pairedDevice.capabilities || {});
+      const metadata = {
+        id: pairedDevice.id,
+        name: pairedDevice.name || pairedDevice.device_name || "Paired Companion",
+        ownerUserId: pairedDevice.ownerUserId,
+        type,
+        platform,
+        capabilities: capabilities.length ? capabilities : ["notifications", "telemetry"],
+        online,
+        battery: pairedDevice.battery || { percent: 100, isCharging: false },
+        heartbeatTimeoutMs
+      };
+
+      if (!existing) {
+        let result = manager.registerDevice(metadata);
+        if (result?.error === "ASYNC_PERSISTENCE_REQUIRED" && typeof manager.registerDeviceDurably === "function") {
+          result = await manager.registerDeviceDurably(metadata);
+        }
+        if (result?.success === false) {
+          logger.warn?.("Paired device could not be registered in the fleet manager", {
+            deviceId: pairedDevice.id,
+            code: result.error || "DEVICE_REGISTRATION_FAILED"
+          });
+        }
+        return result?.error !== "DEVICE_OWNER_MISMATCH";
+      }
+
+      const shouldBindOwner = !existing.ownerUserId;
+      const managerOnline = typeof manager.isDeviceOnline === "function"
+        ? manager.isDeviceOnline(pairedDevice.id)
+        : existing.online === true;
+      const shouldRefreshPresence = managerOnline !== online;
+      if (shouldBindOwner || shouldRefreshPresence) {
+        const presence = {
+          ownerUserId: pairedDevice.ownerUserId,
+          online,
+          battery: pairedDevice.battery,
+          heartbeatTimeoutMs
+        };
+        let result = manager.updateDevicePresence(pairedDevice.id, presence);
+        if (result?.error === "ASYNC_PERSISTENCE_REQUIRED" && typeof manager.updateDevicePresenceDurably === "function") {
+          result = await manager.updateDevicePresenceDurably(pairedDevice.id, presence);
+        }
+        if (result?.success === false) {
+          logger.warn?.("Paired device presence could not be refreshed in the fleet manager", {
+            deviceId: pairedDevice.id,
+            code: result.error || "DEVICE_PRESENCE_UPDATE_FAILED"
+          });
+        }
+      }
+      return true;
+    } catch (error) {
+      logger.warn?.("Paired device fleet synchronization failed", {
+        deviceId: pairedDevice?.id || null,
+        name: error?.name || "Error"
+      });
+      // Authentication remains authoritative in the paired-device registry;
+      // a fleet metadata write failure must not invalidate a valid device token.
+      return true;
+    }
+  };
+
   const authenticateOwnerOrDevice = async (req, res, next) => {
     const deviceToken = req.headers["x-device-token"] || (req.headers.authorization && (req.headers.authorization.startsWith("Bearer dev_tok_") || req.headers.authorization.startsWith("Bearer ultron_dev_")) ? req.headers.authorization.slice(7).trim() : null);
     if (deviceToken && typeof deviceToken === "string") {
@@ -160,6 +257,11 @@ export function createJarvisRouter({
           if (!hydratedDevice) {
             return res.status(401).json({ error: { code: "INVALID_DEVICE_IDENTITY", message: "The verified device could not be loaded into the command runtime." } });
           }
+          const ownerRejection = authorizePairedDeviceOwner(hydratedDevice, res);
+          if (ownerRejection) return ownerRejection;
+          if (!await syncPairedDeviceIntoFleet(hydratedDevice)) {
+            return res.status(403).json({ error: { code: "DEVICE_OWNER_MISMATCH", message: "The fleet record belongs to a different owner." } });
+          }
           req.device = hydratedDevice;
           return next();
         }
@@ -172,6 +274,11 @@ export function createJarvisRouter({
       if (env.NODE_ENV !== "production" && env.ULTRON_ALLOW_LEGACY_DEVICEHUB_AUTH === "true") {
         const legacyDevice = deviceHubInstance.findDeviceByToken(deviceToken);
         if (legacyDevice) {
+          const ownerRejection = authorizePairedDeviceOwner(legacyDevice, res);
+          if (ownerRejection) return ownerRejection;
+          if (!await syncPairedDeviceIntoFleet(legacyDevice)) {
+            return res.status(403).json({ error: { code: "DEVICE_OWNER_MISMATCH", message: "The fleet record belongs to a different owner." } });
+          }
           req.device = legacyDevice;
           return next();
         }
@@ -179,14 +286,19 @@ export function createJarvisRouter({
 
       // A single static desktop token is retained only as an explicit legacy
       // migration path. New devices must use the per-device stored token hash.
-      if (env.ULTRON_DESKTOP_AGENT_TOKEN && deviceToken === env.ULTRON_DESKTOP_AGENT_TOKEN) {
+      if (env.NODE_ENV !== "production" && env.ULTRON_DESKTOP_AGENT_TOKEN && deviceToken === env.ULTRON_DESKTOP_AGENT_TOKEN) {
         req.device = deviceHubInstance.importPairedDevice({
           id: "legacy-companion-device",
           ownerUserId,
           name: "Legacy Companion",
           platform: "windows",
           authToken: deviceToken
-        }) || { id: "legacy-companion-device", name: "Legacy Companion", authToken: deviceToken };
+        }) || { id: "legacy-companion-device", ownerUserId, name: "Legacy Companion", platform: "windows", authToken: deviceToken };
+        const ownerRejection = authorizePairedDeviceOwner(req.device, res);
+        if (ownerRejection) return ownerRejection;
+        if (!await syncPairedDeviceIntoFleet(req.device)) {
+          return res.status(403).json({ error: { code: "DEVICE_OWNER_MISMATCH", message: "The fleet record belongs to a different owner." } });
+        }
         return next();
       }
       return res.status(401).json({
@@ -216,13 +328,13 @@ export function createJarvisRouter({
   const computer = new WindowsComputerControl();
   const productivity = new ProductivitySuite();
   // Wire Telephony and Multi-Device Ecosystem
+  telephonyBrain.brainRouter = brain;
   telephonyBrain.windowsDesktopAgent = windowsDesktopAgent;
-  telephonyBrain.multiDeviceManager = multiDeviceManager;
+  telephonyBrain.multiDeviceManager = multiDeviceManagerInstance;
   telephonyBrain.remoteTaskOrchestrator = remoteTaskOrchestrator;
   remoteTaskOrchestrator.windowsDesktopAgent = windowsDesktopAgent;
-  remoteTaskOrchestrator.multiDeviceManager = multiDeviceManager;
+  remoteTaskOrchestrator.multiDeviceManager = multiDeviceManagerInstance;
   remoteTaskOrchestrator.telephonyGateway = telephonyGateway;
-
 
   // --- JARVIS Capability Benchmark ---
   router.get("/jarvis/benchmark", requireOwner, async (_req, res) => {
@@ -812,8 +924,28 @@ export function createJarvisRouter({
     res.json(result);
   });
 
+  // --- Legacy process-local DeviceHub pairing (development only) ---
+  // Production pairing, listing, token rotation and revocation are handled by
+  // the authenticated Supabase-backed /api/devices routes.
+  const rejectLegacyDeviceHubPairingInProduction = (_req, res, next) => {
+    if (env.NODE_ENV !== "production") return next();
+    return res.status(410).json({
+      error: {
+        code: "LEGACY_DEVICEHUB_PAIRING_DISABLED",
+        message: "This process-local device registry is disabled in production. Use the authenticated Supabase-backed /api/devices endpoints."
+      },
+      canonicalEndpoints: {
+        list: "/api/devices",
+        createPairing: "/api/devices/pairings",
+        claimPairing: "/api/devices/pairings/claim",
+        rotateToken: "/api/devices/:id/rotate-token",
+        revoke: "/api/devices/:id"
+      }
+    });
+  };
+
   // --- Multi-Device Hub & Companion Pairing ---
-  router.post("/jarvis/devices/pair/request", express.json(), (req, res) => {
+  router.post("/jarvis/devices/pair/request", rejectLegacyDeviceHubPairingInProduction, express.json(), (req, res) => {
     const isPairingEnabled = (env.ULTRON_DEVICE_PAIRING_ENABLED === "true" || Boolean(env.ULTRON_DESKTOP_AGENT_TOKEN)) && deviceHubInstance.isPersistent;
     if (!isPairingEnabled) {
       return res.status(503).json({
@@ -833,7 +965,7 @@ export function createJarvisRouter({
     });
   });
 
-  router.post("/jarvis/devices/pair/approve", requireOwner, express.json(), (req, res) => {
+  router.post("/jarvis/devices/pair/approve", requireOwner, rejectLegacyDeviceHubPairingInProduction, express.json(), (req, res) => {
     const pairingReady = (env.ULTRON_DEVICE_PAIRING_ENABLED === "true" || Boolean(env.ULTRON_DESKTOP_AGENT_TOKEN)) && deviceHubInstance.isPersistent;
     if (!pairingReady) return res.status(503).json({ error: { code: "DEVICE_PAIRING_NOT_DURABLE", message: "Configure ULTRON_DEVICE_STORE_PATH and a dedicated ULTRON_DEVICE_SIGNING_SECRET (32+ characters) before pairing devices." } });
     const { pairingCode } = req.body || {};
@@ -847,7 +979,7 @@ export function createJarvisRouter({
     res.json(approved);
   });
 
-  router.post("/jarvis/devices/pair/claim", express.json(), (req, res) => {
+  router.post("/jarvis/devices/pair/claim", rejectLegacyDeviceHubPairingInProduction, express.json(), (req, res) => {
     const pairingReady = (env.ULTRON_DEVICE_PAIRING_ENABLED === "true" || Boolean(env.ULTRON_DESKTOP_AGENT_TOKEN)) && deviceHubInstance.isPersistent;
     if (!pairingReady) return res.status(503).json({ error: { code: "DEVICE_PAIRING_NOT_DURABLE", message: "Device pairing is unavailable until durable storage and its encryption secret are configured." } });
     const { pairingCode } = req.body || {};
@@ -862,7 +994,7 @@ export function createJarvisRouter({
     res.json(claimed);
   });
 
-  router.post("/jarvis/devices/pair/verify", requireOwner, express.json(), (req, res) => {
+  router.post("/jarvis/devices/pair/verify", requireOwner, rejectLegacyDeviceHubPairingInProduction, express.json(), (req, res) => {
     const isPairingEnabled = (env.ULTRON_DEVICE_PAIRING_ENABLED === "true" || Boolean(env.ULTRON_DESKTOP_AGENT_TOKEN)) && deviceHubInstance.isPersistent;
     if (!isPairingEnabled) {
       return res.status(503).json({
@@ -881,7 +1013,7 @@ export function createJarvisRouter({
   });
 
   // --- Multi-Device QR Pairing & Cross-Device Routing ---
-  router.post("/jarvis/devices/pair/qr", requireOwner, express.json(), (req, res) => {
+  router.post("/jarvis/devices/pair/qr", requireOwner, rejectLegacyDeviceHubPairingInProduction, express.json(), (req, res) => {
     const isPairingEnabled = (env.ULTRON_DEVICE_PAIRING_ENABLED === "true" || Boolean(env.ULTRON_DESKTOP_AGENT_TOKEN)) && deviceHubInstance.isPersistent;
     if (!isPairingEnabled) {
       return res.status(503).json({ error: { code: "DEVICE_PAIRING_NOT_DURABLE", message: "Device pairing is not configured for durable storage." } });
@@ -964,6 +1096,92 @@ export function createJarvisRouter({
     deviceWebSocketGateway.handleSseConnection(req, res, deviceId, req.device.authToken);
   });
 
+  router.post("/jarvis/devices/state/sync", authenticateOwnerOrDevice, express.json(), async (req, res) => {
+    const ownerUserId = req.device?.ownerUserId || req.supabaseUser?.id;
+    if (!ownerUserId) {
+      return res.status(401).json({ error: { code: "OWNER_IDENTITY_REQUIRED", message: "A verified owner or paired device is required." } });
+    }
+    const stateKey = typeof req.body?.stateKey === "string" ? req.body.stateKey.trim() : "";
+    if (!stateKey || !Object.prototype.hasOwnProperty.call(req.body || {}, "payload")) {
+      return res.status(400).json({ error: { code: "STATE_SYNC_INPUT_INVALID", message: "stateKey and payload are required." } });
+    }
+    const result = await multiDeviceManagerInstance.syncStateAcrossDevicesDurably({
+      stateKey,
+      payload: req.body.payload,
+      originDeviceId: req.device?.id || null,
+      ownerUserId,
+      expectedVersion: req.body.expectedVersion
+    });
+    if (!result.success) {
+      const status = result.error === "VERSION_CONFLICT" ? 409
+        : result.error === "OWNER_CONTEXT_REQUIRED" ? 401
+        : ["STATE_PERSISTENCE_FAILED", "CLOUD_PERSISTENCE_FAILED", "PERSISTENCE_INITIALIZATION_FAILED", "DURABLE_PERSISTENCE_NOT_CONFIGURED"].includes(result.error) ? 503 : 400;
+      return res.status(status).json({ error: { code: result.error, message: result.message || "State synchronization failed." }, ...result });
+    }
+    return res.status(202).json(result);
+  });
+
+  router.get("/jarvis/devices/my/state/events", authenticateOwnerOrDevice, async (req, res) => {
+    if (!req.device?.id || !req.device?.ownerUserId) {
+      return res.status(401).json({ error: { code: "DEVICE_AUTHENTICATION_REQUIRED", message: "A verified paired device is required." } });
+    }
+    const paired = deviceHubInstance.pairedDevices.get(req.device.id);
+    if (!paired || paired.status === "revoked" || paired.ownerUserId !== req.device.ownerUserId) {
+      return res.status(403).json({ error: { code: "DEVICE_OWNER_MISMATCH", message: "The paired device is not authorized for this owner." } });
+    }
+    if (await multiDeviceManagerInstance.ready === false) {
+      return res.status(503).json({ error: { code: "PERSISTENCE_INITIALIZATION_FAILED", message: "Device state storage is not ready." } });
+    }
+    const events = multiDeviceManagerInstance.pollPendingEvents(req.device.id);
+    return res.json({ success: true, count: events.length, events });
+  });
+
+  router.post("/jarvis/devices/my/state/events/:deliveryId/ack", authenticateOwnerOrDevice, express.json(), async (req, res) => {
+    if (!req.device?.id || !req.device?.ownerUserId) {
+      return res.status(401).json({ error: { code: "DEVICE_AUTHENTICATION_REQUIRED", message: "A verified paired device is required." } });
+    }
+    const paired = deviceHubInstance.pairedDevices.get(req.device.id);
+    if (!paired || paired.status === "revoked" || paired.ownerUserId !== req.device.ownerUserId) {
+      return res.status(403).json({ error: { code: "DEVICE_OWNER_MISMATCH", message: "The paired device is not authorized for this owner." } });
+    }
+    const result = await multiDeviceManagerInstance.acknowledgeDeliveryDurably(req.device.id, req.params.deliveryId);
+    if (!result.success || !result.acknowledged) {
+      return res.status(["STATE_PERSISTENCE_FAILED", "PERSISTENCE_INITIALIZATION_FAILED", "DURABLE_PERSISTENCE_NOT_CONFIGURED", "CLOUD_PERSISTENCE_FAILED"].includes(result.error) ? 503 : 404)
+        .json({ error: { code: result.error || "DELIVERY_NOT_FOUND", message: "The state-sync delivery was not acknowledged." }, ...result });
+    }
+    return res.json(result);
+  });
+
+  router.get("/jarvis/devices/:id/state/events", authenticateOwnerOrDevice, async (req, res) => {
+    if (!req.device?.id || req.device.id !== req.params.id) {
+      return res.status(403).json({ error: { code: "DEVICE_ID_MISMATCH", message: "A device may only poll its own state events." } });
+    }
+    const paired = deviceHubInstance.pairedDevices.get(req.device.id);
+    if (!paired || paired.status === "revoked" || paired.ownerUserId !== req.device.ownerUserId) {
+      return res.status(403).json({ error: { code: "DEVICE_OWNER_MISMATCH", message: "The paired device is not authorized for this owner." } });
+    }
+    if (await multiDeviceManagerInstance.ready === false) {
+      return res.status(503).json({ error: { code: "PERSISTENCE_INITIALIZATION_FAILED", message: "Device state storage is not ready." } });
+    }
+    const events = multiDeviceManagerInstance.pollPendingEvents(req.device.id);
+    return res.json({ success: true, count: events.length, events });
+  });
+
+  router.post("/jarvis/devices/:id/state/events/:deliveryId/ack", authenticateOwnerOrDevice, express.json(), async (req, res) => {
+    if (!req.device?.id || req.device.id !== req.params.id) {
+      return res.status(403).json({ error: { code: "DEVICE_ID_MISMATCH", message: "A device may only acknowledge its own state events." } });
+    }
+    const paired = deviceHubInstance.pairedDevices.get(req.device.id);
+    if (!paired || paired.status === "revoked" || paired.ownerUserId !== req.device.ownerUserId) {
+      return res.status(403).json({ error: { code: "DEVICE_OWNER_MISMATCH", message: "The paired device is not authorized for this owner." } });
+    }
+    const result = await multiDeviceManagerInstance.acknowledgeDeliveryDurably(req.device.id, req.params.deliveryId);
+    if (!result.success || !result.acknowledged) {
+      return res.status(["STATE_PERSISTENCE_FAILED", "PERSISTENCE_INITIALIZATION_FAILED", "DURABLE_PERSISTENCE_NOT_CONFIGURED", "CLOUD_PERSISTENCE_FAILED"].includes(result.error) ? 503 : 404).json({ error: { code: result.error || "DELIVERY_NOT_FOUND", message: "The state-sync delivery was not pending for this device." }, ...result });
+    }
+    return res.json(result);
+  });
+
   router.get("/jarvis/devices/tasks", authenticateOwnerOrDevice, (req, res) => {
     const ownerId = req.device?.ownerUserId || req.supabaseUser?.id;
     if (!ownerId) return res.status(401).json({ error: { code: "OWNER_IDENTITY_REQUIRED", message: "A verified owner or paired device is required." } });
@@ -980,7 +1198,7 @@ export function createJarvisRouter({
     res.json(deviceNetworkingManager.getLocalDiscoveryBeacon());
   });
 
-  router.get("/jarvis/devices", requireOwner, (req, res) => {
+  router.get("/jarvis/devices", requireOwner, rejectLegacyDeviceHubPairingInProduction, (req, res) => {
     const isPairingEnabled = (env.ULTRON_DEVICE_PAIRING_ENABLED === "true" || Boolean(env.ULTRON_DESKTOP_AGENT_TOKEN)) && deviceHubInstance.isPersistent;
     if (!isPairingEnabled) {
       return res.json({ devices: [], connected: false, status: "NOT_CONFIGURED" });
@@ -991,7 +1209,7 @@ export function createJarvisRouter({
     res.json({ devices, connected: devices.length > 0, status: devices.length > 0 ? "CONFIGURED" : "READY" });
   });
 
-  router.post("/jarvis/devices/:id/revoke", requireOwner, (req, res) => {
+  router.post("/jarvis/devices/:id/revoke", requireOwner, rejectLegacyDeviceHubPairingInProduction, (req, res) => {
     const deviceId = req.params.id;
     const result = deviceHubInstance.revokeDevice(deviceId, req.supabaseUser?.id);
     if (!result.success) {
@@ -1006,7 +1224,7 @@ export function createJarvisRouter({
     res.json(result);
   });
 
-  router.delete("/jarvis/devices/:id", requireOwner, (req, res) => {
+  router.delete("/jarvis/devices/:id", requireOwner, rejectLegacyDeviceHubPairingInProduction, (req, res) => {
     const deviceId = req.params.id;
     const device = deviceHubInstance.pairedDevices.get(deviceId);
     if (!device) {
@@ -1029,7 +1247,7 @@ export function createJarvisRouter({
     res.json(result);
   });
 
-  router.post("/jarvis/devices/:id/rotate-token", requireOwner, (req, res) => {
+  router.post("/jarvis/devices/:id/rotate-token", requireOwner, rejectLegacyDeviceHubPairingInProduction, (req, res) => {
     const deviceId = req.params.id;
     const result = deviceHubInstance.rotateDeviceToken(deviceId, req.supabaseUser?.id);
     if (!result.success) {
@@ -1612,53 +1830,6 @@ export function createJarvisRouter({
   });
 
   
-  // --- Robotics & HAL (Singularity) ---
-  router.post("/jarvis/robotics/register", requireOwner, express.json(), (req, res) => {
-    const result = robotController.registerRobot(req.body || {});
-    res.json(result);
-  });
-
-  router.post("/jarvis/robotics/motion", requireOwner, express.json(), (req, res) => {
-    const { robotId, command } = req.body || {};
-    const result = robotController.dispatchMotionCommand(robotId, command || {});
-    if (!result.permitted) {
-      return res.status(403).json(result);
-    }
-    res.json(result);
-  });
-
-  router.post("/jarvis/robotics/emergency-stop", requireOwner, express.json(), (req, res) => {
-    const reason = req.body?.reason || "Operator emergency stop triggered";
-    const result = robotController.triggerEmergencyStop(reason);
-    res.json(result);
-  });
-
-  router.post("/jarvis/robotics/clear-emergency-stop", requireOwner, express.json(), (req, res) => {
-    const authorizationKey = req.body?.authorizationKey;
-    const result = robotController.clearEmergencyStop(authorizationKey);
-    if (!result.success) {
-      return res.status(403).json(result);
-    }
-    res.json(result);
-  });
-
-  router.get("/jarvis/robotics/status", requireOwner, (_req, res) => {
-    res.json(robotController.getFleetStatus());
-  });
-
-  router.post("/jarvis/robotics/export-brain", requireOwner, express.json(), (req, res) => {
-    const exported = robotController.exportBrainPackage(req.body || {});
-    res.json({ success: true, package: exported });
-  });
-
-  router.post("/jarvis/robotics/import-brain", requireOwner, express.json(), (req, res) => {
-    const result = robotController.importBrainPackage(req.body?.package, req.body?.targetDevice);
-    if (!result.success) {
-      return res.status(400).json(result);
-    }
-    res.json(result);
-  });
-
   // --- True Offline & Online Connection Controller (Singularity) ---
   router.get("/jarvis/connection/status", requireOwner, (_req, res) => {
     res.json(connectionController.getStatus());
@@ -1845,24 +2016,24 @@ export function createJarvisRouter({
   // --- Multi-Device Remote Control & Synchronizer ---
   router.get("/jarvis/devices/fleet", requireOwner, (_req, res) => {
     res.json({
-      devices: multiDeviceManager.listDevices(),
-      commandHistory: multiDeviceManager.commandHistory
+      devices: multiDeviceManagerInstance.listDevices(),
+      commandHistory: multiDeviceManagerInstance.commandHistory
     });
   });
 
   router.post("/jarvis/devices/unlock-mobile", requireOwner, async (_req, res) => {
-    const result = await multiDeviceManager.unlockMobileDevices();
+    const result = await multiDeviceManagerInstance.unlockMobileDevices();
     res.json(result);
   });
 
   router.post("/jarvis/devices/lock-mobile", requireOwner, async (_req, res) => {
-    const result = await multiDeviceManager.lockMobileDevices();
+    const result = await multiDeviceManagerInstance.lockMobileDevices();
     res.json(result);
   });
 
   router.post("/jarvis/devices/play-media", requireOwner, express.json(), async (req, res) => {
     const { mediaUrl, query } = req.body || {};
-    const result = await multiDeviceManager.playMediaAcrossDevices({ mediaUrl, query });
+    const result = await multiDeviceManagerInstance.playMediaAcrossDevices({ mediaUrl, query });
     res.json(result);
   });
 
@@ -1898,6 +2069,13 @@ export function createJarvisRouter({
     res.json({ history: remoteTaskOrchestrator.getTaskHistory(limit) });
   });
 
+  const hudSseListeners = new Set();
+  const broadcastHudEvent = (eventData) => {
+    for (const listener of hudSseListeners) {
+      try { listener(eventData); } catch {}
+    }
+  };
+
   // --- Live Cyber-HUD Event Stream (Server-Sent Events) ---
   router.get("/jarvis/hud/events", requireOwner, (req, res) => {
     res.writeHead(200, {
@@ -1910,12 +2088,14 @@ export function createJarvisRouter({
       res.write("data: " + JSON.stringify(eventData) + "\n\n");
     };
 
+    hudSseListeners.add(sendEvent);
+
     // Initial state event
     sendEvent({
       type: "CORE_STATE_CHANGE",
       state: windowsDesktopAgent.screenState === "SYSTEM_LOCKED" ? "STANDBY" : "CALL_ACTIVE",
       detail: "HUD Connected",
-      devices: multiDeviceManager.listDevices().length
+      devices: multiDeviceManagerInstance.listDevices().length
     });
 
     const timer = setInterval(() => {
@@ -1924,6 +2104,7 @@ export function createJarvisRouter({
 
     req.on("close", () => {
       clearInterval(timer);
+      hudSseListeners.delete(sendEvent);
     });
   });
 
@@ -1946,6 +2127,12 @@ export function createJarvisRouter({
     if (state) currentHudState.state = state;
     if (activeTask !== undefined) currentHudState.activeTask = activeTask;
     currentHudState.updatedAt = new Date().toISOString();
+    broadcastHudEvent({
+      type: "CORE_STATE_CHANGE",
+      state: currentHudState.state,
+      detail: currentHudState.activeTask || "HUD state updated",
+      hud: currentHudState
+    });
     res.json({
       success: true,
       hud: currentHudState
@@ -2137,7 +2324,7 @@ export function createJarvisRouter({
 
 
   // =========================================================================
-  // NEXT-GENERATION AUTONOMOUS INTELLIGENCE UPGRADE ROUTES (9 SYSTEMS)
+  // NEXT-GENERATION AUTONOMOUS INTELLIGENCE UPGRADE ROUTES (8 SYSTEMS)
   // =========================================================================
 
   router.get("/jarvis/nextgen/status", requireOwner, (_req, res) => {
@@ -2148,7 +2335,6 @@ export function createJarvisRouter({
         ultronAutonomy: { status: "ACTIVE", version: "2.0.0" },
         ultronGenesis: { status: "ACTIVE", version: "2.0.0" },
         ultronForge: { status: "ACTIVE", version: "2.0.0" },
-        ultronRobotics: { status: "ACTIVE", version: "2.0.0" },
         ultronVision: { status: "ACTIVE", version: "2.0.0" },
         ultronNexus: { status: "ACTIVE", version: "2.0.0" },
         ultronGuardian: { status: "ACTIVE", version: "2.0.0" },
@@ -2212,95 +2398,6 @@ export function createJarvisRouter({
       const { code } = req.body || {};
       const secReport = forgeEngine.analyzeSecurity(code);
       res.json(secReport);
-    } catch (err) {
-      res.status(500).json({ error: { message: err.message } });
-    }
-  });
-
-  router.post("/jarvis/nextgen/robotics/sim-step", requireOwner, express.json(), (req, res) => {
-    try {
-      const { command, dt, obstacles } = req.body || {};
-      const twin = new RobotDigitalTwin();
-      const stepRes = twin.step(command, dt, obstacles);
-      const lidar = twin.scanLidar(obstacles);
-      res.json({ success: true, stepRes, lidar });
-    } catch (err) {
-      res.status(500).json({ error: { message: err.message } });
-    }
-  });
-
-  router.post("/jarvis/nextgen/robotics/sim-to-real", requireOwner, express.json(), (req, res) => {
-    try {
-      const { robotId, trajectory } = req.body || {};
-      const passport = simToRealGate.issueDeploymentPassport(robotId, trajectory);
-      if (!passport.success) return res.status(409).json(passport);
-      res.json(passport);
-    } catch (err) {
-      res.status(400).json({ error: { message: err.message } });
-    }
-  });
-
-  // --- SimReady & OpenUSD Robotics Simulation (Category Q) ---
-  router.get("/jarvis/robotics/simready/assets", requireOwner, (_req, res) => {
-    res.json({ success: true, count: SIMREADY_ASSET_CATALOG.length, assets: SIMREADY_ASSET_CATALOG });
-  });
-
-  router.get("/jarvis/robotics/simready/scenarios", requireOwner, (_req, res) => {
-    res.json({ success: true, scenarios: Object.values(TRAINING_SCENARIOS) });
-  });
-
-  router.post("/jarvis/robotics/simready/scenario/run", requireOwner, express.json(), (req, res) => {
-    try {
-      const { scenarioKey, maxSteps } = req.body || {};
-      if (scenarioKey) simReadyEngine.loadScenario(scenarioKey);
-      const episode = simReadyEngine.runEpisode(Number(maxSteps) || 40);
-      const evaluation = playbackEngine.evaluateAndPlayback(episode);
-      res.json({ success: true, episode, evaluation });
-    } catch (err) {
-      res.status(500).json({ error: { message: err.message } });
-    }
-  });
-
-  router.get("/jarvis/robotics/simready/dataset", requireOwner, (req, res) => {
-    try {
-      const format = String(req.query?.format || "json").toLowerCase();
-      if (format === "csv") {
-        res.setHeader("Content-Type", "text/csv");
-        return res.send(simReadyEngine.exportDatasetCSV());
-      }
-      res.json(simReadyEngine.exportDatasetJSON());
-    } catch (err) {
-      res.status(500).json({ error: { message: err.message } });
-    }
-  });
-
-  router.post("/jarvis/robotics/simready/hil/handshake", requireOwner, express.json(), async (_req, res) => {
-    const result = await hilBridge.handshake();
-    if (!result.success) return res.status(501).json(result);
-    res.json(result);
-  });
-
-  router.get("/jarvis/robotics/simready/central/search", requireOwner, (req, res) => {
-    try {
-      const query = String(req.query?.q || "");
-      const category = req.query?.category ? String(req.query.category) : null;
-      const limit = Number(req.query?.limit) || 10;
-      const results = simReadyCentralExplorer.searchAssets({ query, category, limit });
-      res.json(results);
-    } catch (err) {
-      res.status(500).json({ error: { message: err.message } });
-    }
-  });
-
-  router.post("/jarvis/robotics/simready/central/import", requireOwner, express.json(), (req, res) => {
-    try {
-      const { assetId } = req.body || {};
-      if (!assetId) {
-        return res.status(400).json({ success: false, error: "MISSING_ASSET_ID" });
-      }
-      const result = simReadyCentralExplorer.importAssetToProject(assetId, simReadyEngine);
-      if (!result.success) return res.status(404).json(result);
-      res.json(result);
     } catch (err) {
       res.status(500).json({ error: { message: err.message } });
     }

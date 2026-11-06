@@ -171,6 +171,7 @@ test("signup rejects a known compromised password before contacting Supabase", a
   const calls = [];
   const weakPassword = ["pass", "word"].join("");
   await withServer({
+    env: { ...validEnv, NODE_ENV: "test" },
     fetchImpl: async (url, options = {}) => {
       calls.push({ url, options });
       if (url.startsWith("https://api.pwnedpasswords.com/range/")) {
@@ -202,6 +203,7 @@ test("signup screens a password using only its five-character hash prefix then s
   const password = signupTestSecret;
   const hash = createHash("sha1").update(password, "utf8").digest("hex").toUpperCase();
   await withServer({
+    env: { ...validEnv, NODE_ENV: "test" },
     fetchImpl: async (url, options = {}) => {
       calls.push({ url, options });
       if (url.startsWith("https://api.pwnedpasswords.com/range/")) {
@@ -232,6 +234,7 @@ test("signup screens a password using only its five-character hash prefix then s
 test("signup rejects safely when the privacy-preserving password screening service is unavailable", async () => {
   const calls = [];
   await withServer({
+    env: { ...validEnv, NODE_ENV: "test" },
     fetchImpl: async (url, options = {}) => {
       calls.push({ url, options });
       throw new TypeError("synthetic screening network failure");
@@ -246,5 +249,152 @@ test("signup rejects safely when the privacy-preserving password screening servi
     assert.equal((await response.json()).error.code, "PASSWORD_SCREENING_UNAVAILABLE");
     assert.equal(calls.length, 1);
     assert.match(calls[0].url, /^https:\/\/api\.pwnedpasswords\.com\/range\/[0-9A-F]{5}$/);
+  });
+});
+
+test("production authenticated routes fail closed when the single owner ID is missing", async () => {
+  const calls = [];
+  await withServer({
+    env: { ...validEnv, ULTRON_PERSONAL_AI_MODE: "", ULTRON_SINGLE_OWNER: "", ULTRON_DISABLE_PUBLIC_SIGNUP: "" },
+    fetchImpl: async (url, options = {}) => {
+      calls.push({ url, options });
+      if (url.endsWith("/auth/v1/user")) {
+        return jsonResponse({ id: "supabase-user-1", email: "user@example.com" });
+      }
+      return jsonResponse({});
+    }
+  }, async base => {
+    const response = await fetch(base + "/api/runtime/readiness", {
+      headers: { Cookie: "ultron_sb_access=synthetic-access-token" }
+    });
+    assert.equal(response.status, 503);
+    assert.equal((await response.json()).error.code, "OWNER_NOT_CONFIGURED");
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, "https://project.example.supabase.co/auth/v1/user");
+  });
+});
+
+test("production authenticated routes reject every Supabase user except the configured owner", async () => {
+  await withServer({
+    env: { ...validEnv, ULTRON_OWNER_USER_ID: "configured-owner-uuid" },
+    fetchImpl: async url => url.endsWith("/auth/v1/user")
+      ? jsonResponse({ id: "different-user-uuid", email: "other@example.com" })
+      : jsonResponse({})
+  }, async base => {
+    const response = await fetch(base + "/api/runtime/readiness", {
+      headers: { Cookie: "ultron_sb_access=synthetic-access-token" }
+    });
+    assert.equal(response.status, 403);
+    assert.equal((await response.json()).error.code, "ULTRON_OWNER_ONLY");
+  });
+});
+
+test("production signup is disabled by default unless the owner bootstrap token is supplied", async () => {
+  let upstreamCalls = 0;
+  await withServer({
+    fetchImpl: async () => {
+      upstreamCalls += 1;
+      throw new Error("signup must not reach an upstream without the bootstrap token");
+    }
+  }, async base => {
+    const response = await fetch(base + "/api/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "person@example.com", password: signupTestSecret })
+    });
+    assert.equal(response.status, 403);
+    assert.equal((await response.json()).error.code, "SIGNUP_DISABLED");
+    assert.equal(upstreamCalls, 0);
+  });
+});
+
+test("production signup accepts the configured bootstrap token and screens the password", async () => {
+  const bootstrapToken = "ultron-owner-bootstrap-test-token";
+  const calls = [];
+  await withServer({
+    env: { ...validEnv, ULTRON_OWNER_BOOTSTRAP_TOKEN: bootstrapToken },
+    fetchImpl: async (url, options = {}) => {
+      calls.push({ url, options });
+      if (url.startsWith("https://api.pwnedpasswords.com/range/")) {
+        return new Response("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF:0\r\n", {
+          status: 200,
+          headers: { "Content-Type": "text/plain" }
+        });
+      }
+      return jsonResponse({ user: { email: "person@example.com" } });
+    }
+  }, async base => {
+    const response = await fetch(base + "/api/auth/signup", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-ultron-bootstrap-token": bootstrapToken
+      },
+      body: JSON.stringify({ email: "person@example.com", password: signupTestSecret })
+    });
+    assert.equal(response.status, 202);
+    assert.equal((await response.json()).confirmationRequired, true);
+    assert.equal(calls.length, 2);
+  });
+});
+
+test("session status does not report an authenticated Supabase user when owner identity is missing", async () => {
+  await withServer({
+    fetchImpl: async url => url.endsWith("/auth/v1/user")
+      ? jsonResponse({ id: "supabase-user-1", email: "user@example.com" })
+      : jsonResponse({})
+  }, async base => {
+    const response = await fetch(base + "/api/session", {
+      headers: { Cookie: "ultron_sb_access=synthetic-access-token" }
+    });
+    assert.equal(response.status, 503);
+    const body = await response.json();
+    assert.equal(body.authenticated, false);
+    assert.equal(body.error, "OWNER_NOT_CONFIGURED");
+  });
+});
+
+test("session status reports non-owner Supabase accounts as unauthenticated", async () => {
+  await withServer({
+    env: { ...validEnv, ULTRON_OWNER_USER_ID: "configured-owner-uuid" },
+    fetchImpl: async url => url.endsWith("/auth/v1/user")
+      ? jsonResponse({ id: "different-user-uuid", email: "other@example.com" })
+      : jsonResponse({})
+  }, async base => {
+    const response = await fetch(base + "/api/session", {
+      headers: { Cookie: "ultron_sb_access=synthetic-access-token" }
+    });
+    assert.equal(response.status, 403);
+    const body = await response.json();
+    assert.equal(body.authenticated, false);
+    assert.equal(body.error, "ULTRON_OWNER_ONLY");
+  });
+});
+
+test("production signup remains disabled after owner configuration even when the bootstrap secret is still present", async () => {
+  let upstreamCalls = 0;
+  const bootstrapToken = "ultron-owner-bootstrap-test-token";
+  await withServer({
+    env: {
+      ...validEnv,
+      ULTRON_OWNER_USER_ID: "configured-owner-uuid",
+      ULTRON_OWNER_BOOTSTRAP_TOKEN: bootstrapToken
+    },
+    fetchImpl: async () => {
+      upstreamCalls += 1;
+      throw new Error("configured-owner signup must not contact Supabase");
+    }
+  }, async base => {
+    const response = await fetch(base + "/api/auth/signup", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-ultron-bootstrap-token": bootstrapToken
+      },
+      body: JSON.stringify({ email: "second@example.com", password: signupTestSecret })
+    });
+    assert.equal(response.status, 403);
+    assert.equal((await response.json()).error.code, "SIGNUP_DISABLED");
+    assert.equal(upstreamCalls, 0);
   });
 });

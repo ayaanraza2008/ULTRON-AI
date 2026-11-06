@@ -31,7 +31,7 @@ export const SAST_RULES = [
     name: "SQL Injection",
     severity: "CRITICAL",
     cvss: 9.8,
-    pattern: /\b(?:query|execute|raw)\s*\(\s*["'`].*?(?:SELECT|INSERT|UPDATE|DELETE).*?(?:\$\{|\+\s*[a-zA-Z0-9_])/i,
+    pattern: /\b(?:query|execute|raw)\s*\(\s*(?:`[^`]*(?:SELECT|INSERT|UPDATE|DELETE)[^`]*\$\{[^}]+\}[^`]*`|["'][^"'`]*(?:SELECT|INSERT|UPDATE|DELETE)[^"'`]*["']\s*\+|[a-zA-Z_$][\w$]*\s*\+\s*["'][^"']*(?:SELECT|INSERT|UPDATE|DELETE)[^"']*["'])/i,
     description: "Dynamic SQL statement constructed using string concatenation or template literals.",
     remediation: "Utilize parameterized prepared statements or safe ORM query builders."
   },

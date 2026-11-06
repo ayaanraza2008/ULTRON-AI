@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { Readable } from "node:stream";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "public");
-const CORE_API_ORIGIN = "https://ultron-ai-core.onrender.com";
+const CORE_API_ORIGIN = process.env.CORE_API_ORIGIN || "https://ultron-ai-core.onrender.com";
 const MAX_REQUEST_BYTES = 12 * 1024 * 1024;
 const STATIC_ASSETS = new Map([
   ["/", ["index.html", "text/html; charset=utf-8"]],
@@ -142,8 +142,9 @@ export function createUltronCoreProxy({ fetchImpl = fetch, logger = console, gat
     }
 
     const isApiPath = requestUrl.pathname === "/api" || requestUrl.pathname.startsWith("/api/");
+    const isJarvisPath = requestUrl.pathname === "/jarvis" || requestUrl.pathname.startsWith("/jarvis/");
     const isWorldIntelligencePath = requestUrl.pathname === "/world-intelligence" || requestUrl.pathname.startsWith("/world-intelligence/");
-    if (!isApiPath && !isWorldIntelligencePath) {
+    if (!isApiPath && !isJarvisPath && !isWorldIntelligencePath) {
       sendJson(res, 404, { error: { code: "NOT_FOUND", message: "No interface route matches this path." } });
       return;
     }
@@ -262,7 +263,7 @@ export function createUltronCoreProxy({ fetchImpl = fetch, logger = console, gat
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
-  const port = Number(process.env.PORT) || 10000;
+  const port = Number(process.env.UI_PORT || (process.env.PORT && process.env.PORT !== "10000" ? process.env.PORT : null)) || 3000;
   const server = createUltronCoreProxy();
   server.listen(port, "0.0.0.0", () => console.log("ULTRON CORE interface listening on port " + port));
   const shutdown = () => server.close(() => process.exit(0));

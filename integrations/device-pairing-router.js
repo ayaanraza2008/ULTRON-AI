@@ -6,6 +6,19 @@ import { deviceHub as defaultDeviceHub } from "./device-hub.js";
 const ALLOWED_PLATFORMS = new Set(["windows", "android", "linux", "macos", "ios"]);
 const MAX_RESPONSE_BYTES = 64 * 1024;
 const PAIRING_TTL_MS = 5 * 60 * 1000;
+const ANDROID_HEARTBEAT_MAX_AGE_MS = 35 * 60 * 1000;
+const DESKTOP_HEARTBEAT_MAX_AGE_MS = 90 * 1000;
+
+function isDeviceRecentlySeen(lastSeenAt, platform, now = Date.now()) {
+  const lastSeen = Date.parse(lastSeenAt || "");
+  if (!Number.isFinite(lastSeen)) return false;
+  const ageMs = now - lastSeen;
+  if (ageMs < 0) return false;
+  const maxAgeMs = platform === "android"
+    ? ANDROID_HEARTBEAT_MAX_AGE_MS
+    : DESKTOP_HEARTBEAT_MAX_AGE_MS;
+  return ageMs <= maxAgeMs;
+}
 
 function bounded(value, max = 120) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -147,6 +160,29 @@ export function createDevicePairingRouter({
     throw new TypeError("createDevicePairingRouter requires authenticated Supabase user middleware.");
   }
 
+  // This runtime is intentionally a single-owner personal AI instance.
+  // Paired-device bearer tokens must obey the same owner boundary as signed-in routes.
+  const configuredOwnerUserId = String(env.ULTRON_OWNER_USER_ID || env.ULTRON_INTEGRATION_OWNER_USER_ID || "").trim();
+  const requireConfiguredOwner = (req, res, next) => requireSupabaseUser(req, res, () => {
+    if (!configuredOwnerUserId) {
+      return res.status(503).json({
+        error: {
+          code: "ULTRON_OWNER_NOT_CONFIGURED",
+          message: "Device management is disabled until the ULTRON owner user ID is configured."
+        }
+      });
+    }
+    if (!req.supabaseUser?.id || req.supabaseUser.id !== configuredOwnerUserId) {
+      return res.status(403).json({
+        error: {
+          code: "ULTRON_OWNER_ONLY",
+          message: "Device management is restricted to the configured ULTRON owner."
+        }
+      });
+    }
+    return next();
+  });
+
   const router = express.Router();
   const claimAttempts = new Map();
 
@@ -231,6 +267,23 @@ export function createDevicePairingRouter({
       if (!verified) {
         return res.status(401).json({ error: { code: "INVALID_DEVICE_TOKEN", message: "The device token is invalid, expired, or revoked." } });
       }
+      if (!configuredOwnerUserId) {
+        return res.status(503).json({
+          error: {
+            code: "ULTRON_OWNER_NOT_CONFIGURED",
+            message: "Paired-device access is disabled until the ULTRON owner user ID is configured."
+          }
+        });
+      }
+      const verifiedOwnerUserId = String(verified.ownerUserId || verified.owner_user_id || "").trim();
+      if (!verifiedOwnerUserId || verifiedOwnerUserId !== configuredOwnerUserId) {
+        return res.status(403).json({
+          error: {
+            code: "ULTRON_OWNER_ONLY",
+            message: "This paired device does not belong to the configured ULTRON owner."
+          }
+        });
+      }
       const device = deviceHubInstance.importPairedDevice({ ...verified, authToken: token });
       if (!device) {
         return res.status(401).json({ error: { code: "INVALID_DEVICE_IDENTITY", message: "The paired device identity could not be loaded." } });
@@ -242,7 +295,7 @@ export function createDevicePairingRouter({
     }
   }
 
-  router.get("/devices", requireSupabaseUser, async (req, res) => {
+  router.get("/devices", requireConfiguredOwner, async (req, res) => {
     if (!isUuid(req.supabaseUser?.id)) {
       return res.status(401).json({ error: { code: "AUTH_REQUIRED", message: "Sign in to manage your paired devices." } });
     }
@@ -267,7 +320,6 @@ export function createDevicePairingRouter({
       );
       const now = Date.now();
       const devices = (Array.isArray(rows) ? rows : []).map(row => {
-        const lastSeen = Date.parse(row.last_seen_at || "");
         return {
           id: row.id,
           name: row.device_name,
@@ -275,7 +327,7 @@ export function createDevicePairingRouter({
           status: row.status,
           pairedAt: row.paired_at,
           lastSeenAt: row.last_seen_at,
-          online: Number.isFinite(lastSeen) && now - lastSeen <= 60_000,
+          online: isDeviceRecentlySeen(row.last_seen_at, row.platform, now),
           battery: typeof row.battery_percent === "number"
             ? { percent: row.battery_percent, isCharging: Boolean(row.is_charging) }
             : null
@@ -318,7 +370,7 @@ export function createDevicePairingRouter({
     }
   });
 
-  router.post("/devices/pairings", requireSupabaseUser, async (req, res) => {
+  router.post("/devices/pairings", requireConfiguredOwner, async (req, res) => {
     const ownerId = req.supabaseUser?.id;
     if (!isUuid(ownerId)) return res.status(401).json({ error: { code: "AUTH_REQUIRED", message: "Sign in before pairing a device." } });
     const platform = bounded(req.body?.platform, 20).toLowerCase();
@@ -408,7 +460,7 @@ export function createDevicePairingRouter({
     }
   });
 
-  router.post("/devices/:id/rotate-token", requireSupabaseUser, async (req, res) => {
+  router.post("/devices/:id/rotate-token", requireConfiguredOwner, async (req, res) => {
     const ownerId = req.supabaseUser?.id;
     if (!isUuid(ownerId) || !isUuid(req.params.id)) {
       return res.status(400).json({ error: { code: "INVALID_DEVICE_ID", message: "Device ID is invalid." } });
@@ -421,13 +473,37 @@ export function createDevicePairingRouter({
         "&owner_user_id=eq." + encodeURIComponent(ownerId) + "&select=id",
         {
           method: "PATCH",
-          body: { token_hash: tokenHash(token), token_prefix: token.slice(0, 20), status: "active", revoked_at: null, last_seen_at: new Date().toISOString() },
+          body: { token_hash: tokenHash(token), token_prefix: token.slice(0, 20), status: "active", revoked_at: null, last_seen_at: null },
           prefer: "return=representation"
         }
       );
       if (!Array.isArray(rows) || !rows[0]?.id) {
         return res.status(404).json({ error: { code: "DEVICE_NOT_FOUND", message: "No device with that ID belongs to this account." } });
       }
+
+      // Keep the in-process credential cache aligned with the database and
+      // invalidate every already-authenticated transport for the old token.
+      const inMemoryDevice = deviceHubInstance.pairedDevices.get(rows[0].id);
+      if (inMemoryDevice && inMemoryDevice.ownerUserId === ownerId) {
+        inMemoryDevice.authToken = token;
+        inMemoryDevice.tokenHash = tokenHash(token);
+        inMemoryDevice.tokenPrefix = token.slice(0, 20);
+        inMemoryDevice.encryptedAuthToken = null;
+        inMemoryDevice.status = "active";
+        inMemoryDevice.revokedAt = null;
+        inMemoryDevice.online = false;
+        inMemoryDevice.lastSeenAt = null;
+        deviceHubInstance.saveToDisk();
+      }
+      // The database rotation is authoritative even if this process has no
+      // cached device object; clear any stale local revocation tombstone.
+      deviceHubInstance.revokedDevices?.delete(rows[0].id);
+      deviceHubInstance.emitEvent?.({
+        type: "DEVICE_CREDENTIALS_ROTATED",
+        deviceId: rows[0].id,
+        ownerUserId: ownerId
+      });
+
       res.setHeader("Cache-Control", "no-store");
       return res.json({ deviceId: rows[0].id, deviceToken: token, rotated: true });
     } catch (error) {
@@ -435,7 +511,7 @@ export function createDevicePairingRouter({
     }
   });
 
-  router.delete("/devices/:id", requireSupabaseUser, async (req, res) => {
+  router.delete("/devices/:id", requireConfiguredOwner, async (req, res) => {
     const ownerId = req.supabaseUser?.id;
     if (!isUuid(ownerId) || !isUuid(req.params.id)) {
       return res.status(400).json({ error: { code: "INVALID_DEVICE_ID", message: "Device ID is invalid." } });
@@ -449,6 +525,11 @@ export function createDevicePairingRouter({
       if (!Array.isArray(rows) || !rows[0]?.id) {
         return res.status(404).json({ error: { code: "DEVICE_NOT_FOUND", message: "No device with that ID belongs to this account." } });
       }
+
+      // Revoke the in-memory identity and close authenticated WebSocket/SSE
+      // sessions immediately; database rejection alone affects only reconnects.
+      deviceHubInstance.revokeDevice(rows[0].id, ownerId, { authoritativeExternal: true });
+
       res.json({ ok: true, revoked: true, deviceId: rows[0].id });
     } catch (error) {
       res.status(error.status || 502).json({ error: { code: error.code || "DEVICE_REVOKE_FAILED", message: error.message } });

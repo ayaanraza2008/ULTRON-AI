@@ -78,7 +78,13 @@ export const APPROVED_REMOTE_ACTIONS = new Set([
   "sandboxed_file_read",
   "media_playback",
   "wake_device",
-  "notify"
+  "notify",
+  "open_folder",
+  "find_file",
+  "inspect_task",
+  "stop_task",
+  "get_task_output",
+  "emergency_stop"
 ]);
 
 export const APPROVED_REMOTE_APPS = new Set([
@@ -100,6 +106,7 @@ export class DeviceHub {
   constructor(options = {}) {
     this.env = options.env || process.env;
     this.pairedDevices = new Map();
+    this.revokedDevices = new Set();
     this.pendingPairings = new Map();
     this.commandQueue = new Map();
     this.notifications = [];
@@ -136,24 +143,41 @@ export class DeviceHub {
     const id = String(record.id || "").trim();
     const ownerUserId = String(record.ownerUserId || record.owner_user_id || "").trim();
     const authToken = String(record.authToken || "").trim();
-    if (!id || !ownerUserId || !/^ultron_dev_[a-f0-9]{64}$/i.test(authToken) || record.status === "revoked") return null;
+    if (!id || !ownerUserId || !/^ultron_dev_[a-f0-9]{64}$/i.test(authToken) ||
+        record.status === "revoked" || this.revokedDevices.has(id)) return null;
 
     const previous = this.pairedDevices.get(id);
+    const platform = String(record.platform || previous?.platform || "unknown").toLowerCase();
+    const incomingTokenHash = hashToken(authToken);
+    const maxStaleMs = platform === "android" ? 35 * 60 * 1000 : 90 * 1000;
+    // Preserve only a fresh, already-authenticated in-process session for the
+    // same owner and credential. DB identity/timestamps alone never restore it.
+    const previousSessionIsLive = Boolean(
+      previous &&
+      previous.ownerUserId === ownerUserId &&
+      previous.tokenHash === incomingTokenHash &&
+      previous.status !== "revoked" &&
+      this.isDeviceOnline(id, maxStaleMs)
+    );
     const now = new Date().toISOString();
     const device = {
       ...(previous || {}),
       id,
       name: String(record.name || record.device_name || previous?.name || "Companion Device").slice(0, 120),
-      platform: String(record.platform || previous?.platform || "unknown").toLowerCase(),
+      platform,
       authToken,
-      tokenHash: hashToken(authToken),
+      tokenHash: incomingTokenHash,
       tokenPrefix: authToken.slice(0, 20),
       ownerUserId,
       status: "active",
       pairedAt: record.pairedAt || record.paired_at || previous?.pairedAt || now,
-      lastSeenAt: now,
+      lastSeenAt: previousSessionIsLive
+        ? previous.lastSeenAt
+        : (record.lastSeenAt || record.last_seen_at || previous?.lastSeenAt || null),
       battery: previous?.battery || null,
-      online: true,
+      // A durable pairing record proves identity, not current connectivity.
+      // Only a still-fresh authenticated in-process heartbeat/socket is trusted.
+      online: previousSessionIsLive,
       source: "supabase"
     };
     this.pairedDevices.set(id, device);
@@ -173,6 +197,7 @@ export class DeviceHub {
       for (const item of data.devices) {
         if (!item.id || !item.tokenHash) continue;
         const decryptedAuthToken = decryptToken(item.encryptedAuthToken, this.masterKey);
+        if (item.status === "revoked") this.revokedDevices.add(item.id);
         this.pairedDevices.set(item.id, {
           id: item.id,
           name: item.name,
@@ -231,12 +256,22 @@ export class DeviceHub {
       }, null, 2);
 
       const tmpPath = `${this.durableStoragePath}.${Date.now()}.tmp`;
-      fs.writeFileSync(tmpPath, payload, "utf8");
+      fs.writeFileSync(tmpPath, payload, { encoding: "utf8", mode: 0o600 });
       fs.renameSync(tmpPath, this.durableStoragePath);
       return true;
     } catch {
       return false;
     }
+  }
+
+  _persistOrRollback(rollback) {
+    if (this.persistenceError) {
+      rollback();
+      return { success: false, error: "DEVICE_PERSISTENCE_NOT_CONFIGURED", reason: this.persistenceError };
+    }
+    if (!this.isPersistent || this.saveToDisk()) return { success: true };
+    rollback();
+    return { success: false, error: "DEVICE_PERSISTENCE_FAILED" };
   }
 
   /**
@@ -289,14 +324,19 @@ export class DeviceHub {
       pairedAt: new Date().toISOString(),
       lastSeenAt: new Date().toISOString(),
       battery: null,
-      online: true,
+      // Pairing completes authorization; it does not prove the client is connected.
+      online: false,
       publicKey: clientPublicKey,
       capabilities: entry.capabilities || {}
     };
 
     this.pairedDevices.set(deviceId, device);
     this.pendingPairings.delete(cleanCode);
-    this.saveToDisk();
+    const persisted = this._persistOrRollback(() => {
+      this.pairedDevices.delete(deviceId);
+      this.pendingPairings.set(cleanCode, entry);
+    });
+    if (!persisted.success) return persisted;
 
     return {
       success: true,
@@ -339,16 +379,23 @@ export class DeviceHub {
       pairedAt: new Date().toISOString(),
       lastSeenAt: new Date().toISOString(),
       battery: null,
-      online: true,
+      // Approval/claim does not prove the companion has connected yet.
+      online: false,
       publicKey: null,
       capabilities: {}
     };
 
+    const previousEntry = { ...entry };
     this.pairedDevices.set(deviceId, device);
     entry.approved = true;
     entry.deviceId = deviceId;
     entry.deviceToken = deviceToken;
-    this.saveToDisk();
+    const persisted = this._persistOrRollback(() => {
+      this.pairedDevices.delete(deviceId);
+      for (const key of Object.keys(entry)) delete entry[key];
+      Object.assign(entry, previousEntry);
+    });
+    if (!persisted.success) return persisted;
 
     return {
       success: true,
@@ -397,7 +444,7 @@ export class DeviceHub {
 
     for (const dev of this.pairedDevices.values()) {
       if (dev.status === "revoked") continue;
-      if (safeTimingCompare(dev.tokenHash, incomingHash) || (dev.authToken && dev.authToken === token)) {
+      if (safeTimingCompare(dev.tokenHash, incomingHash)) {
         dev.lastSeenAt = new Date().toISOString();
         return dev;
       }
@@ -413,7 +460,7 @@ export class DeviceHub {
     if (!device || device.status === "revoked") return null;
 
     const incomingHash = hashToken(token);
-    const isMatch = safeTimingCompare(device.tokenHash, incomingHash) || (device.authToken && device.authToken === token);
+    const isMatch = safeTimingCompare(device.tokenHash, incomingHash);
     if (!isMatch) return null;
 
     device.lastSeenAt = new Date().toISOString();
@@ -423,19 +470,34 @@ export class DeviceHub {
   /**
    * Revoke a paired device.
    */
-  revokeDevice(deviceId, ownerUserId) {
+  revokeDevice(deviceId, ownerUserId, { authoritativeExternal = false } = {}) {
     const device = this.pairedDevices.get(deviceId);
     if (!device) return { success: false, error: "DEVICE_NOT_FOUND" };
     if (ownerUserId && device.ownerUserId !== ownerUserId) {
       return { success: false, error: "ACCESS_DENIED_NOT_DEVICE_OWNER" };
     }
 
+    const previousDevice = { ...device };
+    const previousQueue = this.commandQueue.get(deviceId);
     device.status = "revoked";
     device.revokedAt = new Date().toISOString();
+    this.revokedDevices.add(deviceId);
     this.commandQueue.delete(deviceId);
-    this.saveToDisk();
+    const persisted = !this.isPersistent || this.saveToDisk();
+    if (!persisted && !authoritativeExternal) {
+      Object.assign(device, previousDevice);
+      this.revokedDevices.delete(deviceId);
+      if (previousQueue) this.commandQueue.set(deviceId, previousQueue);
+      return { success: false, error: "DEVICE_PERSISTENCE_FAILED" };
+    }
+    this.emitEvent({ type: "DEVICE_REVOKED", deviceId, ownerUserId: device.ownerUserId });
 
-    return { success: true, deviceId, status: "revoked" };
+    return {
+      success: true,
+      deviceId,
+      status: "revoked",
+      ...(!persisted ? { localPersistenceWarning: "AUTHORITATIVE_EXTERNAL_REVOCATION_APPLIED" } : {})
+    };
   }
 
   /**
@@ -448,6 +510,8 @@ export class DeviceHub {
       return { success: false, error: "ACCESS_DENIED_NOT_DEVICE_OWNER" };
     }
 
+    const previousDevice = { ...device };
+    const wasRevoked = this.revokedDevices.has(deviceId);
     const newToken = "ultron_dev_" + crypto.randomBytes(32).toString("hex");
     device.authToken = newToken;
     device.tokenHash = hashToken(newToken);
@@ -455,7 +519,15 @@ export class DeviceHub {
     device.encryptedAuthToken = encryptToken(newToken, this.masterKey);
     device.status = "active";
     device.revokedAt = null;
-    this.saveToDisk();
+    device.online = false;
+    device.lastSeenAt = null;
+    this.revokedDevices.delete(deviceId);
+    const persisted = this._persistOrRollback(() => {
+      Object.assign(device, previousDevice);
+      if (wasRevoked) this.revokedDevices.add(deviceId);
+    });
+    if (!persisted.success) return persisted;
+    this.emitEvent({ type: "DEVICE_CREDENTIALS_ROTATED", deviceId, ownerUserId: device.ownerUserId });
 
     return { success: true, deviceId, newDeviceToken: newToken };
   }
@@ -512,10 +584,11 @@ export class DeviceHub {
     }
     return list.map(dev => ({
       id: dev.id,
+      ownerUserId: dev.ownerUserId,
       name: dev.name,
       platform: dev.platform,
       status: dev.status || "active",
-      online: dev.online,
+      online: this.isDeviceOnline(dev.id),
       battery: dev.battery,
       pairedAt: dev.pairedAt,
       lastSeenAt: dev.lastSeenAt,
@@ -531,10 +604,17 @@ export class DeviceHub {
   }
 
   unpairDevice(deviceId) {
-    const deleted = this.pairedDevices.delete(deviceId);
+    const device = this.pairedDevices.get(deviceId);
+    if (!device) return { success: false, deviceId };
+    const previousQueue = this.commandQueue.get(deviceId);
+    this.pairedDevices.delete(deviceId);
     this.commandQueue.delete(deviceId);
-    this.saveToDisk();
-    return { success: deleted, deviceId };
+    const persisted = this._persistOrRollback(() => {
+      this.pairedDevices.set(deviceId, device);
+      if (previousQueue) this.commandQueue.set(deviceId, previousQueue);
+    });
+    if (!persisted.success) return persisted;
+    return { success: true, deviceId };
   }
 
   /**
@@ -728,12 +808,15 @@ export class DeviceHub {
    * Checks whether a device is currently active and has communicated recently.
    * If the last contact exceeds maxStaleMs, the device is marked OFFLINE.
    */
-  isDeviceOnline(deviceId, maxStaleMs = 60_000) {
+  isDeviceOnline(deviceId, maxStaleMs = null) {
     const device = this.pairedDevices.get(deviceId);
-    if (!device || device.status === "revoked") return false;
-    if (device.online === false) return false;
-    const lastSeen = Date.parse(device.lastSeenAt || 0);
-    const isFresh = Number.isFinite(lastSeen) && (Date.now() - lastSeen) < maxStaleMs;
+    if (!device || device.status === "revoked" || this.revokedDevices.has(deviceId)) return false;
+    if (device.online !== true) return false;
+    const platformWindow = device.platform === "android" ? 35 * 60 * 1000 : 90 * 1000;
+    const freshnessWindow = Number.isFinite(maxStaleMs) && maxStaleMs >= 0 ? maxStaleMs : platformWindow;
+    const lastSeen = Date.parse(device.lastSeenAt || "");
+    const ageMs = Date.now() - lastSeen;
+    const isFresh = Number.isFinite(lastSeen) && ageMs >= 0 && ageMs <= freshnessWindow;
     if (!isFresh) {
       device.online = false;
       return false;

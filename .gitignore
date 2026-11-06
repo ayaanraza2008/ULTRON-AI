@@ -15,6 +15,7 @@ __pycache__/
 *.py[cod]
 
 sentinel-memory.json
+data/
 
 # Android companion build artifacts & local properties
 android-companion/.gradle/
@@ -25,4 +26,5 @@ android-companion/local.properties
 windows-companion/bin/
 windows-companion/obj/
 windows-companion/publish/
+artifacts/
 

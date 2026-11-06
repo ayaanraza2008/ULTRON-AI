@@ -7,13 +7,14 @@ import os from "node:os";
 import path from "node:path";
 import { createJarvisRouter } from "../jarvis-router.js";
 import { DeviceHub } from "../integrations/device-hub.js";
+import { MultiDeviceManager } from "../integrations/multi-device-manager.js";
 
 async function withDeviceRouter({ env = {
   NODE_ENV: "test",
   ULTRON_ALLOW_LEGACY_DEVICEHUB_AUTH: "true",
   ULTRON_INTEGRATION_OWNER_USER_ID: "owner-user",
   ULTRON_DEVICE_PAIRING_ENABLED: "true"
-}, userId = "owner-user", deviceHub } = {}, run) {
+}, userId = "owner-user", deviceHub, multiDeviceManager } = {}, run) {
   const app = express();
   const requireSupabaseUser = (req, res, next) => {
     if (req.headers["authorization"] || userId) {
@@ -23,7 +24,7 @@ async function withDeviceRouter({ env = {
     return res.status(401).json({ error: { message: "Unauthorized" } });
   };
   app.use(express.json());
-  app.use("/api", createJarvisRouter({ env, requireSupabaseUser, deviceHub }));
+  app.use("/api", createJarvisRouter({ env, requireSupabaseUser, deviceHub, multiDeviceManager }));
   const server = createServer(app);
   await new Promise((resolve, reject) => {
     server.once("error", reject);
@@ -242,5 +243,125 @@ test("JARVIS direct command enqueue rejects actions and applications outside the
     });
     assert.equal(unapprovedApp.status, 403);
     assert.equal((await unapprovedApp.json()).error.code, "REMOTE_APP_NOT_APPROVED");
+  });
+});
+
+
+test("Production disables process-local DeviceHub pairing and security lifecycle routes", async () => {
+  const productionEnv = {
+    NODE_ENV: "production",
+    ULTRON_INTEGRATION_OWNER_USER_ID: "owner-user",
+    ULTRON_DEVICE_PAIRING_ENABLED: "true",
+    ULTRON_ALLOW_LEGACY_DEVICEHUB_AUTH: "false"
+  };
+  await withDeviceRouter({ env: productionEnv }, async base => {
+    const cases = [
+      ["GET", "/api/jarvis/devices"],
+      ["POST", "/api/jarvis/devices/pair/request"],
+      ["POST", "/api/jarvis/devices/pair/approve"],
+      ["POST", "/api/jarvis/devices/pair/claim"],
+      ["POST", "/api/jarvis/devices/pair/verify"],
+      ["POST", "/api/jarvis/devices/pair/qr"],
+      ["POST", "/api/jarvis/devices/device-123/revoke"],
+      ["DELETE", "/api/jarvis/devices/device-123"],
+      ["POST", "/api/jarvis/devices/device-123/rotate-token"]
+    ];
+
+    for (const [method, route] of cases) {
+      const response = await fetch(base + route, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: method === "GET" ? undefined : JSON.stringify({ pairingCode: "123456" })
+      });
+      assert.equal(response.status, 410, `${method} ${route}`);
+      const payload = await response.json();
+      assert.equal(payload.error.code, "LEGACY_DEVICEHUB_PAIRING_DISABLED");
+      assert.equal(payload.canonicalEndpoints.createPairing, "/api/devices/pairings");
+      assert.equal(payload.canonicalEndpoints.revoke, "/api/devices/:id");
+    }
+  });
+});
+
+
+test("Production rejects the legacy static desktop token and requires per-device Supabase authentication", async () => {
+  const productionEnv = {
+    NODE_ENV: "production",
+    ULTRON_INTEGRATION_OWNER_USER_ID: "owner-user",
+    ULTRON_DESKTOP_AGENT_TOKEN: "legacy-static-desktop-token",
+    ULTRON_ALLOW_LEGACY_DEVICEHUB_AUTH: "true"
+  };
+  await withDeviceRouter({ env: productionEnv }, async base => {
+    const response = await fetch(base + "/api/jarvis/devices/my/heartbeat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-device-token": "legacy-static-desktop-token"
+      },
+      body: JSON.stringify({ online: true })
+    });
+    assert.equal(response.status, 401);
+    const payload = await response.json();
+    assert.equal(payload.error.code, "INVALID_DEVICE_TOKEN");
+  });
+});
+
+test("paired device authentication rejects a companion that belongs to a different owner", async () => {
+  const deviceHub = new DeviceHub();
+  const pairing = deviceHub.createPairingCode({ name: "Foreign Android", platform: "android" });
+  const paired = deviceHub.verifyPairingCode(pairing.code, null, "different-owner");
+  assert.equal(paired.success, true);
+
+  await withDeviceRouter({ deviceHub }, async base => {
+    const response = await fetch(base + "/api/jarvis/devices/tasks", {
+      headers: { "x-device-token": paired.authToken }
+    });
+    assert.equal(response.status, 403);
+    assert.equal((await response.json()).error.code, "ULTRON_OWNER_ONLY");
+  });
+});
+
+test("paired device authentication fails closed when no configured owner identity exists", async () => {
+  const deviceHub = new DeviceHub();
+  const pairing = deviceHub.createPairingCode({ name: "Unbound Windows", platform: "windows" });
+  const paired = deviceHub.verifyPairingCode(pairing.code, null, "owner-user");
+  assert.equal(paired.success, true);
+
+  await withDeviceRouter({
+    deviceHub,
+    env: { NODE_ENV: "test", ULTRON_ALLOW_LEGACY_DEVICEHUB_AUTH: "true" }
+  }, async base => {
+    const response = await fetch(base + "/api/jarvis/devices/tasks", {
+      headers: { "x-device-token": paired.authToken }
+    });
+    assert.equal(response.status, 503);
+    assert.equal((await response.json()).error.code, "ULTRON_OWNER_NOT_CONFIGURED");
+  });
+});
+
+test("authenticated paired devices are registered once in the fleet and fresh presence is synchronized", async () => {
+  const deviceHub = new DeviceHub();
+  const manager = new MultiDeviceManager({ persist: false, seedDefaultFleet: false, deviceHub });
+  const pairing = deviceHub.createPairingCode({ name: "Owner Windows", platform: "windows" });
+  const paired = deviceHub.verifyPairingCode(pairing.code, null, "owner-user");
+  assert.equal(paired.success, true);
+
+  await withDeviceRouter({ deviceHub, multiDeviceManager: manager }, async base => {
+    const headers = { "x-device-token": paired.authToken };
+    const first = await fetch(base + "/api/jarvis/devices/tasks", { headers });
+    assert.equal(first.status, 200);
+
+    const registered = manager.getDevice(paired.deviceId);
+    assert.ok(registered);
+    assert.equal(registered.ownerUserId, "owner-user");
+    assert.equal(registered.online, false);
+    assert.equal(manager.listDevices().length, 1);
+
+    assert.equal(deviceHub.heartbeat(paired.deviceId, paired.authToken).success, true);
+    const second = await fetch(base + "/api/jarvis/devices/tasks", { headers });
+    assert.equal(second.status, 200);
+
+    assert.equal(manager.getDevice(paired.deviceId).online, true);
+    assert.equal(manager.isDeviceOnline(paired.deviceId), true);
+    assert.equal(manager.listDevices().length, 1);
   });
 });

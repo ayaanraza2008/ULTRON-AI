@@ -31,14 +31,16 @@ export class WindowsDesktopAgent {
   constructor(options = {}) {
     this.deviceId = options.deviceId || "pc-windows-" + os.hostname().toLowerCase();
     this.deviceName = options.deviceName || "Primary Windows Workstation (" + os.hostname() + ")";
+    this.projectRoot = path.resolve(options.projectRoot || process.env.ULTRON_PROJECT_ROOT || process.cwd());
     this.screenState = DESKTOP_SCREEN_STATE.LOCKED;
     this.deviceHub = options.deviceHub || null;
     this.registered = false;
     this.authToken = null;
     this.activeTask = null;
+    this.activeTasks = new Map();
     this.executionHistory = [];
     this.onStateChangeCallback = options.onStateChange || null;
-    this.computerControl = new WindowsComputerControl();
+    this.computerControl = options.computerControl || new WindowsComputerControl();
     this.workerTimer = null;
     this.heartbeatTimer = null;
     this.workerRunning = false;
@@ -72,22 +74,15 @@ export class WindowsDesktopAgent {
   }
 
   /**
-   * Unlocks the PC screen and transitions the Cyber-HUD to glowing active orange state.
+   * Refuses remote unlock: Windows sign-in must be completed through local authentication.
    */
   async unlockScreen() {
-    this.screenState = DESKTOP_SCREEN_STATE.UNLOCKED;
-    this.notifyStateChange("SYSTEM_UNLOCKED", {
-      deviceId: this.deviceId,
-      screenState: this.screenState,
-      theme: "reactor_orange_active",
-      timestamp: new Date().toISOString()
-    });
-
     return {
-      success: true,
+      success: false,
+      error: "UNLOCK_REQUIRES_LOCAL_AUTHENTICATION",
       deviceId: this.deviceId,
       screenState: this.screenState,
-      message: "Workstation unlocked. Energy Core active."
+      message: "ULTRON cannot bypass Windows sign-in. Unlock the workstation locally, then reconnect the companion."
     };
   }
 
@@ -95,25 +90,48 @@ export class WindowsDesktopAgent {
    * Locks the workstation screen via user32.dll LockWorkStation.
    */
   async lockScreen() {
-    this.screenState = DESKTOP_SCREEN_STATE.LOCKED;
-    let winLock = { success: true };
+    let winLock;
     try {
       winLock = await windowsAutomation.lockWorkstation();
-    } catch {}
+    } catch (error) {
+      return {
+        success: false,
+        error: "WORKSTATION_LOCK_FAILED",
+        deviceId: this.deviceId,
+        screenState: this.screenState,
+        message: String(error?.message || "Windows did not confirm the lock request.").slice(0, 300)
+      };
+    }
 
+    if (winLock?.success !== true) {
+      return {
+        success: false,
+        error: "WORKSTATION_LOCK_FAILED",
+        deviceId: this.deviceId,
+        screenState: this.screenState,
+        lockResult: winLock || null,
+        message: "Windows did not confirm the lock request."
+      };
+    }
+
+    this.screenState = DESKTOP_SCREEN_STATE.LOCKED;
     this.notifyStateChange("SYSTEM_LOCKED", {
       deviceId: this.deviceId,
       screenState: this.screenState,
       theme: "reactor_blue_locked",
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      simulated: winLock.simulated === true
     });
 
     return {
       success: true,
       deviceId: this.deviceId,
       screenState: this.screenState,
+      simulated: winLock.simulated === true,
       lockResult: winLock,
-      message: "Workstation locked. Security grid armed."
+      message: winLock.simulated === true
+        ? "Lock request was simulated; no Windows workstation was locked."
+        : "Windows confirmed the workstation lock request."
     };
   }
 
@@ -125,7 +143,7 @@ export class WindowsDesktopAgent {
     const freeMem = Math.round(os.freemem() / (1024 * 1024 * 1024));
     const ramUsedPercent = Math.round(((totalMem - freeMem) / totalMem) * 100);
 
-    let storageAvailableGb = 150;
+    let storageAvailableGb = null;
     if (process.platform === "win32") {
       try {
         const psCmd = `powershell -NoProfile -Command "Get-PSDrive -PSProvider FileSystem | Select-Object -Property Root, Free | ConvertTo-Json"`;
@@ -147,7 +165,7 @@ export class WindowsDesktopAgent {
       hostname: os.hostname(),
       platform: process.platform,
       cpus: os.cpus().length,
-      cpuModel: os.cpus()[0]?.model || "AMD Ryzen 7 5700U with Radeon Graphics",
+      cpuModel: os.cpus()[0]?.model || "unknown",
       totalRamGb: totalMem,
       freeRamGb: freeMem,
       ramUsedPercent,
@@ -158,32 +176,80 @@ export class WindowsDesktopAgent {
   }
 
   /**
-   * Runs safe project diagnostics on the ULTRON AI repository.
+   * Inspects project metadata and Git state without executing tests or claiming test health.
    */
   async checkProjectStatus() {
-    this.activeTask = {
+    const task = {
       task: "CHECK_PROJECT",
       startedAt: new Date().toISOString(),
       status: "RUNNING"
     };
+    this.activeTask = task;
 
-    const vitals = await this.getSystemVitals();
+    let packageInfo = null;
+    let packageReadError = null;
+    try {
+      const packageText = await fs.readFile(path.join(this.projectRoot, "package.json"), "utf8");
+      packageInfo = JSON.parse(packageText);
+    } catch (error) {
+      packageReadError = error?.code || "PROJECT_PACKAGE_METADATA_UNAVAILABLE";
+    }
+
+    let repository = {
+      detected: false,
+      name: path.basename(this.projectRoot),
+      branch: null,
+      commitSha: null,
+      workingTreeClean: null
+    };
+    try {
+      const { stdout } = await execAsync(
+        "git rev-parse --show-toplevel && git rev-parse --abbrev-ref HEAD && git rev-parse HEAD && git status --porcelain",
+        { cwd: this.projectRoot, timeout: 5000, windowsHide: true, maxBuffer: 16 * 1024 }
+      );
+      const [repositoryRoot, branch, commitSha, ...statusLines] = stdout.trimEnd().split(/\r?\n/);
+      repository = {
+        detected: Boolean(repositoryRoot && commitSha),
+        name: repositoryRoot ? path.basename(repositoryRoot) : path.basename(this.projectRoot),
+        branch: branch || null,
+        commitSha: commitSha || null,
+        workingTreeClean: statusLines.join("\n").trim().length === 0
+      };
+    } catch {
+      // A companion may be installed outside a Git checkout; report metadata as unavailable.
+    }
+
+    let vitals = null;
+    let vitalsError = null;
+    try {
+      vitals = await this.getSystemVitals();
+    } catch (error) {
+      vitalsError = String(error?.message || "SYSTEM_VITALS_UNAVAILABLE").slice(0, 300);
+    }
+
+    const inspected = Boolean(packageInfo || repository.detected);
     const result = {
-      success: true,
-      repo: "ayaanraza2008/ULTRON-AI",
-      branch: "main",
-      testsTotal: 800,
-      testsPassing: 799,
-      testsFailed: 0,
-      testsSkipped: 1,
+      success: inspected,
+      repo: packageInfo?.name || repository.name,
+      repository,
+      packageVersion: typeof packageInfo?.version === "string" ? packageInfo.version : null,
+      nodeVersion: process.versions.node,
+      testScriptAvailable: typeof packageInfo?.scripts?.test === "string",
+      tests: {
+        state: "NOT_RUN",
+        reason: "This status probe reads project metadata only. It does not execute the test suite."
+      },
       vitals,
-      status: "HEALTHY",
+      ...(packageReadError ? { packageReadError } : {}),
+      ...(vitalsError ? { vitalsError } : {}),
+      status: inspected ? "INSPECTION_ONLY_UNVERIFIED" : "PROJECT_METADATA_UNAVAILABLE",
       checkedAt: new Date().toISOString()
     };
 
-    this.activeTask.status = "COMPLETED";
-    this.activeTask.result = result;
-    this.executionHistory.unshift(this.activeTask);
+    task.status = inspected ? "COMPLETED" : "FAILED";
+    task.result = result;
+    if (!inspected) task.error = "PROJECT_METADATA_UNAVAILABLE";
+    this.executionHistory.unshift(task);
     if (this.executionHistory.length > 50) this.executionHistory.pop();
 
     return result;
@@ -201,9 +267,30 @@ export class WindowsDesktopAgent {
    * Executes an authorized remote command received from the central ULTRON brain.
    * Strictly enforces allowlists; unrestricted terminal/shell is denied.
    */
+  createManagedTask(taskId, action, payload = {}) {
+    const abortController = new AbortController();
+    const taskRecord = {
+      id: taskId,
+      action,
+      payload,
+      abortController,
+      childProcess: null,
+      status: "running",
+      output: [],
+      startedAt: new Date().toISOString(),
+      stoppedAt: null
+    };
+    this.activeTasks.set(taskId, taskRecord);
+    this.activeTask = taskId;
+    return taskRecord;
+  }
+
   async executeCommand(action, payload = {}) {
     const cleanAction = String(action || "").toLowerCase().trim();
     const startTime = Date.now();
+    const taskId = payload.taskId || "task_" + crypto.randomUUID();
+    const isMetaAction = ["inspect_task", "status", "get_system_vitals", "get_task_output", "stop_task", "emergency_stop"].includes(cleanAction);
+    const managedTask = isMetaAction ? null : this.createManagedTask(taskId, cleanAction, payload);
 
     try {
       let result = null;
@@ -262,15 +349,139 @@ export class WindowsDesktopAgent {
           break;
         }
 
+        case "open_folder": {
+          result = await this.computerControl.listFiles(payload.folder || payload.subDir || "");
+          break;
+        }
+
+        case "find_file": {
+          const rawQuery = String(payload.query || payload.fileName || payload.name || "").trim();
+          if (!rawQuery || rawQuery.length > 128) {
+            result = {
+              success: false,
+              error: "FILE_QUERY_REQUIRED",
+              message: "Provide a file name or search term of at most 128 characters."
+            };
+            break;
+          }
+          const query = rawQuery.toLowerCase();
+          const listing = await this.computerControl.listFiles(payload.subDir || payload.folder || "");
+          if (!Array.isArray(listing)) {
+            result = {
+              success: false,
+              error: "FILE_LIST_UNAVAILABLE",
+              message: "The ULTRON workspace did not return a valid directory listing."
+            };
+            break;
+          }
+          const matches = listing
+            .filter(entry => entry && entry.isFile === true && typeof entry.name === "string")
+            .filter(entry => entry.name.toLowerCase().includes(query))
+            .slice(0, 100)
+            .map(entry => entry.name);
+          result = { success: true, query: rawQuery, matches, totalMatches: matches.length };
+          break;
+        }
+
+        case "inspect_task": {
+          const current = this.activeTask ? this.activeTasks.get(this.activeTask) : null;
+          const running = Array.from(this.activeTasks.values()).filter(t => t.status === "running").map(t => ({ id: t.id, action: t.action, startedAt: t.startedAt }));
+          result = {
+            success: true,
+            activeTask: current ? { id: current.id, action: current.action, status: current.status, startedAt: current.startedAt } : null,
+            runningTasks: running,
+            runningCount: running.length,
+            history: this.executionHistory.slice(0, 10),
+            isEmergencyStopped: this.computerControl.isEmergencyStopped()
+          };
+          break;
+        }
+
+        case "stop_task": {
+          const targetId = payload.taskId || this.activeTask;
+          const taskToStop = this.activeTasks.get(targetId);
+          if (taskToStop && taskToStop.status === "running") {
+            taskToStop.abortController.abort();
+            if (taskToStop.childProcess && typeof taskToStop.childProcess.kill === "function") {
+              try { taskToStop.childProcess.kill("SIGTERM"); } catch {}
+            }
+            taskToStop.status = "aborted";
+            taskToStop.stoppedAt = new Date().toISOString();
+            if (this.activeTask === targetId) this.activeTask = null;
+            result = { success: true, stoppedTaskId: targetId, status: "aborted", stoppedAt: taskToStop.stoppedAt };
+          } else if (taskToStop) {
+            result = { success: true, stoppedTaskId: targetId, status: taskToStop.status, message: "Task was already stopped." };
+          } else {
+            result = { success: false, error: "TASK_NOT_FOUND", taskId: targetId, message: "No active task found matching ID." };
+          }
+          break;
+        }
+
+        case "get_task_output": {
+          const queryId = String(payload.taskId || this.activeTask || "").trim();
+          const task = queryId ? this.activeTasks.get(queryId) : null;
+          const matched = queryId
+            ? this.executionHistory.find(h => h.taskId === queryId || h.result?.taskId === queryId)
+            : null;
+          const status = task?.status || (matched ? "completed" : "not_found");
+          if (status === "not_found") {
+            result = { success: false, error: "TASK_NOT_FOUND", taskId: queryId || null };
+          } else {
+            result = {
+              success: true,
+              taskId: queryId,
+              status,
+              output: task?.output ?? matched?.result ?? null
+            };
+          }
+          break;
+        }
+
+        case "emergency_stop": {
+          this.computerControl.setEmergencyStop(true);
+          await this.lockScreen();
+          const abortedIds = [];
+          for (const [id, t] of this.activeTasks.entries()) {
+            if (t.status === "running") {
+              t.abortController.abort();
+              if (t.childProcess && typeof t.childProcess.kill === "function") {
+                try { t.childProcess.kill("SIGKILL"); } catch {}
+              }
+              t.status = "emergency_stopped";
+              t.stoppedAt = new Date().toISOString();
+              abortedIds.push(id);
+            }
+          }
+          this.activeTask = null;
+          result = { success: true, status: "EMERGENCY_STOP_ENGAGED", abortedTasks: abortedIds, timestamp: new Date().toISOString() };
+          break;
+        }
+
         default: {
           throw new Error(`Command '${action}' is not authorized on Windows Desktop Companion.`);
         }
       }
 
+      const operationSucceeded = Boolean(
+        result !== null &&
+        result !== undefined &&
+        !(typeof result === "object" && result.success === false)
+      );
+      if (managedTask && managedTask.status === "running") {
+        managedTask.status = operationSucceeded ? "completed" : "failed";
+        managedTask.completedAt = new Date().toISOString();
+        managedTask.output.push(result);
+      }
+      if (this.activeTask === taskId) {
+        this.activeTask = null;
+      }
+
       const outcome = {
-        success: true,
+        success: operationSucceeded,
+        taskId,
         action: cleanAction,
         result,
+        ...(operationSucceeded ? {} : { error: result?.error || "COMMAND_FAILED" }),
         executionTimeMs: Date.now() - startTime,
         executedAt: new Date().toISOString()
       };
@@ -279,8 +490,15 @@ export class WindowsDesktopAgent {
       if (this.executionHistory.length > 100) this.executionHistory.pop();
       return outcome;
     } catch (err) {
+      if (managedTask) {
+        managedTask.status = managedTask.abortController.signal.aborted ? "aborted" : "failed";
+        managedTask.completedAt = new Date().toISOString();
+        managedTask.error = String(err?.message || "COMMAND_FAILED").slice(0, 500);
+      }
+      if (this.activeTask === taskId) this.activeTask = null;
       const errorOutcome = {
         success: false,
+        taskId,
         action: cleanAction,
         error: err.message,
         executionTimeMs: Date.now() - startTime,

@@ -6,8 +6,19 @@ import {
   DEVICE_TYPES
 } from "../integrations/multi-device-manager.js";
 
+function createTestManager() {
+  return new MultiDeviceManager({
+    persist: false,
+    androidBridge: {
+      async unlockDevice(deviceId) { return { success: true, deviceId }; },
+      async lockDevice(deviceId) { return { success: true, deviceId }; },
+      async playMedia(deviceId, mediaUrl, query) { return { success: true, deviceId, mediaUrl, query }; }
+    }
+  });
+}
+
 test("MultiDeviceManager: Fleet initializes with primary PC and 3 Android mobile devices", () => {
-  const mdm = new MultiDeviceManager();
+  const mdm = createTestManager();
   const devices = mdm.listDevices();
 
   assert.equal(devices.length, 4);
@@ -17,7 +28,7 @@ test("MultiDeviceManager: Fleet initializes with primary PC and 3 Android mobile
 });
 
 test("MultiDeviceManager: Simultaneously unlocks all 3 mobile devices", async () => {
-  const mdm = new MultiDeviceManager();
+  const mdm = createTestManager();
   // Ensure all devices start locked
   mdm.listDevices({ platform: "android" }).forEach(d => d.screenLocked = true);
 
@@ -33,7 +44,7 @@ test("MultiDeviceManager: Simultaneously unlocks all 3 mobile devices", async ()
 });
 
 test("MultiDeviceManager: Simultaneously locks all mobile devices", async () => {
-  const mdm = new MultiDeviceManager();
+  const mdm = createTestManager();
   await mdm.unlockMobileDevices();
 
   const result = await mdm.lockMobileDevices();
@@ -45,7 +56,7 @@ test("MultiDeviceManager: Simultaneously locks all mobile devices", async () => 
 });
 
 test("MultiDeviceManager: Simultaneously launches media playback across all capable devices", async () => {
-  const mdm = new MultiDeviceManager();
+  const mdm = createTestManager();
   const mediaOutcome = await mdm.playMediaAcrossDevices({
     mediaUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
     query: "favorite song"
@@ -59,8 +70,21 @@ test("MultiDeviceManager: Simultaneously launches media playback across all capa
   assert.ok(mobileDevices.every(d => d.currentMedia && d.currentMedia.playing === true));
 });
 
+test("MultiDeviceManager: Does not fake Android success without a real bridge", async () => {
+  const mdm = new MultiDeviceManager({ persist: false });
+  const unlock = await mdm.unlockMobileDevices();
+  const lock = await mdm.lockMobileDevices();
+  const media = await mdm.playMediaAcrossDevices({ mediaUrl: "https://example.com/media.mp3" });
+  assert.equal(unlock.success, false);
+  assert.equal(unlock.error, "ANDROID_BRIDGE_UNAVAILABLE");
+  assert.equal(lock.success, false);
+  assert.equal(lock.error, "ANDROID_BRIDGE_UNAVAILABLE");
+  assert.equal(media.success, false);
+  assert.equal(media.error, "ANDROID_BRIDGE_UNAVAILABLE");
+});
+
 test("MultiDeviceManager: Disconnects and reconnects devices with status tracking", () => {
-  const mdm = new MultiDeviceManager();
+  const mdm = createTestManager();
   const phone = "phone-android-alpha";
 
   const disc = mdm.disconnectDevice(phone);

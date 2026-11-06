@@ -87,7 +87,11 @@ services:
         value: "5000"
       - key: APP_ACCESS_PASSWORD
         sync: false
+      # The sole owner's Supabase Auth UUID. Production private APIs fail closed when missing.
       - key: ULTRON_INTEGRATION_OWNER_USER_ID
+        sync: false
+      # Private bootstrap secret required only to create the initial owner account.
+      - key: ULTRON_OWNER_BOOTSTRAP_TOKEN
         sync: false
       - key: SESSION_SECRET
         generateValue: true

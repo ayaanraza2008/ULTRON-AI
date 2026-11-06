@@ -53,21 +53,35 @@ function parseFrame(buffer) {
   const isFinal = (firstByte & 0x80) !== 0;
   const opcode = firstByte & 0x0f;
   const isMasked = (secondByte & 0x80) !== 0;
+
+  // This gateway negotiates no extensions and supports complete text/control
+  // frames only. Reject malformed or unsupported client frames before parsing
+  // their payload so protocol ambiguity cannot reach the command handler.
+  if ((firstByte & 0x70) !== 0) throw new Error("WebSocket reserved bits must be zero.");
+  if (![0x1, 0x8, 0x9, 0xa].includes(opcode)) throw new Error("Unsupported WebSocket opcode.");
+  if (!isMasked) throw new Error("Client WebSocket frames must be masked.");
+  if (!isFinal) throw new Error("Fragmented WebSocket frames are not supported.");
+
   let payloadLength = secondByte & 0x7f;
   let offset = 2;
 
   if (payloadLength === 126) {
     if (buffer.length < 4) return null;
     payloadLength = buffer.readUInt16BE(2);
+    if (payloadLength < 126) throw new Error("Non-canonical WebSocket payload length.");
     offset = 4;
   } else if (payloadLength === 127) {
     if (buffer.length < 10) return null;
     const bigLen = buffer.readBigUInt64BE(2);
-    if (bigLen > BigInt(MAX_FRAME_PAYLOAD)) {
-      throw new Error("Frame payload exceeds safety limit.");
+    if (bigLen < 65536n || bigLen > BigInt(MAX_FRAME_PAYLOAD)) {
+      throw new Error("Invalid or oversized WebSocket payload length.");
     }
     payloadLength = Number(bigLen);
     offset = 10;
+  }
+
+  if ([0x8, 0x9, 0xa].includes(opcode) && payloadLength > 125) {
+    throw new Error("WebSocket control frames cannot exceed 125 bytes.");
   }
 
   let maskingKey = null;
@@ -102,18 +116,28 @@ export class DeviceWebSocketGateway {
   constructor(options = {}) {
     this.deviceHub = options.deviceHub || defaultDeviceHub;
     this.logger = options.logger || console;
+    this.env = options.env || process.env;
     this.authenticateDeviceToken = options.authenticateDeviceToken ||
-      (String(process.env.NODE_ENV || "").toLowerCase() === "production"
-        ? token => verifyPairedDeviceToken({ token, env: process.env, logger: this.logger })
+      (String(this.env.NODE_ENV || "").toLowerCase() === "production"
+        ? token => verifyPairedDeviceToken({ token, env: this.env, logger: this.logger })
         : null);
     this.clients = new Map(); // deviceId -> ClientSession
     this.sseClients = new Map(); // deviceId -> Set(res)
     this.pingIntervalMs = options.pingIntervalMs || 30_000;
+    this.stateSyncAckHandler = null;
     this.attachedServer = null;
     this.upgradeHandler = null;
 
     // Listen to DeviceHub events for instant dispatch
     this.unsubscribeHub = this.deviceHub.registerEventListener(event => this.handleDeviceHubEvent(event));
+  }
+
+  /**
+   * Registers the owner-scoped handler used after an authenticated device
+   * acknowledges a queued state-sync delivery.
+   */
+  setStateSyncAckHandler(handler) {
+    this.stateSyncAckHandler = typeof handler === "function" ? handler : null;
   }
 
   /**
@@ -164,9 +188,39 @@ export class DeviceWebSocketGateway {
     if (typeof this.authenticateDeviceToken === "function") {
       const verified = await this.authenticateDeviceToken(token);
       if (!verified) return null;
+
+      // The production gateway is an independent WebSocket entry point; it
+      // must enforce the same single-owner boundary as the REST pairing routes.
+      const configuredOwnerId = String(
+        this.env.ULTRON_OWNER_USER_ID || this.env.ULTRON_INTEGRATION_OWNER_USER_ID || ""
+      ).trim();
+      const verifiedOwnerId = String(verified.ownerUserId || verified.owner_user_id || "").trim();
+      const isProduction = String(this.env.NODE_ENV || "").toLowerCase() === "production";
+      if ((isProduction && !configuredOwnerId) ||
+          (configuredOwnerId && verifiedOwnerId !== configuredOwnerId)) {
+        this.logger.warn?.("Device WebSocket authentication rejected by owner policy", {
+          code: "ULTRON_OWNER_ONLY"
+        });
+        return null;
+      }
+
       return this.deviceHub.importPairedDevice({ ...verified, authToken: token });
     }
-    return this.deviceHub.findDeviceByToken(token);
+    // The development-only process-local token path is still subject to an
+    // explicitly configured owner boundary; it must not bypass single-owner
+    // policy merely because the durable Supabase verifier is disabled.
+    const legacyDevice = this.deviceHub.findDeviceByToken(token);
+    if (!legacyDevice) return null;
+    const configuredOwnerId = String(
+      this.env.ULTRON_OWNER_USER_ID || this.env.ULTRON_INTEGRATION_OWNER_USER_ID || ""
+    ).trim();
+    const isProduction = String(this.env.NODE_ENV || "").toLowerCase() === "production";
+    const legacyOwnerId = String(legacyDevice.ownerUserId || legacyDevice.owner_user_id || "").trim();
+    if ((isProduction && !configuredOwnerId) ||
+        (configuredOwnerId && legacyOwnerId !== configuredOwnerId)) {
+      return null;
+    }
+    return legacyDevice;
   }
 
   /**
@@ -181,15 +235,36 @@ export class DeviceWebSocketGateway {
       return; // Leave for other upgrade handlers if any
     }
 
-    const wsKey = req.headers["sec-websocket-key"];
-    if (!wsKey || req.headers.upgrade?.toLowerCase() !== "websocket") {
-      socket.write("HTTP/1.1 400 Bad Request\r\n\r\n");
+    const wsKey = typeof req.headers["sec-websocket-key"] === "string"
+      ? req.headers["sec-websocket-key"].trim()
+      : "";
+    if (req.headers["sec-websocket-version"] !== "13") {
+      socket.write("HTTP/1.1 426 Upgrade Required\r\nSec-WebSocket-Version: 13\r\nConnection: close\r\n\r\n");
+      socket.destroy();
+      return;
+    }
+    const decodedWsKey = Buffer.from(wsKey, "base64");
+    const validWsKey = decodedWsKey.length === 16 && decodedWsKey.toString("base64") === wsKey;
+    const hasConnectionUpgrade = String(req.headers.connection || "")
+      .split(",")
+      .some(value => value.trim().toLowerCase() === "upgrade");
+    if (!validWsKey || req.headers.upgrade?.toLowerCase() !== "websocket" || !hasConnectionUpgrade) {
+      socket.write("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n");
       socket.destroy();
       return;
     }
 
-    // Authenticate device token from query param, header, or bearer token
-    let token = url.searchParams.get("token") || req.headers["x-device-token"];
+    // Device credentials must never be accepted in URLs: query strings can be
+    // retained by reverse proxies, access logs, browser history, and diagnostics.
+    // Companion clients must use the dedicated header or the authenticated AUTH frame.
+    if (url.searchParams.has("token")) {
+      socket.write("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n");
+      socket.destroy();
+      return;
+    }
+
+    // Authenticate device token from headers only.
+    let token = req.headers["x-device-token"];
     if (!token && req.headers.authorization) {
       const match = req.headers.authorization.match(/^Bearer\s+(.+)$/i);
       if (match) token = match[1].trim();
@@ -214,6 +289,7 @@ export class DeviceWebSocketGateway {
 
     const clientSession = {
       socket,
+      closed: false,
       device: device || null,
       deviceId: device?.id || null,
       authenticated: Boolean(device),
@@ -239,6 +315,7 @@ export class DeviceWebSocketGateway {
     });
 
     socket.on("close", () => {
+      clientSession.closed = true;
       if (clientSession.authTimeout) {
         clearTimeout(clientSession.authTimeout);
         clientSession.authTimeout = null;
@@ -248,7 +325,9 @@ export class DeviceWebSocketGateway {
         clientSession.pingTimer = null;
       }
       if (clientSession.deviceId) {
-        this.disconnectClient(clientSession.deviceId);
+        // A replaced socket may emit "close" after its successor is already
+        // registered. Only the currently registered session may clear presence.
+        this.disconnectClient(clientSession.deviceId, 1000, "", clientSession);
       }
     });
 
@@ -281,6 +360,7 @@ export class DeviceWebSocketGateway {
     // If client already connected, clean up previous
     if (this.clients.has(deviceId)) {
       const old = this.clients.get(deviceId);
+      old.closed = true;
       try { old.socket.destroy(); } catch {}
       clearInterval(old.pingTimer);
     }
@@ -310,10 +390,11 @@ export class DeviceWebSocketGateway {
   /**
    * Disconnects a client and cleans up timers.
    */
-  disconnectClient(deviceId, code = 1000, reason = "") {
+  disconnectClient(deviceId, code = 1000, reason = "", expectedSession = null) {
     const client = this.clients.get(deviceId);
-    if (!client) return;
+    if (!client || (expectedSession && client !== expectedSession)) return false;
 
+    client.closed = true;
     clearInterval(client.pingTimer);
     clearTimeout(client.authTimeout);
 
@@ -335,15 +416,19 @@ export class DeviceWebSocketGateway {
     }
 
     this.broadcastPresence(deviceId, false);
+    return true;
   }
 
   /**
    * Processes incoming data chunks from a client socket.
    */
   async handleSocketData(clientSession, chunk) {
+    // A superseded or explicitly closed socket must not process bytes that
+    // were already queued by the runtime before its close event was delivered.
+    if (clientSession.closed || clientSession.socket?.destroyed) return;
     clientSession.buffer = Buffer.concat([clientSession.buffer, chunk]);
 
-    while (clientSession.buffer.length > 0) {
+    while (clientSession.buffer.length > 0 && !clientSession.closed && !clientSession.socket?.destroyed) {
       let frame;
       try {
         frame = parseFrame(clientSession.buffer);
@@ -370,8 +455,11 @@ export class DeviceWebSocketGateway {
 
       // Handle Close (opcode 0x8)
       if (frame.opcode === 0x8) {
-        if (clientSession.deviceId) this.disconnectClient(clientSession.deviceId);
-        else clientSession.socket.destroy();
+        if (clientSession.deviceId) {
+          this.disconnectClient(clientSession.deviceId, 1000, "", clientSession);
+        } else {
+          clientSession.socket.destroy();
+        }
         return;
       }
 
@@ -379,6 +467,7 @@ export class DeviceWebSocketGateway {
       if (frame.opcode === 0x1) {
         const text = frame.payload.toString("utf8");
         await this.handleClientMessage(clientSession, text);
+        if (clientSession.socket?.destroyed) return;
       }
     }
   }
@@ -387,6 +476,7 @@ export class DeviceWebSocketGateway {
    * Handles incoming JSON messages from a companion client.
    */
   async handleClientMessage(clientSession, text) {
+    if (clientSession.closed || clientSession.socket?.destroyed) return;
     let msg;
     try {
       msg = JSON.parse(text);
@@ -394,9 +484,18 @@ export class DeviceWebSocketGateway {
       return;
     }
 
-    // 1. Auth Message
+    // 1. Auth Message. Authentication is a one-way state transition: an
+    // already authenticated socket must never be rebound to another device.
     if (msg.type === "AUTH" && msg.token) {
+      if (clientSession.authenticated || clientSession.deviceId) {
+        this.sendFrame(clientSession.socket, { type: "ERROR", error: "REAUTHENTICATION_NOT_ALLOWED" });
+        clientSession.socket.destroy();
+        return;
+      }
       const device = await this.authenticateToken(msg.token);
+      // The socket may close or be invalidated while durable token verification
+      // is in flight. Never register a session after that transition.
+      if (clientSession.closed || clientSession.socket?.destroyed) return;
       if (!device) {
         this.sendFrame(clientSession.socket, { type: "AUTH_FAILED", error: "INVALID_DEVICE_TOKEN" });
         clientSession.socket.destroy();
@@ -419,12 +518,51 @@ export class DeviceWebSocketGateway {
 
     // 2. Heartbeat & Telemetry
     if (msg.type === "HEARTBEAT") {
-      this.deviceHub.heartbeat(deviceId, token, msg.telemetry || {});
-      this.sendFrame(clientSession.socket, { type: "HEARTBEAT_ACK", timestamp: Date.now() });
+      const heartbeat = this.deviceHub.heartbeat(deviceId, token, msg.telemetry || {});
+      if (!heartbeat?.success) {
+        this.sendFrame(clientSession.socket, {
+          type: "HEARTBEAT_ACK",
+          success: false,
+          error: heartbeat?.error || "HEARTBEAT_REJECTED",
+          timestamp: Date.now()
+        });
+        this.disconnectClient(deviceId, 1008, "Heartbeat rejected", clientSession);
+        return;
+      }
+      this.sendFrame(clientSession.socket, {
+        type: "HEARTBEAT_ACK",
+        success: true,
+        timestamp: Date.now()
+      });
       return;
     }
 
-    // 3. Command Completion
+    // 3. Acknowledge owner-scoped state-sync delivery. The paired session
+    // supplies device and owner identity; clients cannot ACK another device.
+    if (msg.type === "STATE_SYNC_ACK" && msg.deliveryId) {
+      const ownerUserId = clientSession.device?.ownerUserId;
+      let outcome = { success: false, error: "STATE_SYNC_ACK_NOT_CONFIGURED" };
+      if (ownerUserId && typeof this.stateSyncAckHandler === "function") {
+        try {
+          outcome = await this.stateSyncAckHandler({
+            deviceId,
+            ownerUserId,
+            deliveryId: String(msg.deliveryId)
+          });
+        } catch {
+          outcome = { success: false, error: "STATE_SYNC_ACK_FAILED" };
+        }
+      }
+      this.sendFrame(clientSession.socket, {
+        type: "STATE_SYNC_ACK_RESULT",
+        deliveryId: msg.deliveryId,
+        success: Boolean(outcome?.success && outcome?.acknowledged),
+        ...(outcome?.error ? { error: outcome.error } : {})
+      });
+      return;
+    }
+
+    // 4. Command Completion
     if (msg.type === "COMMAND_COMPLETE" && msg.commandId) {
       const outcome = this.deviceHub.completeCommand(deviceId, msg.commandId, token, msg.result || {});
       this.sendFrame(clientSession.socket, { type: "COMMAND_COMPLETE_ACK", commandId: msg.commandId, success: outcome.success });
@@ -490,6 +628,46 @@ export class DeviceWebSocketGateway {
   }
 
   /**
+   * Delivers a state synchronization event only to authenticated, paired
+   * sessions belonging to the supplied owner. Returns actual delivery
+   * acknowledgements from the local WebSocket/SSE transport.
+   */
+  dispatchStateSync({ ownerUserId, deviceIds = [], event } = {}) {
+    if (typeof ownerUserId !== "string" || !ownerUserId.trim() || !Array.isArray(deviceIds) || !event) {
+      return { success: false, error: "STATE_SYNC_ARGUMENTS_INVALID", deliveredDeviceIds: [] };
+    }
+
+    const sentDeviceIds = [];
+    const uniqueIds = [...new Set(deviceIds.map(id => String(id || "").trim()).filter(Boolean))];
+    for (const deviceId of uniqueIds) {
+      const paired = this.deviceHub.pairedDevices.get(deviceId);
+      if (!paired || paired.status === "revoked" || paired.ownerUserId !== ownerUserId) continue;
+
+      const client = this.clients.get(deviceId);
+      if (client?.authenticated && client.device?.ownerUserId === ownerUserId && client.socket) {
+        if (this.sendFrame(client.socket, { type: "STATE_SYNC", event })) {
+          sentDeviceIds.push(deviceId);
+          continue;
+        }
+      }
+
+      const sseSet = this.sseClients.get(deviceId);
+      if (sseSet && sseSet.size > 0) {
+        let sent = false;
+        for (const res of sseSet) {
+          try {
+            res.write(`event: state-sync\ndata: ${JSON.stringify({ type: "STATE_SYNC", event })}\n\n`);
+            sent = true;
+          } catch {}
+        }
+        if (sent) sentDeviceIds.push(deviceId);
+      }
+    }
+
+    return { success: true, sentDeviceIds };
+  }
+
+  /**
    * Broadcasts presence changes to all connected owner devices.
    */
   broadcastPresence(deviceId, online) {
@@ -525,6 +703,29 @@ export class DeviceWebSocketGateway {
    */
   handleDeviceHubEvent(event) {
     if (!event) return;
+
+    if ((event.type === "DEVICE_REVOKED" || event.type === "DEVICE_CREDENTIALS_ROTATED") &&
+        event.deviceId && event.ownerUserId) {
+      const client = this.clients.get(event.deviceId);
+      if (client?.device?.ownerUserId === event.ownerUserId) {
+        this.disconnectClient(
+          event.deviceId,
+          1008,
+          event.type === "DEVICE_REVOKED" ? "Device access revoked" : "Device credentials rotated"
+        );
+      }
+
+      // SSE streams are authenticated only when opened, so terminate them
+      // immediately when the device is revoked or its credential is rotated.
+      const streams = this.sseClients.get(event.deviceId);
+      if (streams) {
+        for (const res of streams) {
+          try { res.end(); } catch {}
+        }
+        this.sseClients.delete(event.deviceId);
+      }
+      return;
+    }
 
     if (event.type === "COMMAND_DISPATCH" && event.targetDeviceId && event.command) {
       this.dispatchCommand(event.targetDeviceId, event.command);

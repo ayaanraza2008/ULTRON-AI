@@ -92,6 +92,7 @@ export const SECRET_RULES = [
 
 const TEST_FIXTURE_FINGERPRINTS = new Set([
   "743554670c",
+  "a109e36947",
   "1db61e13c1",
   "9f5e00085c",
   "8bcac7908e",

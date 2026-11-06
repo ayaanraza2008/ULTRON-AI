@@ -19,9 +19,12 @@ export class RemoteTaskOrchestrator {
     this.windowsDesktopAgent = options.windowsDesktopAgent || null;
     this.telephonyGateway = options.telephonyGateway || null;
     this.taskQueue = new Map();
-    this.processedIdempotencyKeys = new Set();
+    this.processedIdempotencyKeys = new Map();
     this.taskHistory = [];
     this.maxHistory = 100;
+    this.idempotencyWindowMs = Number.isFinite(options.idempotencyWindowMs)
+      ? Math.max(1, Math.min(10 * 60 * 1000, options.idempotencyWindowMs))
+      : 30_000;
   }
 
   /**
@@ -43,20 +46,41 @@ export class RemoteTaskOrchestrator {
       };
     }
 
-    // Idempotency check: prevent duplicate execution from carrier re-transmissions
-    const idKey = idempotencyKey || `${callerId}_${action}_${JSON.stringify(payload)}`;
-    if (this.processedIdempotencyKeys.has(idKey)) {
+    // Idempotency is scoped to the caller and retains the original task outcome.
+    // A retry must not turn a still-running or failed operation into fake success.
+    const requestKey = idempotencyKey || `${action}_${JSON.stringify(payload)}`;
+    const idKey = `${String(callerId || "owner")}: ${requestKey}`;
+    const existingRequest = this.processedIdempotencyKeys.get(idKey);
+    if (existingRequest) {
+      const completedSuccessfully = existingRequest.status === "COMPLETED" && existingRequest.success === true;
+      const message = existingRequest.status === "RUNNING"
+        ? "Duplicate task suppressed; the original task is still running."
+        : existingRequest.status === "FAILED"
+          ? "Duplicate task suppressed; the original task failed."
+          : "Duplicate task suppressed; the original task completed.";
       return {
-        success: true,
+        success: completedSuccessfully,
         duplicateSuppressed: true,
-        message: "Duplicate task received within active window. Execution suppressed."
+        taskId: existingRequest.taskId,
+        status: existingRequest.status,
+        ...(existingRequest.result === null ? {} : { result: existingRequest.result }),
+        ...(existingRequest.error
+          ? { error: existingRequest.error }
+          : existingRequest.status === "RUNNING" ? { error: "DUPLICATE_TASK_IN_PROGRESS" } : {}),
+        message
       };
     }
-    this.processedIdempotencyKeys.add(idKey);
-    const timer = setTimeout(() => this.processedIdempotencyKeys.delete(idKey), 30000);
-    if (typeof timer.unref === "function") timer.unref();
 
     const taskId = "rem-task-" + crypto.randomUUID();
+    const idempotencyRecord = {
+      taskId,
+      status: "RUNNING",
+      success: null,
+      result: null,
+      error: null,
+      startedAt: new Date().toISOString()
+    };
+    this.processedIdempotencyKeys.set(idKey, idempotencyRecord);
     const taskRecord = {
       id: taskId,
       callerId,
@@ -68,6 +92,17 @@ export class RemoteTaskOrchestrator {
       result: null
     };
     this.taskQueue.set(taskId, taskRecord);
+
+    // Keep RUNNING records until work actually finishes. Start the retry
+    // retention window only after a terminal result, so slow tasks are not duplicated.
+    const scheduleIdempotencyExpiry = () => {
+      const timer = setTimeout(() => {
+        if (this.processedIdempotencyKeys.get(idKey) === idempotencyRecord) {
+          this.processedIdempotencyKeys.delete(idKey);
+        }
+      }, this.idempotencyWindowMs);
+      if (typeof timer.unref === "function") timer.unref();
+    };
 
     const reportStep = (stepDescription) => {
       const step = { description: stepDescription, timestamp: new Date().toISOString() };
@@ -87,9 +122,13 @@ export class RemoteTaskOrchestrator {
           if (this.windowsDesktopAgent) {
             executionResult = await this.windowsDesktopAgent.unlockScreen();
           } else {
-            executionResult = { success: true, message: "PC unlocked." };
+            executionResult = { success: false, error: "WINDOWS_AGENT_UNAVAILABLE", message: "Windows desktop companion is not connected or registered." };
           }
-          reportStep("Step 3: Workstation screen unlocked. Energy Core activated.");
+          if (executionResult && executionResult.success !== false) {
+            reportStep("Step 3: Workstation screen unlocked. Energy Core activated.");
+          } else {
+            reportStep("Step 3: Failed to unlock workstation: " + (executionResult?.message || executionResult?.error));
+          }
           break;
         }
 
@@ -98,9 +137,15 @@ export class RemoteTaskOrchestrator {
           if (this.windowsDesktopAgent) {
             executionResult = await this.windowsDesktopAgent.lockScreen();
           } else {
-            executionResult = { success: true, message: "PC locked." };
+            executionResult = { success: false, error: "WINDOWS_AGENT_UNAVAILABLE", message: "Windows desktop companion is not connected or registered." };
           }
-          reportStep("Step 3: Workstation locked.");
+          if (executionResult && executionResult.success !== false && executionResult.simulated === true) {
+            reportStep("Step 3: Lock request simulated; no real Windows workstation was locked.");
+          } else if (executionResult && executionResult.success !== false) {
+            reportStep("Step 3: Windows agent confirmed the workstation lock request.");
+          } else {
+            reportStep("Step 3: Failed to lock workstation: " + (executionResult?.message || executionResult?.error));
+          }
           break;
         }
 
@@ -109,9 +154,13 @@ export class RemoteTaskOrchestrator {
           if (this.multiDeviceManager) {
             executionResult = await this.multiDeviceManager.unlockMobileDevices();
           } else {
-            executionResult = { success: true, unlockedCount: 3 };
+            executionResult = { success: false, error: "MULTI_DEVICE_MANAGER_UNAVAILABLE", message: "Multi-device manager is not configured." };
           }
-          reportStep(`Step 3: Unlocked ${executionResult.unlockedCount || 3} mobile devices.`);
+          if (executionResult && executionResult.success !== false) {
+            reportStep(`Step 3: Unlocked ${executionResult.unlockedCount || 0} mobile devices.`);
+          } else {
+            reportStep("Step 3: Failed to unlock mobile devices: " + (executionResult?.message || executionResult?.error));
+          }
           break;
         }
 
@@ -120,69 +169,192 @@ export class RemoteTaskOrchestrator {
           if (this.multiDeviceManager) {
             executionResult = await this.multiDeviceManager.playMediaAcrossDevices(payload);
           } else {
-            executionResult = { success: true, playingDevices: 3 };
+            executionResult = { success: false, error: "MULTI_DEVICE_MANAGER_UNAVAILABLE", message: "Multi-device manager is not configured." };
           }
-          reportStep("Step 3: Favorite song launched across all devices.");
+          if (executionResult && executionResult.success !== false) {
+            reportStep("Step 3: Favorite song launched across all devices.");
+          } else {
+            reportStep("Step 3: Failed to launch media: " + (executionResult?.message || executionResult?.error));
+          }
           break;
         }
 
         case "CHECK_STORAGE_AND_RUNNABILITY": {
           reportStep("Step 2: Querying Windows PC storage and hardware headroom...");
-          let vitals = { storageAvailableGb: 184, ramUsedPercent: 36 };
           if (this.windowsDesktopAgent) {
-            vitals = await this.windowsDesktopAgent.getSystemVitals();
+            const vitals = await this.windowsDesktopAgent.getSystemVitals();
+            const rawStorageAvailableGb = vitals?.storageAvailableGb;
+            const storageCheckAvailable = typeof rawStorageAvailableGb === "number" &&
+              Number.isFinite(rawStorageAvailableGb) && rawStorageAvailableGb >= 0;
+            const storageAvailableGb = storageCheckAvailable ? rawStorageAvailableGb : null;
+            const canRun = storageCheckAvailable ? storageAvailableGb > 10 : null;
+            executionResult = {
+              success: true,
+              storageAvailableGb: storageCheckAvailable ? storageAvailableGb : null,
+              ramUsedPercent: vitals?.ramUsedPercent,
+              storageCheckAvailable,
+              canRun,
+              verdict: canRun === true
+                ? `Free storage (${storageAvailableGb} GB) exceeds the 10 GB threshold; other run prerequisites remain unverified.`
+                : canRun === false
+                  ? `Free storage (${storageAvailableGb} GB) is below the 10 GB threshold.`
+                  : "Free storage could not be measured; PC runnability remains unverified."
+            };
+            reportStep(canRun === true
+              ? "Step 3: Storage exceeds the configured minimum; other prerequisites remain unverified."
+              : canRun === false
+                ? "Step 3: Storage is below the configured minimum; the PC is not reported as runnable."
+                : "Step 3: Free storage could not be measured; PC runnability remains unverified.");
+          } else {
+            executionResult = { success: false, error: "WINDOWS_AGENT_UNAVAILABLE", message: "Windows desktop companion is not connected or registered." };
+            reportStep("Step 3: Storage check failed: Windows companion unavailable.");
           }
-          const canRun = vitals.storageAvailableGb > 10;
-          executionResult = {
-            storageAvailableGb: vitals.storageAvailableGb,
-            ramUsedPercent: vitals.ramUsedPercent,
-            canRun,
-            verdict: canRun
-              ? `You have ${vitals.storageAvailableGb} GB of free storage. Your project has ample space and is ready to run.`
-              : `Storage is critically low (${vitals.storageAvailableGb} GB). Free up disk space before execution.`
-          };
-          reportStep("Step 3: Vitals received. Storage verified.");
           break;
         }
 
         case "CHECK_PROJECT_TESTS": {
-          reportStep("Step 2: Inspecting ULTRON AI repository and running test diagnostics...");
+          reportStep("Step 2: Inspecting repository metadata; this operation does not run the test suite.");
           if (this.windowsDesktopAgent) {
             executionResult = await this.windowsDesktopAgent.checkProjectStatus();
+            reportStep(executionResult?.success === false
+              ? "Step 3: Project inspection failed: " + (executionResult?.error || executionResult?.message || "metadata unavailable")
+              : "Step 3: Repository metadata inspected. Automated tests were NOT_RUN; no test-health verdict is asserted.");
           } else {
-            executionResult = { success: true, testsTotal: 800, testsPassing: 799, testsFailed: 0 };
+            executionResult = { success: false, error: "WINDOWS_AGENT_UNAVAILABLE", message: "Windows desktop companion is not connected or registered." };
+            reportStep("Step 3: Project test inspection failed: Windows companion unavailable.");
           }
-          reportStep("Step 3: Test diagnostics complete. All systems healthy.");
+          break;
+        }
+
+        case "LAUNCH_PC_APP": {
+          reportStep("Step 2: Launching application on Windows PC...");
+          if (this.windowsDesktopAgent) {
+            executionResult = await this.windowsDesktopAgent.executeCommand("launch_app", payload);
+            reportStep(executionResult?.success === false
+              ? "Step 3: Application launch failed: " + (executionResult?.message || executionResult?.error || "unknown error")
+              : "Step 3: Application launch confirmed by the Windows agent.");
+          } else {
+            executionResult = { success: false, error: "WINDOWS_AGENT_UNAVAILABLE", message: "Windows desktop companion is not connected or registered." };
+            reportStep("Step 3: App launch failed: Windows companion unavailable.");
+          }
+          break;
+        }
+
+        case "OPEN_PC_FOLDER": {
+          reportStep("Step 2: Accessing PC directory...");
+          if (this.windowsDesktopAgent) {
+            executionResult = await this.windowsDesktopAgent.executeCommand("open_folder", payload);
+            reportStep(executionResult?.success === false
+              ? "Step 3: Directory query failed: " + (executionResult?.message || executionResult?.error || "unknown error")
+              : "Step 3: Directory query completed on the Windows agent.");
+          } else {
+            executionResult = { success: false, error: "WINDOWS_AGENT_UNAVAILABLE", message: "Windows desktop companion is not connected or registered." };
+            reportStep("Step 3: Directory query failed: Windows companion unavailable.");
+          }
+          break;
+        }
+
+        case "FIND_PC_FILE": {
+          reportStep("Step 2: Searching PC filesystem for file...");
+          if (this.windowsDesktopAgent) {
+            executionResult = await this.windowsDesktopAgent.executeCommand("find_file", payload);
+            reportStep(executionResult?.success === false
+              ? "Step 3: File search failed: " + (executionResult?.message || executionResult?.error || "unknown error")
+              : "Step 3: File search completed on the Windows agent.");
+          } else {
+            executionResult = { success: false, error: "WINDOWS_AGENT_UNAVAILABLE", message: "Windows desktop companion is not connected or registered." };
+            reportStep("Step 3: File search failed: Windows companion unavailable.");
+          }
+          break;
+        }
+
+        case "GET_PC_VITALS": {
+          reportStep("Step 2: Gathering PC hardware vitals...");
+          if (this.windowsDesktopAgent) {
+            executionResult = await this.windowsDesktopAgent.getSystemVitals();
+            reportStep("Step 3: PC hardware vitals collected.");
+          } else {
+            executionResult = { success: false, error: "WINDOWS_AGENT_UNAVAILABLE", message: "Windows desktop companion is not connected or registered." };
+            reportStep("Step 3: Vitals query failed: Windows companion unavailable.");
+          }
+          break;
+        }
+
+        case "INSPECT_RUNNING_TASK": {
+          reportStep("Step 2: Inspecting active task on Windows PC...");
+          if (this.windowsDesktopAgent) {
+            executionResult = await this.windowsDesktopAgent.executeCommand("inspect_task", payload);
+            reportStep(executionResult?.success === false
+              ? "Step 3: Task inspection failed: " + (executionResult?.message || executionResult?.error || "unknown error")
+              : "Step 3: Task inspection completed on the Windows agent.");
+          } else {
+            executionResult = { success: false, error: "WINDOWS_AGENT_UNAVAILABLE", message: "Windows desktop companion is not connected or registered." };
+            reportStep("Step 3: Task inspection failed: Windows companion unavailable.");
+          }
+          break;
+        }
+
+        case "EMERGENCY_STOP": {
+          reportStep("Step 2: Transmitting EMERGENCY STOP directive to the connected Windows companion...");
+          if (this.windowsDesktopAgent) {
+            executionResult = await this.windowsDesktopAgent.executeCommand("emergency_stop", payload);
+            reportStep(executionResult?.success === false
+              ? "Step 3: Windows emergency stop failed: " + (executionResult?.message || executionResult?.error || "unknown error")
+              : "Step 3: Emergency stop acknowledged by the Windows companion; other devices were not targeted.");
+          } else {
+            executionResult = { success: false, error: "WINDOWS_AGENT_UNAVAILABLE", message: "Windows desktop companion is not connected or registered. No device received an emergency stop command." };
+            reportStep("Step 3: Emergency stop failed: Windows companion unavailable.");
+          }
           break;
         }
 
         default: {
-          executionResult = { success: true, message: `Action ${action} completed.` };
-          reportStep(`Step 2: Action ${action} executed.`);
+          executionResult = { success: false, error: "UNKNOWN_ACTION", message: `Action '${action}' is not supported.` };
+          reportStep(`Step 2: Action '${action}' rejected as unsupported.`);
           break;
         }
       }
 
-      taskRecord.status = "COMPLETED";
+      const isSuccess = Boolean(executionResult && executionResult.success !== false);
+      taskRecord.status = isSuccess ? "COMPLETED" : "FAILED";
       taskRecord.completedAt = new Date().toISOString();
       taskRecord.result = executionResult;
+      if (!isSuccess) {
+        taskRecord.error = executionResult?.error || "TASK_FAILED";
+      }
+      idempotencyRecord.status = isSuccess ? "COMPLETED" : "FAILED";
+      idempotencyRecord.success = isSuccess;
+      idempotencyRecord.result = executionResult;
+      idempotencyRecord.error = isSuccess ? null : (executionResult?.error || "TASK_FAILED");
+      idempotencyRecord.completedAt = taskRecord.completedAt;
+      scheduleIdempotencyExpiry();
 
       this.taskHistory.unshift(taskRecord);
       if (this.taskHistory.length > this.maxHistory) this.taskHistory.pop();
       this.taskQueue.delete(taskId);
 
       return {
-        success: true,
+        success: isSuccess,
         taskId,
         action,
         progressSteps: taskRecord.progressSteps,
-        result: executionResult
+        result: executionResult,
+        ...(isSuccess ? {} : { error: executionResult?.error || "TASK_FAILED", message: executionResult?.message || "Task failed" })
       };
     } catch (err) {
       taskRecord.status = "FAILED";
       taskRecord.error = err.message;
+      taskRecord.completedAt = new Date().toISOString();
+      idempotencyRecord.status = "FAILED";
+      idempotencyRecord.success = false;
+      idempotencyRecord.error = String(err?.message || "TASK_FAILED");
+      idempotencyRecord.result = { success: false, error: idempotencyRecord.error };
+      idempotencyRecord.completedAt = taskRecord.completedAt;
+      scheduleIdempotencyExpiry();
       this.taskQueue.delete(taskId);
-      return { success: false, taskId, error: err.message };
+      this.taskHistory.unshift(taskRecord);
+      if (this.taskHistory.length > this.maxHistory) this.taskHistory.pop();
+      return { success: false, taskId, error: idempotencyRecord.error };
     }
   }
 

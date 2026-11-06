@@ -1,28 +1,22 @@
 # ULTRON AI — REMAINING BLOCKERS & DEPENDENCIES
-**Audit Date:** 2026-11-05T15:38:14.744Z  
+**Audit Date:** 2026-11-06T16:37:55.700Z  
 
 ---
 
-## 1. HARDWARE & EXTERNAL DEPENDENCIES
+## 1. LIVE SERVICE & CLIENT ACCEPTANCE GATES
 
-The following items are completely implemented in software and verified in simulation, but require external physical hardware for physical-world operation:
+The following checks require configured external services or operator-owned devices; no result is inferred from source presence:
 
-1. **Physical Robotics Actuator Pairing:**
-   - Software Status: 100% COMPLETE. Hardware Abstraction Layer, ROS 2 standard topics, latching e-stop, and 3D geofence are verified.
-   - Blocker: Requires physical robot hardware (Unitree, ROS 2 rover) on local network for physical motor actuation.
-
-2. **Physical Smart Home Actuators:**
-   - Software Status: 100% COMPLETE. Read-only telemetry and actuation gating endpoints are verified.
-   - Blocker: Requires pairing physical Matter / Home Assistant bridge.
-
-3. **Render Production Deployment:**
-   - Codebase Status: Clean, verified, and pushed to origin/main.
-   - Blocker: Requires explicit operator deployment authorization before triggering Render build.
+1. **Live AI provider:** Complete an authenticated inference and fallback check with a configured provider.
+2. **Cloud persistence:** Review and apply the missing Supabase schema only after explicit production approval; verify restart durability.
+3. **Windows and Android clients:** Install, pair, verify permissions, ACK, reconnect and revocation on real devices.
+4. **Voice and vision:** Verify real microphone, speaker, camera and screen permission flows on supported devices.
+5. **Production release:** Keep PR #478 unmerged and Render deployment locked until the owner explicitly authorizes it.
 
 ---
 
-## 2. FICTIONAL / PHYSICALLY IMPOSSIBLE ITEMS (HONESTLY IDENTIFIED)
+## 2. PRODUCT BOUNDARIES
 
-1. Fictional sentient AI consciousness: Scientifically non-existent; replaced by deterministic LLM heuristics.
-2. Nanotech physical assembly: Physically impossible with current manufacturing technology.
-3. Unrestricted global network hacking: Barred by ethical guidelines and legal boundaries.
+1. Human-like sentience is not claimed; ULTRON is a software AI system whose outputs depend on configured models and tools.
+2. External actions remain permission-gated, auditable and subject to owner authorization.
+3. Live integrations are reported as unverified until authenticated end-to-end acceptance evidence exists.

@@ -1,5 +1,5 @@
 # ULTRON AI — GAP ANALYSIS REPORT
-**Audit Date:** 2026-11-05T15:38:14.744Z  
+**Audit Date:** 2026-11-06T16:37:55.700Z  
 **Scope:** Fictional Cinematic Reference vs. Real-World Engineering Capabilities  
 
 ---
@@ -7,8 +7,8 @@
 ## 1. SYSTEMIC GAP SUMMARY
 
 Fictional cinematic abilities in Marvel's JARVIS and ULTRON fall into two distinct domains:
-1. **Practical Real-World Software Capabilities (Achieved at 100%):** Natural voice synthesis, emotion understanding, Windows automation, multi-agent DAG orchestration, telephony bridge, multi-device unlock, code sandboxing, and web research.
-2. **Fictional & Physical Limitations (Awaiting External Hardware or Physically Impossible):** Sentient unconstrained consciousness (scientifically non-existent), physical nanotech fabrication (laws of physics), and unauthorized global satellite hacking (strictly prohibited).
+1. **Personal AI Software Capabilities:** Provider-backed intelligence, memory, Windows and Android assistance, multi-agent orchestration, telephony, multi-device coordination, coding tools, and web research. The score below reflects source/test-file presence, not live acceptance.
+2. **Product Boundaries:** Human-like sentience is not claimed; unrestricted access to external systems is excluded; consequential operations remain permission-gated.
 
 ---
 
@@ -23,10 +23,10 @@ Fictional cinematic abilities in Marvel's JARVIS and ULTRON fall into two distin
 - **Known Boundaries:** Cloud LLM latency bounded by network; local CPU Ollama/DSH gateway provides offline fallback.
 
 ### 2. Autonomy and task execution
-- **JARVIS Reference:** Autonomous workshop execution, suit fabrication oversight, and multi-step diagnostic pipelines.
+- **JARVIS Reference:** Autonomous personal-computing workflows, diagnostics, and multi-step task pipelines.
 - **ULTRON Reference:** Full unassisted global initiative, multi-threaded objective decomposition, and resilient execution.
 - **Current Implementation:** 11-stage autonomous task lifecycle (Goal -> Decompose -> Plan -> Tool -> Permission -> Execute -> Observe -> Verify -> Report -> Persist) with durable worker.
-- **Gap Analysis:** Physical suit fabrication requires industrial robotics; software workflow decomposition is fully autonomous.
+- **Gap Analysis:** Physical fabrication is outside the personal AI software scope; task decomposition and bounded software execution remain in scope.
 - **Resolved Upgrade:** Durable background Supabase worker with atomic attempt fences, lease renewals, and 30s idempotency deduplication.
 - **Known Boundaries:** High-risk destructive operations require operator approval and fail closed without explicit consent.
 
@@ -71,10 +71,10 @@ Fictional cinematic abilities in Marvel's JARVIS and ULTRON fall into two distin
 - **Known Boundaries:** Sandbox enforces unprivileged child processes; OS-kernel modifications are strictly prohibited.
 
 ### 8. Agents and orchestration
-- **JARVIS Reference:** Coordination of workshop subsystems (Dum-E, U, automated manufacturing arms, flight stabilizers).
-- **ULTRON Reference:** Decentralized hive-mind coordination of autonomous specialized drone sentries operating in concert.
+- **JARVIS Reference:** Coordination of personal assistant subsystems, tools, background workers, and connected software clients.
+- **ULTRON Reference:** Decentralized coordination of specialized software agents operating in concert.
 - **Current Implementation:** 18 specialized operational agents (`chief-of-staff`, `researcher`, `coder`, `debugger`, `devops`, etc.) with Kahn DAG sorting and DLQ.
-- **Gap Analysis:** Physical drone sentries replaced by specialized autonomous software agents executing parallel DAG tasks.
+- **Gap Analysis:** Specialized autonomous software agents execute permissioned parallel DAG tasks.
 - **Resolved Upgrade:** Kahn topological dependency sorting, upfront cycle detection (`DAG_CYCLE_DETECTED`), and 6-class DLQ retry classification.
 - **Known Boundaries:** Sub-agent branch concurrency is bounded to 4 parallel processes to preserve 8 GB host RAM headroom.
 
@@ -88,22 +88,22 @@ Fictional cinematic abilities in Marvel's JARVIS and ULTRON fall into two distin
 
 ### 10. Creative capabilities
 - **JARVIS Reference:** Holographic graphic rendering, visual layout generation, architectural schematic drafts for Stark Tower.
-- **ULTRON Reference:** Robotic chassis visual design, tactical structural modification concepts, and multimedia broadcasting.
+- **ULTRON Reference:** Advanced visual design, digital content workflows, and multimedia broadcasting.
 - **Current Implementation:** Autonomous video editor (6 cinematic presets, beat grid alignment, SRT/VTT subtitles), SVG thumbnail studio, 12-step autonomous production.
 - **Gap Analysis:** CGI holographic projection replaced by high-performance SVG graphics and hardware-bounded FFmpeg video exports.
 - **Resolved Upgrade:** Single-pass FFmpeg rendering with `-threads 4` bounded for Ryzen 7 5700U with 8 GB RAM.
 - **Known Boundaries:** FFmpeg rendering is bounded to 4 threads to prevent host RAM starvation and CPU overheating.
 
 ### 11. Device and environment integration
-- **JARVIS Reference:** Stark Mansion smart home automation, security door locks, phone access, Mark suit telemetry.
+- **JARVIS Reference:** Personal smart-home integrations, access controls, phone connectivity, and device telemetry.
 - **ULTRON Reference:** Distributed control across internet connected machines, automated facilities, and remote terminals.
 - **Current Implementation:** Inbound cellular telephone call gateway (G.711 μ-law) with DTMF PIN, 3-Android phone fleet unlock, ADB automation bridge, YouTube fleet streaming.
-- **Gap Analysis:** Fictional satellite hijacking replaced by carrier webhook integration, authorized ADB bridges, and signed companion tokens.
+- **Gap Analysis:** Unsupported global control is excluded; device operations use authenticated carrier webhooks, authorized ADB bridges, and signed companion tokens.
 - **Resolved Upgrade:** Caller ID allowlisting, 4-digit DTMF PIN challenge (3-attempt lockout), and simultaneous multi-device WebSocket dispatch.
 - **Known Boundaries:** Android ADB bridge requires USB debugging or pairing PIN; physical devices must be on the authorized local subnet.
 
 ### 12. Strategic intelligence
-- **JARVIS Reference:** Tactical combat calculations, power distribution strategies during armor flight, risk assessment.
+- **JARVIS Reference:** Strategic planning, resource allocation, risk assessment, and contingency analysis.
 - **ULTRON Reference:** Global strategic chess-match foresight, multi-branch contingent planning, resource optimization.
 - **Current Implementation:** `chief-of-staff` and `architect` strategic agent roles, 6-level autonomy policies (0-5), Kahn DAG branch cancellation, resource budgeting.
 - **Gap Analysis:** Sci-fi hostile global domination translated into legitimate, permission-controlled project-level strategic planning.
@@ -111,7 +111,7 @@ Fictional cinematic abilities in Marvel's JARVIS and ULTRON fall into two distin
 - **Known Boundaries:** Autonomous actions exceeding configured autonomy level require explicit user sign-off.
 
 ### 13. Self-monitoring and improvement
-- **JARVIS Reference:** Armor damage diagnostics, power core depletion warnings, self-reboot routines, and system status readouts.
+- **JARVIS Reference:** System health diagnostics, resource depletion warnings, recovery routines, and operational status readouts.
 - **ULTRON Reference:** Constant algorithmic self-evolution, adapting to adversary counter-measures, self-repair routines.
 - **Current Implementation:** Proactive monitoring daemon (RAM > 85%, battery < 20% alerts), SelfImprovementEngine failure ledger, runtime readiness doctor, 226-file syntax check.
 - **Gap Analysis:** Unconstrained self-reprogramming bounded by security policy guards to protect core invariants.
@@ -121,7 +121,7 @@ Fictional cinematic abilities in Marvel's JARVIS and ULTRON fall into two distin
 ### 14. Security and reliability
 - **JARVIS Reference:** Stark security firewalls, biometric voice recognition, defense against hostile corporate infiltration.
 - **ULTRON Reference:** Cryptographic resilience, fault-tolerant distributed presence, instant process recovery.
-- **Current Implementation:** Supabase JWT session auth, owner UUID gating (`ULTRON_OWNER_ONLY`), DNS-pinned fetch (SSRF/rebinding defense), latching e-stop, offline-first controller.
+- **Current Implementation:** Supabase JWT session auth, owner UUID gating (`ULTRON_OWNER_ONLY`), DNS-pinned fetch (SSRF/rebinding defense), owner-authorized task stop, offline-first controller.
 - **Gap Analysis:** Fictional unhackable cyber-shields replaced by empirical defense-in-depth security best practices.
-- **Resolved Upgrade:** Target scope enforcement, static secret scanner, latching e-stop with token, and offline sync queue.
+- **Resolved Upgrade:** Target scope enforcement, static secret scanner, owner-authorized task cancellation, and offline sync queue.
 - **Known Boundaries:** Public cloud egress blocked in OFFLINE mode; private IP ranges (RFC 1918/4193) strictly barred from outbound fetching.

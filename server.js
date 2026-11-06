@@ -23,6 +23,7 @@ import { createMobileRouter } from "./mobile/mobile-router.js";
 import { createCompanionRouter } from "./system/companion-router.js";
 import { deviceWebSocketGateway } from "./integrations/device-websocket-gateway.js";
 import { deviceNetworkingManager } from "./integrations/device-networking.js";
+import { proactiveDaemon } from "./system/proactive-daemon.js";
 
 const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
 const SESSION_COOKIE = "ultron_session";
@@ -713,9 +714,34 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
     res.append("Set-Cookie", `ultron_sb_refresh=${encodeURIComponent(refresh)}; ${cookieOptions(60 * 60 * 24 * 30)}`);
     return true;
   }
+  function configuredOwnerUserId() {
+    return String(env.ULTRON_OWNER_USER_ID || env.ULTRON_INTEGRATION_OWNER_USER_ID || "").trim();
+  }
+  function personalAiModeEnabled() {
+    // ULTRON is a private single-owner service in production by default.
+    // Missing owner configuration must never silently turn a production instance
+    // into a public multi-account service.
+    return String(env.NODE_ENV || "").toLowerCase() === "production" ||
+      ["true", "1"].includes(String(env.ULTRON_PERSONAL_AI_MODE || "").toLowerCase()) ||
+      ["true", "1"].includes(String(env.ULTRON_SINGLE_OWNER || "").toLowerCase()) ||
+      ["true", "1"].includes(String(env.ULTRON_DISABLE_PUBLIC_SIGNUP || "").toLowerCase());
+  }
+  function ownerAuthorizationError(userId) {
+    const ownerUserId = configuredOwnerUserId();
+    if (ownerUserId && userId !== ownerUserId) {
+      return { status: 403, body: { error: { code: "ULTRON_OWNER_ONLY", message: "Access restricted: this ULTRON instance belongs exclusively to its registered owner." } } };
+    }
+    if (personalAiModeEnabled() && !ownerUserId) {
+      return { status: 503, body: { error: { code: "OWNER_NOT_CONFIGURED", message: "Personal AI mode is active but owner user ID is not configured." } } };
+    }
+    return null;
+  }
+
   async function requireSupabaseUser(req, res, next) {
     const user = await getSupabaseUser(req, res);
     if (!user) return res.status(401).json({ error: { code: "SUPABASE_AUTH_REQUIRED", message: "Sign in to your ULTRON account to use saved data." } });
+    const ownerError = ownerAuthorizationError(user.id);
+    if (ownerError) return res.status(ownerError.status).json(ownerError.body);
     req.supabaseUser = user;
     next();
   }
@@ -788,6 +814,18 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
     return payload;
   }
 
+  function safeTimingCompare(a, b) {
+    if (typeof a !== "string" || typeof b !== "string") return false;
+    try {
+      const bufA = Buffer.from(a);
+      const bufB = Buffer.from(b);
+      if (bufA.length !== bufB.length) return false;
+      return crypto.timingSafeEqual(bufA, bufB);
+    } catch {
+      return false;
+    }
+  }
+
   function sessionSecret() {
     return env.SESSION_SECRET || env.APP_ACCESS_PASSWORD || "";
   }
@@ -796,8 +834,19 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
     return Boolean(env.APP_ACCESS_PASSWORD && secret && verifySession(parseCookies(req.headers.cookie)[SESSION_COOKIE], secret));
   }
   async function requireSession(req, res, next) {
+    // A valid local access-password session is the explicit single-owner
+    // access path. Supabase sessions must additionally pass owner identity
+    // enforcement here; do not let requireSession routes bypass the owner gate.
     if (hasValidSession(req)) return next();
-    if (await getSupabaseUser(req, res)) return next();
+
+    const user = await getSupabaseUser(req, res);
+    if (user) {
+      const ownerError = ownerAuthorizationError(user.id);
+      if (ownerError) return res.status(ownerError.status).json(ownerError.body);
+      req.supabaseUser = user;
+      return next();
+    }
+
     if (!env.APP_ACCESS_PASSWORD && !supabaseConfig()) {
       return res.status(503).json({ error: { code: "ACCESS_NOT_CONFIGURED", message: "Configure Supabase URL and publishable key, or set APP_ACCESS_PASSWORD and SESSION_SECRET." } });
     }
@@ -885,12 +934,43 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
     if (!configured) return res.status(503).json({ authenticated: false, configured: false });
     if (hasValidSession(req)) return res.json({ authenticated: true, configured: true, authType: "access_gate" });
     const user = await getSupabaseUser(req, res);
-    res.json({ authenticated: Boolean(user), configured: true, authType: user ? "supabase" : null, email: user?.email || null });
+    if (!user) return res.json({ authenticated: false, configured: true, authType: null, email: null });
+    const ownerError = ownerAuthorizationError(user.id);
+    if (ownerError) {
+      return res.status(ownerError.status).json({
+        authenticated: false,
+        configured: true,
+        error: ownerError.body.error.code
+      });
+    }
+    return res.json({ authenticated: true, configured: true, authType: "supabase", email: user.email || null });
   });
 
   const authRateLimiter = createAuthRateLimiter();
 
   app.post("/api/auth/signup", authRateLimiter, async (req, res) => {
+    if (configuredOwnerUserId()) {
+      // The bootstrap credential is only for creating the initial owner account.
+      // Once an owner UUID is configured, no additional accounts may be created.
+      return res.status(403).json({
+        error: {
+          code: "SIGNUP_DISABLED",
+          message: "The ULTRON owner is already configured; additional account signup is disabled."
+        }
+      });
+    }
+    if (personalAiModeEnabled() || env.ULTRON_OWNER_BOOTSTRAP_TOKEN) {
+      const bootstrapToken = String(req.headers["x-ultron-bootstrap-token"] || req.body?.bootstrapToken || "").trim();
+      const expectedToken = String(env.ULTRON_OWNER_BOOTSTRAP_TOKEN || "").trim();
+      if (!expectedToken || !bootstrapToken || !safeTimingCompare(bootstrapToken, expectedToken)) {
+        return res.status(403).json({
+          error: {
+            code: "SIGNUP_DISABLED",
+            message: "Public signup is disabled. ULTRON is an exclusive personal AI system reserved for its single owner."
+          }
+        });
+      }
+    }
     const email = typeof req.body?.email === "string" ? req.body.email.trim().slice(0, 320) : "";
     const password = typeof req.body?.password === "string" ? req.body.password : "";
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || password.length < 8 || password.length > 256) {
@@ -2090,6 +2170,10 @@ if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToP
     worker = startWorker();
     app.locals.workerRuntime = worker.getStatus;
   }
+  if (process.env.ULTRON_PROACTIVE_DAEMON_ENABLED !== "false") {
+    proactiveDaemon.start();
+    console.log("ULTRON Proactive Living Assistant Daemon started (vitals & anomaly monitoring).");
+  }
 
   let shutdownStarted = false;
   const shutdown = signal => {
@@ -2097,6 +2181,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToP
     shutdownStarted = true;
     console.info(`ULTRON AI received ${signal}; draining HTTP connections and stopping background work.`);
     worker?.stop();
+    proactiveDaemon.stop();
     deviceWebSocketGateway.close();
     httpServer.close(error => {
       if (error) {

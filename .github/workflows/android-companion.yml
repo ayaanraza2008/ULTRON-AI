@@ -1,5 +1,10 @@
 name: ULTRON Android Companion
 
+# Keep only the newest validation run for this branch; stale push/PR runs waste runners.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [main, "feat/**"]

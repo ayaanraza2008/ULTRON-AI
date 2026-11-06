@@ -42,6 +42,15 @@ test("JARVIS routes fail closed when the owner account is not configured", async
   });
 });
 
+test("JARVIS accepts the canonical ULTRON_OWNER_USER_ID setting", async () => {
+  await withRouter({
+    env: { ULTRON_OWNER_USER_ID: "owner-user" }
+  }, async base => {
+    const response = await fetch(base + "/api/jarvis/agents");
+    assert.equal(response.status, 200);
+  });
+});
+
 test("JARVIS routes reject authenticated users other than the configured owner", async () => {
   await withRouter({
     env: { ULTRON_INTEGRATION_OWNER_USER_ID: "owner-user" },
@@ -290,8 +299,11 @@ test("JARVIS exposes live 100% capability benchmark to configured owner", async 
     assert.equal(res.status, 200);
     const body = await res.json();
     assert.equal(body.status, "ok");
-    assert.equal(body.evaluation.totalWeightedScore, 100);
-    assert.equal(body.evaluation.overallStatus, "VERIFIED_100_PERCENT");
+    assert.equal(body.evaluation.maxPossibleScore, 100);
+    assert.ok(body.evaluation.totalInventoryCoveragePercent >= 0 && body.evaluation.totalInventoryCoveragePercent <= 100);
+    assert.ok(["SOURCE_TEST_INVENTORY_COMPLETE", "SOURCE_TEST_INVENTORY_INCOMPLETE"].includes(body.evaluation.overallStatus));
+    assert.equal(body.evaluation.runtimeVerificationStatus, "NOT_EVALUATED");
+    assert.equal(body.evaluation.liveIntegrationStatus, "NOT_EVALUATED");
     assert.equal(body.evaluation.categoriesCount, 14);
   });
 });
@@ -305,10 +317,14 @@ test("JARVIS exposes live JARVIS + ULTRON capability comparator to configured ow
     assert.equal(res.status, 200);
     const body = await res.json();
     assert.equal(body.status, "ok");
-    assert.equal(body.evaluation.totalMaturityScore, 100);
-    assert.equal(body.evaluation.status, "VERIFIED_100_PERCENT");
-    assert.ok(body.evaluation.jarvisAlignmentScore > 85);
-    assert.ok(body.evaluation.ultronAlignmentScore > 80);
+    assert.equal(body.evaluation.maxPossibleScore, 100);
+    assert.ok(body.evaluation.totalInventoryCoveragePercent >= 0 && body.evaluation.totalInventoryCoveragePercent <= 100);
+    assert.ok(["SOURCE_TEST_INVENTORY_COMPLETE", "SOURCE_TEST_INVENTORY_INCOMPLETE"].includes(body.evaluation.status));
+    assert.equal(body.evaluation.jarvisAlignmentScore, null);
+    assert.equal(body.evaluation.ultronAlignmentScore, null);
+    assert.equal(body.evaluation.alignmentAssessment, "NOT_MEASURED");
+    assert.equal(body.evaluation.runtimeVerificationStatus, "NOT_EVALUATED");
+    assert.equal(body.evaluation.liveIntegrationStatus, "NOT_EVALUATED");
     assert.equal(body.evaluation.categoriesCount, 14);
   });
 });

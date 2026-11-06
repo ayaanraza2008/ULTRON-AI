@@ -86,3 +86,18 @@ test("Code Shield: Real tool-backed npm audit dependency vulnerability analysis"
   assert.ok(Array.isArray(report.findings));
   assert.ok(typeof report.isSecure === "boolean");
 });
+
+
+test("Code Shield: parameterized SQL with dynamic bind values is not reported as injection", () => {
+  const shield = new CodeShield();
+  const safeCode = 'await client.query("SELECT * FROM state WHERE key = $1", ["state:" + stateKey]);';
+  const report = shield.scanSourceCode(safeCode, { target: "localhost" });
+  assert.equal(report.findings.some(f => f.cwe === "CWE-89"), false);
+});
+
+test("Code Shield: SQL template interpolation in the query argument is reported", () => {
+  const shield = new CodeShield();
+  const vulnerableCode = 'await db.query(`SELECT * FROM users WHERE id = ${userId}`);';
+  const report = shield.scanSourceCode(vulnerableCode, { target: "localhost" });
+  assert.ok(report.findings.some(f => f.cwe === "CWE-89" && f.severity === "CRITICAL"));
+});
