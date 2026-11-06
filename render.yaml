@@ -188,7 +188,7 @@ services:
     plan: free
     region: singapore
     branch: main
-    buildCommand: cd rea-gateway && npm install --omit=dev && npm ls zod --all && npm audit --omit=dev --audit-level=high
+    buildCommand: cd rea-gateway && npm install --omit=dev && npm ls zod glob minimatch --all && npm audit --omit=dev --audit-level=low
     startCommand: cd rea-gateway && npm start
     healthCheckPath: /healthz
     autoDeployTrigger: commit
