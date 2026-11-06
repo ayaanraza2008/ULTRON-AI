@@ -351,7 +351,7 @@ export class JarvisUltronCapabilityComparator {
       `# ULTRON AI — JARVIS + ULTRON MASTER CAPABILITY BENCHMARK`,
       `**Timestamp:** ${evaluation.timestamp}  `,
       `**Source/Test Inventory Coverage:** **${evaluation.totalInventoryCoveragePercent}% / 100%**  `,
-      `**JARVIS Alignment:** **${NOT_MEASURED** | **Marvel ULTRON Alignment:** **${NOT_MEASURED**  `,
+      "**JARVIS Alignment:** NOT MEASURED | **Marvel ULTRON Alignment:** NOT MEASURED  ",
       ``,
       `---`,
       ``,
@@ -363,7 +363,7 @@ export class JarvisUltronCapabilityComparator {
 
     evaluation.categories.forEach((c, idx) => {
       benchmarkMd.push(
-        `| ${idx + 1} | **${c.name}** | ${c.weight}% | ${NOT_MEASURED | ${NOT_MEASURED | ${c.inventoryCoveragePercent}% | \`${c.implementationStatus}\` |`
+        `| ${idx + 1} | **${c.name}** | ${c.weight}% | NOT MEASURED | NOT MEASURED | ${c.inventoryCoveragePercent}% | \\`${c.implementationStatus}\\` |`
       );
     });
 
