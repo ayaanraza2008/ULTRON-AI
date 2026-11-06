@@ -43,3 +43,18 @@ test("Windows native task output is limited to processes launched and tracked by
   assert.match(implementation, /TASK_NOT_FOUND/);
   assert.match(source, /while \(CompletedTaskOrder\.Count > 100/);
 });
+
+test("Windows native app launch checks the command ID before starting a process", async () => {
+  const source = await readFile(new URL("../windows-companion/RemoteCommandExecutor.cs", import.meta.url), "utf8");
+  const start = source.indexOf("private static object LaunchApp");
+  const end = source.indexOf("private static void RememberTaskResult", start);
+  assert.ok(start >= 0 && end > start, "app launcher implementation must exist");
+  const implementation = source.slice(start, end);
+  const processStart = implementation.indexOf("Process.Start(");
+
+  assert.ok(processStart > 0, "app launch must use Process.Start");
+  assert.ok(implementation.indexOf("lock (LaunchAppLock)") < processStart);
+  assert.ok(implementation.indexOf("TrackedProcesses.TryGetValue(taskId") < processStart);
+  assert.ok(implementation.indexOf("CompletedTaskResults.TryGetValue(taskId") < processStart);
+  assert.match(implementation, /duplicateSuppressed = true/);
+});
