@@ -104,8 +104,10 @@ export class RemoteTaskOrchestrator {
           } else {
             executionResult = { success: false, error: "WINDOWS_AGENT_UNAVAILABLE", message: "Windows desktop companion is not connected or registered." };
           }
-          if (executionResult && executionResult.success !== false) {
-            reportStep("Step 3: Workstation locked.");
+          if (executionResult && executionResult.success !== false && executionResult.simulated === true) {
+            reportStep("Step 3: Lock request simulated; no real Windows workstation was locked.");
+          } else if (executionResult && executionResult.success !== false) {
+            reportStep("Step 3: Windows agent confirmed the workstation lock request.");
           } else {
             reportStep("Step 3: Failed to lock workstation: " + (executionResult?.message || executionResult?.error));
           }
@@ -146,19 +148,26 @@ export class RemoteTaskOrchestrator {
           reportStep("Step 2: Querying Windows PC storage and hardware headroom...");
           if (this.windowsDesktopAgent) {
             const vitals = await this.windowsDesktopAgent.getSystemVitals();
-            const canRun = (vitals?.storageAvailableGb || 0) > 10;
+            const storageAvailableGb = Number(vitals?.storageAvailableGb);
+            const storageCheckAvailable = Number.isFinite(storageAvailableGb) && storageAvailableGb >= 0;
+            const canRun = storageCheckAvailable ? storageAvailableGb > 10 : null;
             executionResult = {
               success: true,
-              storageAvailableGb: vitals?.storageAvailableGb,
+              storageAvailableGb: storageCheckAvailable ? storageAvailableGb : null,
               ramUsedPercent: vitals?.ramUsedPercent,
+              storageCheckAvailable,
               canRun,
-              verdict: canRun
-                ? `You have ${vitals?.storageAvailableGb} GB of free storage. Your project has ample space and is ready to run.`
-                : `Storage is critically low (${vitals?.storageAvailableGb} GB). Free up disk space before execution.`
+              verdict: canRun === true
+                ? `Free storage (${storageAvailableGb} GB) exceeds the 10 GB threshold; other run prerequisites remain unverified.`
+                : canRun === false
+                  ? `Free storage (${storageAvailableGb} GB) is below the 10 GB threshold.`
+                  : "Free storage could not be measured; PC runnability remains unverified."
             };
-            reportStep(executionResult.canRun
-              ? "Step 3: Storage exceeds the configured minimum."
-              : "Step 3: Storage is below the configured minimum; the PC is not reported as runnable.");
+            reportStep(canRun === true
+              ? "Step 3: Storage exceeds the configured minimum; other prerequisites remain unverified."
+              : canRun === false
+                ? "Step 3: Storage is below the configured minimum; the PC is not reported as runnable."
+                : "Step 3: Free storage could not be measured; PC runnability remains unverified.");
           } else {
             executionResult = { success: false, error: "WINDOWS_AGENT_UNAVAILABLE", message: "Windows desktop companion is not connected or registered." };
             reportStep("Step 3: Storage check failed: Windows companion unavailable.");
@@ -167,7 +176,7 @@ export class RemoteTaskOrchestrator {
         }
 
         case "CHECK_PROJECT_TESTS": {
-          reportStep("Step 2: Inspecting ULTRON AI repository and running test diagnostics...");
+          reportStep("Step 2: Inspecting repository metadata; this operation does not run the test suite.");
           if (this.windowsDesktopAgent) {
             executionResult = await this.windowsDesktopAgent.checkProjectStatus();
             reportStep(executionResult?.success === false

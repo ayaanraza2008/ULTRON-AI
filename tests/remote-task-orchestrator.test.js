@@ -38,7 +38,9 @@ test("RemoteTaskOrchestrator: Executes storage diagnostics and checks project ru
   assert.equal(outcome.success, true);
   assert.equal(vitalsQueried, true);
   assert.equal(outcome.result.canRun, true);
+  assert.equal(outcome.result.storageCheckAvailable, true);
   assert.equal(outcome.result.storageAvailableGb, 180);
+  assert.match(outcome.result.verdict, /other run prerequisites remain unverified/i);
   assert.ok(progressSteps.length >= 2);
   assert.equal(orchestrator.getTaskHistory().length, 1);
 });
@@ -124,4 +126,40 @@ test("RemoteTaskOrchestrator: Does not report a failed Windows application launc
   assert.equal(outcome.success, false);
   assert.equal(outcome.error, "APP_NOT_ALLOWED");
   assert.match(outcome.progressSteps.at(-1).description, /launch failed/i);
+});
+
+
+test("RemoteTaskOrchestrator: Reports unavailable storage as unverified instead of zero or low", async () => {
+  const orchestrator = new RemoteTaskOrchestrator({
+    windowsDesktopAgent: {
+      getSystemVitals: async () => ({ storageAvailableGb: null, ramUsedPercent: 51 })
+    }
+  });
+  const outcome = await orchestrator.executeRemoteTask({
+    callerId: "owner-call-03",
+    isOwner: true,
+    action: "CHECK_STORAGE_AND_RUNNABILITY"
+  });
+
+  assert.equal(outcome.success, true);
+  assert.equal(outcome.result.storageCheckAvailable, false);
+  assert.equal(outcome.result.canRun, null);
+  assert.match(outcome.result.verdict, /could not be measured/i);
+  assert.match(outcome.progressSteps.at(-1).description, /remains unverified/i);
+});
+
+test("RemoteTaskOrchestrator: Does not claim a simulated non-Windows lock locked the workstation", async () => {
+  const orchestrator = new RemoteTaskOrchestrator({
+    windowsDesktopAgent: {
+      lockScreen: async () => ({ success: true, simulated: true })
+    }
+  });
+  const outcome = await orchestrator.executeRemoteTask({
+    callerId: "owner-call-04",
+    isOwner: true,
+    action: "LOCK_PC_SCREEN"
+  });
+
+  assert.equal(outcome.success, true);
+  assert.match(outcome.progressSteps.at(-1).description, /simulated; no real Windows workstation was locked/i);
 });

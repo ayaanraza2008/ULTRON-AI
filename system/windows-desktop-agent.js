@@ -74,7 +74,7 @@ export class WindowsDesktopAgent {
   }
 
   /**
-   * Unlocks the PC screen and transitions the Cyber-HUD to glowing active orange state.
+   * Refuses remote unlock: Windows sign-in must be completed through local authentication.
    */
   async unlockScreen() {
     return {
@@ -176,7 +176,7 @@ export class WindowsDesktopAgent {
   }
 
   /**
-   * Runs safe project diagnostics on the ULTRON AI repository.
+   * Inspects project metadata and Git state without executing tests or claiming test health.
    */
   async checkProjectStatus() {
     const task = {
