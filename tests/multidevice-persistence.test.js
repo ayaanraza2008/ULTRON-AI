@@ -178,7 +178,19 @@ test("DatabasePersistenceAdapter: automatic fallback to FilePersistenceAdapter w
     const saveOutcome = await adapter.save(testData);
     assert.equal(saveOutcome.success, true);
     assert.equal(saveOutcome.backend, "fallback_file");
+    assert.equal(saveOutcome.cloudPersisted, false, "A local fallback must never be reported as cloud durable");
+    assert.equal(saveOutcome.fallbackPersisted, true, "The local recovery copy must be confirmed separately");
     assert.ok(fs.existsSync(fallbackFile), "Fallback file must be created on DB error");
+
+    const sharedStateOutcome = await adapter.saveSharedState({
+      stateKey: "fallback-theme",
+      payload: { mode: "dark" },
+      expectedVersion: 0
+    });
+    assert.equal(sharedStateOutcome.success, true);
+    assert.equal(sharedStateOutcome.backend, "file");
+    assert.equal(sharedStateOutcome.cloudPersisted, false);
+    assert.equal(sharedStateOutcome.warning, "DATABASE_WRITE_FAILED");
 
     // Load should read from fallback file
     const loadedData = await adapter.load();
@@ -188,6 +200,28 @@ test("DatabasePersistenceAdapter: automatic fallback to FilePersistenceAdapter w
   } finally {
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
   }
+});
+
+test("DatabasePersistenceAdapter: failed local fallback is not reported as a successful save", async () => {
+  const adapter = new DatabasePersistenceAdapter({
+    fallbackAdapter: {
+      async save() { return false; },
+      async load() { return null; }
+    }
+  });
+
+  const outcome = await adapter.save({
+    devices: [],
+    sharedState: [],
+    pendingDeliveries: [],
+    revokedDevices: []
+  });
+
+  assert.equal(outcome.success, false);
+  assert.equal(outcome.backend, "unavailable");
+  assert.equal(outcome.cloudPersisted, false);
+  assert.equal(outcome.fallbackPersisted, false);
+  assert.equal(outcome.note, "no_db_configured");
 });
 
 test("createMultiDevicePersistenceAdapter factory instantiates correct backend", () => {
