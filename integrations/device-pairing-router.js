@@ -440,6 +440,27 @@ export function createDevicePairingRouter({
       if (!Array.isArray(rows) || !rows[0]?.id) {
         return res.status(404).json({ error: { code: "DEVICE_NOT_FOUND", message: "No device with that ID belongs to this account." } });
       }
+
+      // Keep the in-process credential cache aligned with the database and
+      // invalidate every already-authenticated transport for the old token.
+      const inMemoryDevice = deviceHubInstance.pairedDevices.get(rows[0].id);
+      if (inMemoryDevice && inMemoryDevice.ownerUserId === ownerId) {
+        inMemoryDevice.authToken = token;
+        inMemoryDevice.tokenHash = tokenHash(token);
+        inMemoryDevice.tokenPrefix = token.slice(0, 20);
+        inMemoryDevice.encryptedAuthToken = null;
+        inMemoryDevice.status = "active";
+        inMemoryDevice.revokedAt = null;
+        inMemoryDevice.online = false;
+        inMemoryDevice.lastSeenAt = null;
+        deviceHubInstance.saveToDisk();
+      }
+      deviceHubInstance.emitEvent?.({
+        type: "DEVICE_CREDENTIALS_ROTATED",
+        deviceId: rows[0].id,
+        ownerUserId: ownerId
+      });
+
       res.setHeader("Cache-Control", "no-store");
       return res.json({ deviceId: rows[0].id, deviceToken: token, rotated: true });
     } catch (error) {
@@ -461,6 +482,16 @@ export function createDevicePairingRouter({
       if (!Array.isArray(rows) || !rows[0]?.id) {
         return res.status(404).json({ error: { code: "DEVICE_NOT_FOUND", message: "No device with that ID belongs to this account." } });
       }
+
+      // Revoke the in-memory identity and close authenticated WebSocket/SSE
+      // sessions immediately; database rejection alone affects only reconnects.
+      deviceHubInstance.revokeDevice(rows[0].id, ownerId);
+      deviceHubInstance.emitEvent?.({
+        type: "DEVICE_REVOKED",
+        deviceId: rows[0].id,
+        ownerUserId: ownerId
+      });
+
       res.json({ ok: true, revoked: true, deviceId: rows[0].id });
     } catch (error) {
       res.status(error.status || 502).json({ error: { code: error.code || "DEVICE_REVOKE_FAILED", message: error.message } });
