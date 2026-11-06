@@ -110,6 +110,7 @@ test("RemoteTaskOrchestrator: Fails closed with WINDOWS_AGENT_UNAVAILABLE when c
   });
   assert.equal(resStop.success, false);
   assert.equal(resStop.error, "WINDOWS_AGENT_UNAVAILABLE");
+  assert.match(resStop.message, /No device received an emergency stop command/);
 });
 
 
