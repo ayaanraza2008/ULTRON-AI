@@ -75,7 +75,8 @@ function makeDatabase() {
         token_hash: pairing.token_hash,
         token_prefix: pairing.token_prefix,
         status: "active",
-        last_seen_at: new Date().toISOString(),
+        // A claimed pairing is not proof that the companion has connected.
+        last_seen_at: null,
         paired_at: new Date().toISOString(),
         revoked_at: null
       };
@@ -283,6 +284,11 @@ test("device-pairing migration installs an atomic single-use claim function rest
   assert.match(telemetryMigration, /add column if not exists battery_percent smallint/i);
   assert.match(telemetryMigration, /battery_percent between 0 and 100/i);
   assert.match(telemetryMigration, /add column if not exists is_charging boolean/i);
+
+  const presenceMigration = await readFile(new URL("../supabase/migrations/20261106130200_paired_device_online_requires_heartbeat.sql", import.meta.url), "utf8");
+  assert.match(presenceMigration, /alter column last_seen_at drop not null/i);
+  assert.match(presenceMigration, /alter column last_seen_at drop default/i);
+  assert.match(presenceMigration, /last_seen_at\s*,[\s\S]*?now\(\)\s*,/i);
 });
 
 
@@ -319,6 +325,8 @@ test("paired device self status and heartbeat are owner-scoped and update durabl
     assert.equal(status.devices.length, 2);
     assert.ok(status.devices.some(device => device.id === windows.deviceId));
     assert.equal(status.devices.some(device => device.name === "Other Owner Windows"), false);
+    assert.equal(status.devices.find(device => device.id === android.deviceId).online, false);
+    assert.equal(status.devices.find(device => device.id === windows.deviceId).online, false);
 
     const heartbeatResponse = await fetch(base + "/devices/me/heartbeat", {
       method: "POST",
@@ -330,6 +338,15 @@ test("paired device self status and heartbeat are owner-scoped and update durabl
     const stored = db.devices.get(android.deviceId);
     assert.equal(stored.battery_percent, 73);
     assert.equal(stored.is_charging, true);
+    assert.ok(stored.last_seen_at);
+
+    const refreshedStatusResponse = await fetch(base + "/devices/me", {
+      headers: { "x-device-token": android.deviceToken }
+    });
+    assert.equal(refreshedStatusResponse.status, 200);
+    const refreshedStatus = await refreshedStatusResponse.json();
+    assert.equal(refreshedStatus.devices.find(device => device.id === android.deviceId).online, true);
+    assert.equal(refreshedStatus.devices.find(device => device.id === windows.deviceId).online, false);
     assert.equal(hub.pairedDevices.size, 1);
   }, ENV, hub);
 });
