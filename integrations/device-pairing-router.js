@@ -491,11 +491,13 @@ export function createDevicePairingRouter({
         inMemoryDevice.encryptedAuthToken = null;
         inMemoryDevice.status = "active";
         inMemoryDevice.revokedAt = null;
-        deviceHubInstance.revokedDevices?.delete(rows[0].id);
         inMemoryDevice.online = false;
         inMemoryDevice.lastSeenAt = null;
         deviceHubInstance.saveToDisk();
       }
+      // The database rotation is authoritative even if this process has no
+      // cached device object; clear any stale local revocation tombstone.
+      deviceHubInstance.revokedDevices?.delete(rows[0].id);
       deviceHubInstance.emitEvent?.({
         type: "DEVICE_CREDENTIALS_ROTATED",
         deviceId: rows[0].id,
