@@ -1586,6 +1586,14 @@ export function createJarvisRouter({
       if (!raw) {
         return res.status(400).json({ error: { message: "Command text is required." } });
       }
+      if (raw.length > 4000) {
+        return res.status(413).json({
+          error: {
+            code: "COMMAND_TOO_LARGE",
+            message: "Command text must be 4,000 characters or fewer."
+          }
+        });
+      }
 
       const lower = raw.toLowerCase();
       const detectedLang = brain.detectLanguage ? brain.detectLanguage(raw) : language;
