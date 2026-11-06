@@ -280,3 +280,26 @@ test("Production disables process-local DeviceHub pairing and security lifecycle
     }
   });
 });
+
+
+test("Production rejects the legacy static desktop token and requires per-device Supabase authentication", async () => {
+  const productionEnv = {
+    NODE_ENV: "production",
+    ULTRON_INTEGRATION_OWNER_USER_ID: "owner-user",
+    ULTRON_DESKTOP_AGENT_TOKEN: "legacy-static-desktop-token",
+    ULTRON_ALLOW_LEGACY_DEVICEHUB_AUTH: "true"
+  };
+  await withDeviceRouter({ env: productionEnv }, async base => {
+    const response = await fetch(base + "/api/jarvis/devices/my/heartbeat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-device-token": "legacy-static-desktop-token"
+      },
+      body: JSON.stringify({ online: true })
+    });
+    assert.equal(response.status, 401);
+    const payload = await response.json();
+    assert.equal(payload.error.code, "INVALID_DEVICE_TOKEN");
+  });
+});

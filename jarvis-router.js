@@ -170,7 +170,7 @@ export function createJarvisRouter({
 
       // A single static desktop token is retained only as an explicit legacy
       // migration path. New devices must use the per-device stored token hash.
-      if (env.ULTRON_DESKTOP_AGENT_TOKEN && deviceToken === env.ULTRON_DESKTOP_AGENT_TOKEN) {
+      if (env.NODE_ENV !== "production" && env.ULTRON_DESKTOP_AGENT_TOKEN && deviceToken === env.ULTRON_DESKTOP_AGENT_TOKEN) {
         req.device = deviceHubInstance.importPairedDevice({
           id: "legacy-companion-device",
           ownerUserId,
