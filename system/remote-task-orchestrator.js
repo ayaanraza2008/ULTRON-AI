@@ -61,7 +61,9 @@ export class RemoteTaskOrchestrator {
         taskId: existingRequest.taskId,
         status: existingRequest.status,
         ...(existingRequest.result === null ? {} : { result: existingRequest.result }),
-        ...(existingRequest.error ? { error: existingRequest.error } : {}),
+        ...(existingRequest.error
+          ? { error: existingRequest.error }
+          : existingRequest.status === "RUNNING" ? { error: "DUPLICATE_TASK_IN_PROGRESS" } : {}),
         message
       };
     }
