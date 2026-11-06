@@ -6,7 +6,7 @@ Repository: https://github.com/mohammedayanrafiq/JARVIS-ULTIMATE
 Audited revision: `a1aea5cbc3b92831b51de2b01e07d7e1b26cd6aa`  
 License: MIT
 
-The existing ULTRON desktop-companion implementation documents adaptation of selected desktop-orb and window-management concepts from JARVIS-ULTIMATE. This notice preserves the upstream copyright and license terms. ULTRON does not import JARVIS's arbitrary shell-command execution path or its RMS-volume-as-wake-word behavior.
+No JARVIS source code or assets are copied in this integration. ULTRON already had its desktop companion, orb positioning, tray, and window-management behavior; those existing implementations are retained. This notice records the upstream MIT license reviewed during the audit, not a claim that ULTRON redistributes a JARVIS-derived code portion. JARVIS's arbitrary shell-command execution path and RMS-volume-as-wake-word behavior are not imported.
 
 ```
 MIT License
