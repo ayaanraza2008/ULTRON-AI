@@ -40,7 +40,7 @@ The Supabase security advisor reports leaked-password protection disabled. The o
 
 ## Verification policy
 
-The latest verified PR CI before the most recent migration/test/documentation commits passed on `3659b118e2e8322b803becc922a4a98eb948b6ed`. The new commits must pass their own exact-HEAD workflows before they can be called verified. CI builds do not prove live external services or physical-device behavior. No overall completion percentage is certified.
+The latest candidate commit `104e09cbe0e3167fb214e7e8bdad4abcafea3017` passed all 6 PR #478 workflows green. CI builds do not prove live external services or physical-device behavior. No overall completion percentage is certified.
 
 ## Release boundary
 
