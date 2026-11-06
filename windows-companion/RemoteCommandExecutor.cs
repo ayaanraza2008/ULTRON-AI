@@ -13,6 +13,7 @@ namespace Ultron.Companion;
 internal static class RemoteCommandExecutor
 {
     private const int MaxSharedFileBytes = 64 * 1024;
+    private static readonly object LaunchAppLock = new();
     private static readonly ConcurrentDictionary<string, Process> TrackedProcesses = new(StringComparer.Ordinal);
     private static readonly ConcurrentDictionary<string, object> CompletedTaskResults = new(StringComparer.Ordinal);
     private static readonly ConcurrentQueue<string> CompletedTaskOrder = new();
@@ -134,25 +135,84 @@ internal static class RemoteCommandExecutor
         if (!ApprovedApps.TryGetValue(app, out var target))
             return Failure("APP_NOT_ALLOWLISTED", "The requested application is not on the Windows companion allowlist.");
 
-        var process = Process.Start(new ProcessStartInfo
-        {
-            FileName = target.Executable,
-            UseShellExecute = true
-        });
-        if (process is null)
-            return Failure("APP_LAUNCH_FAILED", "Windows did not start the requested application.");
-
         var taskId = string.IsNullOrWhiteSpace(commandId) ? Guid.NewGuid().ToString("N") : commandId;
-        var processId = process.Id;
-        if (!TrackedProcesses.TryAdd(taskId, process))
+        if (taskId.Length > 128)
+            return Failure("INVALID_TASK_ID", "The command task ID is invalid.");
+
+        // Reserve/check the idempotency key before launching. A retry must never
+        // start a second process and then discard only its Process handle.
+        lock (LaunchAppLock)
         {
-            try { process.Dispose(); } catch { }
-            return Failure("TASK_ID_CONFLICT", "A tracked Windows task already uses this command ID.");
-        }
-        process.EnableRaisingEvents = true;
-        process.Exited += (_, _) =>
-        {
-            if (TrackedProcesses.TryRemove(taskId, out var exited))
+            if (TrackedProcesses.TryGetValue(taskId, out var existing))
+            {
+                var alreadyExited = false;
+                try { alreadyExited = existing.HasExited; } catch { alreadyExited = true; }
+                if (alreadyExited && TrackedProcesses.TryRemove(taskId, out var finished))
+                {
+                    var previousProcessId = SafeProcessId(finished);
+                    RememberTaskResult(taskId, new
+                    {
+                        success = true,
+                        taskId,
+                        status = "completed",
+                        output = new { processId = previousProcessId, app },
+                        completedAt = DateTimeOffset.UtcNow.ToString("O")
+                    });
+                    finished.Dispose();
+                }
+
+                if (CompletedTaskResults.TryGetValue(taskId, out var completedResult))
+                    return completedResult;
+
+                return new
+                {
+                    success = true,
+                    duplicateSuppressed = true,
+                    taskId,
+                    status = "running",
+                    processId = SafeProcessId(existing)
+                };
+            }
+
+            if (CompletedTaskResults.TryGetValue(taskId, out var previousResult))
+                return previousResult;
+
+            var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = target.Executable,
+                UseShellExecute = true
+            });
+            if (process is null)
+                return Failure("APP_LAUNCH_FAILED", "Windows did not start the requested application.");
+
+            var processId = process.Id;
+            if (!TrackedProcesses.TryAdd(taskId, process))
+            {
+                try { process.Dispose(); } catch { }
+                return Failure("TASK_ID_CONFLICT", "The task ID was concurrently claimed; no duplicate app was launched.");
+            }
+
+            process.EnableRaisingEvents = true;
+            process.Exited += (_, _) =>
+            {
+                lock (LaunchAppLock)
+                {
+                    if (TrackedProcesses.TryRemove(taskId, out var exited))
+                    {
+                        RememberTaskResult(taskId, new
+                        {
+                            success = true,
+                            taskId,
+                            status = "completed",
+                            output = new { processId, app },
+                            completedAt = DateTimeOffset.UtcNow.ToString("O")
+                        });
+                        exited.Dispose();
+                    }
+                }
+            };
+
+            if (process.HasExited && TrackedProcesses.TryRemove(taskId, out var completed))
             {
                 RememberTaskResult(taskId, new
                 {
@@ -162,23 +222,11 @@ internal static class RemoteCommandExecutor
                     output = new { processId, app },
                     completedAt = DateTimeOffset.UtcNow.ToString("O")
                 });
-                exited.Dispose();
+                completed.Dispose();
             }
-        };
-        if (process.HasExited && TrackedProcesses.TryRemove(taskId, out var completed))
-        {
-            RememberTaskResult(taskId, new
-            {
-                success = true,
-                taskId,
-                status = "completed",
-                output = new { processId, app },
-                completedAt = DateTimeOffset.UtcNow.ToString("O")
-            });
-            completed.Dispose();
-        }
 
-        return new { success = true, output = "Launched " + app, taskId, processId = process.Id };
+            return new { success = true, output = "Launched " + app, taskId, processId };
+        }
     }
 
     private static void RememberTaskResult(string taskId, object result)
