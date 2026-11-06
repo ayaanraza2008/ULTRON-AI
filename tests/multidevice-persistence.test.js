@@ -473,3 +473,47 @@ test("DatabasePersistenceAdapter: remote TLS cannot be disabled by URL, env, or 
     else process.env.ULTRON_DATABASE_SSL_REJECT_UNAUTHORIZED = previousOverride;
   }
 });
+
+
+test("createMultiDevicePersistenceAdapter wires authenticated Supabase REST and upserts root state", async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ultron-supabase-rest-"));
+  const calls = [];
+  try {
+    const adapter = createMultiDevicePersistenceAdapter({
+      storagePath: path.join(tmpDir, "fallback.json"),
+      supabaseUrl: "https://ultron-test.supabase.co",
+      supabaseServiceRoleKey: "server-only-test-key",
+      fetchImpl: async (url, init) => {
+        calls.push({ url: String(url), init });
+        return { ok: true, status: 204, json: async () => [] };
+      }
+    });
+
+    assert.ok(adapter instanceof DatabasePersistenceAdapter);
+    const outcome = await adapter.save({
+      devices: [],
+      sharedState: [],
+      pendingDeliveries: [],
+      revokedDevices: []
+    });
+
+    assert.equal(outcome.success, true);
+    assert.equal(outcome.backend, "supabase_rest");
+    assert.equal(calls.length, 1);
+    assert.match(calls[0].url, /\/rest\/v1\/ultron_multidevice_state\?on_conflict=key$/);
+    assert.equal(calls[0].init.method, "POST");
+    assert.equal(calls[0].init.headers.get("apikey"), "server-only-test-key");
+    assert.equal(calls[0].init.headers.get("Authorization"), "Bearer server-only-test-key");
+    assert.match(calls[0].init.headers.get("Prefer"), /resolution=merge-duplicates/);
+  } finally {
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+  }
+});
+
+test("createMultiDevicePersistenceAdapter rejects remote Supabase URLs without HTTPS", () => {
+  assert.throws(() => createMultiDevicePersistenceAdapter({
+    supabaseUrl: "http://supabase.example.com",
+    supabaseServiceRoleKey: "server-only-test-key",
+    fetchImpl: async () => ({ ok: true })
+  }), /SUPABASE_URL_MUST_USE_HTTPS/);
+});
