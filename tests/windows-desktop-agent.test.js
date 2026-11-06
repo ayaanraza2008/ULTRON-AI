@@ -67,3 +67,60 @@ test("WindowsDesktopAgent: Project status reports measured metadata without fabr
   assert.equal(Object.hasOwn(status, "testsTotal"), false);
   assert.equal(agent.executionHistory.length, 1);
 });
+
+test("WindowsDesktopAgent finds files from the array returned by WindowsComputerControl.listFiles", async () => {
+  const calls = [];
+  const agent = new WindowsDesktopAgent({
+    computerControl: {
+      async listFiles(subDir) {
+        calls.push(subDir);
+        return [
+          { name: "Quarterly-Report.pdf", isFile: true, isDirectory: false },
+          { name: "reports-archive", isFile: false, isDirectory: true },
+          { name: "meeting-notes.md", isFile: true, isDirectory: false },
+          { name: "README.md", isFile: true, isDirectory: false }
+        ];
+      }
+    }
+  });
+
+  const result = await agent.executeCommand("find_file", { query: "REPORT", folder: "Documents" });
+  assert.equal(result.success, true);
+  assert.equal(result.result.query, "REPORT");
+  assert.deepEqual(result.result.matches, ["Quarterly-Report.pdf"]);
+  assert.equal(result.result.totalMatches, 1);
+  assert.deepEqual(calls, ["Documents"]);
+});
+
+test("WindowsDesktopAgent rejects empty and oversized file search queries without listing files", async () => {
+  let listCalls = 0;
+  const agent = new WindowsDesktopAgent({
+    computerControl: {
+      async listFiles() {
+        listCalls += 1;
+        return [{ name: "secret.txt", isFile: true }];
+      }
+    }
+  });
+
+  const empty = await agent.executeCommand("find_file", { query: "   " });
+  assert.equal(empty.success, false);
+  assert.equal(empty.result.error, "FILE_QUERY_REQUIRED");
+
+  const oversized = await agent.executeCommand("find_file", { query: "x".repeat(129) });
+  assert.equal(oversized.success, false);
+  assert.equal(oversized.result.error, "FILE_QUERY_REQUIRED");
+  assert.equal(listCalls, 0);
+});
+
+test("WindowsDesktopAgent does not claim a failed directory listing is a successful empty search", async () => {
+  const agent = new WindowsDesktopAgent({
+    computerControl: {
+      async listFiles() { return null; }
+    }
+  });
+
+  const result = await agent.executeCommand("find_file", { query: "report" });
+  assert.equal(result.success, false);
+  assert.equal(result.result.error, "FILE_LIST_UNAVAILABLE");
+});
