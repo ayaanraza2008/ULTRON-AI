@@ -8,9 +8,7 @@ on:
   push:
     branches:
       - main
-      - feat/kaligpt-capability-integration
-      - feat/ultron-capability-integration
-      - feat/**
+      - feat/ultron-operation-infinity-multidevice
   pull_request:
   workflow_dispatch:
 
@@ -82,11 +80,13 @@ jobs:
         run: node scripts/provision-test-databases.mjs
       - name: Preload the real Node sandbox image used by the Docker isolation battery
         run: docker pull node:20-alpine
-      - run: npm test
+      - name: Run bounded Node test suite
+        run: timeout --signal=TERM --kill-after=30s 25m npm test -- --test-force-exit
       - name: Run ULTRON repository security quality gate
         run: npm run security:report
   world-intelligence-build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
