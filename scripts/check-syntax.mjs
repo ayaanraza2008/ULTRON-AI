@@ -8,11 +8,11 @@
 import { execFileSync } from "node:child_process";
 
 const trackedFiles = execFileSync("git", ["ls-files", "-z"], { encoding: "utf8" })
-  .split("\\0")
+  .split("\0")
   .filter(Boolean);
 
 const filesToCheck = trackedFiles
-  .filter((file) => /\\.(?:js|mjs|cjs)$/i.test(file))
+  .filter((file) => /\.(?:js|mjs|cjs)$/i.test(file))
   .sort();
 
 if (filesToCheck.length === 0) {
@@ -37,9 +37,9 @@ for (const file of filesToCheck) {
 }
 
 if (failures.length > 0) {
-  console.error(`\\nFailed syntax check on ${failures.length} of ${filesToCheck.length} tracked file(s).`);
+  console.error(`\nFailed syntax check on ${failures.length} of ${filesToCheck.length} tracked file(s).`);
   process.exit(1);
 }
 
-console.log(`\\nSyntax verification passed: ${checked}/${filesToCheck.length} tracked files verified clean.`);
+console.log(`\nSyntax verification passed: ${checked}/${filesToCheck.length} tracked files verified clean.`);
 process.exit(0);
