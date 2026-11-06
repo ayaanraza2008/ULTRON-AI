@@ -31,6 +31,10 @@ test("unsupported binary or malformed PDF data is rejected", async () => {
     extractDocumentText({ filename: "binary.txt", mimeType: "text/plain", bytes: Buffer.from([0x61, 0x00, 0x62]) }),
     error => error.code === "DOCUMENT_INVALID_TEXT" && error.status === 422
   );
+  await assert.rejects(
+    extractDocumentText({ filename: "broken.docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", bytes: Buffer.from("PK\\x03\\x04") }),
+    error => error.code === "DOCUMENT_INVALID_DOCX" && error.status === 422
+  );
 });
 
 test("document retrieval ranks query-relevant excerpts and bounds context size", () => {
