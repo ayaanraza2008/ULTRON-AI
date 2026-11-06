@@ -163,6 +163,25 @@ export function createDevicePairingRouter({
   // This runtime is intentionally a single-owner personal AI instance.
   // Paired-device bearer tokens must obey the same owner boundary as signed-in routes.
   const configuredOwnerUserId = String(env.ULTRON_OWNER_USER_ID || env.ULTRON_INTEGRATION_OWNER_USER_ID || "").trim();
+  const requireConfiguredOwner = (req, res, next) => requireSupabaseUser(req, res, () => {
+    if (!configuredOwnerUserId) {
+      return res.status(503).json({
+        error: {
+          code: "ULTRON_OWNER_NOT_CONFIGURED",
+          message: "Device management is disabled until the ULTRON owner user ID is configured."
+        }
+      });
+    }
+    if (!req.supabaseUser?.id || req.supabaseUser.id !== configuredOwnerUserId) {
+      return res.status(403).json({
+        error: {
+          code: "ULTRON_OWNER_ONLY",
+          message: "Device management is restricted to the configured ULTRON owner."
+        }
+      });
+    }
+    return next();
+  });
 
   const router = express.Router();
   const claimAttempts = new Map();
@@ -276,7 +295,7 @@ export function createDevicePairingRouter({
     }
   }
 
-  router.get("/devices", requireSupabaseUser, async (req, res) => {
+  router.get("/devices", requireConfiguredOwner, async (req, res) => {
     if (!isUuid(req.supabaseUser?.id)) {
       return res.status(401).json({ error: { code: "AUTH_REQUIRED", message: "Sign in to manage your paired devices." } });
     }
@@ -351,7 +370,7 @@ export function createDevicePairingRouter({
     }
   });
 
-  router.post("/devices/pairings", requireSupabaseUser, async (req, res) => {
+  router.post("/devices/pairings", requireConfiguredOwner, async (req, res) => {
     const ownerId = req.supabaseUser?.id;
     if (!isUuid(ownerId)) return res.status(401).json({ error: { code: "AUTH_REQUIRED", message: "Sign in before pairing a device." } });
     const platform = bounded(req.body?.platform, 20).toLowerCase();
@@ -441,7 +460,7 @@ export function createDevicePairingRouter({
     }
   });
 
-  router.post("/devices/:id/rotate-token", requireSupabaseUser, async (req, res) => {
+  router.post("/devices/:id/rotate-token", requireConfiguredOwner, async (req, res) => {
     const ownerId = req.supabaseUser?.id;
     if (!isUuid(ownerId) || !isUuid(req.params.id)) {
       return res.status(400).json({ error: { code: "INVALID_DEVICE_ID", message: "Device ID is invalid." } });
@@ -489,7 +508,7 @@ export function createDevicePairingRouter({
     }
   });
 
-  router.delete("/devices/:id", requireSupabaseUser, async (req, res) => {
+  router.delete("/devices/:id", requireConfiguredOwner, async (req, res) => {
     const ownerId = req.supabaseUser?.id;
     if (!isUuid(ownerId) || !isUuid(req.params.id)) {
       return res.status(400).json({ error: { code: "INVALID_DEVICE_ID", message: "Device ID is invalid." } });
