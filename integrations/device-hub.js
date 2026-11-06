@@ -157,9 +157,11 @@ export class DeviceHub {
       ownerUserId,
       status: "active",
       pairedAt: record.pairedAt || record.paired_at || previous?.pairedAt || now,
-      lastSeenAt: now,
+      lastSeenAt: record.lastSeenAt || record.last_seen_at || previous?.lastSeenAt || null,
       battery: previous?.battery || null,
-      online: true,
+      // A durable pairing record proves identity, not current connectivity.
+      // Only an authenticated heartbeat may mark the companion online.
+      online: false,
       source: "supabase"
     };
     this.pairedDevices.set(id, device);
@@ -295,7 +297,8 @@ export class DeviceHub {
       pairedAt: new Date().toISOString(),
       lastSeenAt: new Date().toISOString(),
       battery: null,
-      online: true,
+      // Pairing completes authorization; it does not prove the client is connected.
+      online: false,
       publicKey: clientPublicKey,
       capabilities: entry.capabilities || {}
     };
@@ -345,7 +348,8 @@ export class DeviceHub {
       pairedAt: new Date().toISOString(),
       lastSeenAt: new Date().toISOString(),
       battery: null,
-      online: true,
+      // Approval/claim does not prove the companion has connected yet.
+      online: false,
       publicKey: null,
       capabilities: {}
     };
