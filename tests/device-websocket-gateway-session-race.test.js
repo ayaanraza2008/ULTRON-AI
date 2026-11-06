@@ -88,3 +88,49 @@ test("an authenticated WebSocket cannot rebind itself with a second device AUTH 
   assert.equal(gateway.clients.get(deviceId), session);
   gateway.close();
 });
+
+test("production WebSocket authentication rejects a paired device outside the configured owner", async () => {
+  const hub = {
+    pairedDevices: new Map(),
+    registerEventListener() { return () => {}; },
+    importPairedDevice(record) { this.imported = record; return record; }
+  };
+  const gateway = new DeviceWebSocketGateway({
+    deviceHub: hub,
+    env: { NODE_ENV: "production", ULTRON_OWNER_USER_ID: "owner-a" },
+    authenticateDeviceToken: async () => ({
+      id: "device-b",
+      ownerUserId: "owner-b",
+      status: "active"
+    }),
+    logger: { warn() {}, error() {} }
+  });
+
+  const result = await gateway.authenticateToken("ultron_dev_" + "a".repeat(64));
+  assert.equal(result, null);
+  assert.equal(hub.imported, undefined);
+  gateway.close();
+});
+
+test("production WebSocket authentication accepts a device belonging to the configured owner", async () => {
+  const hub = {
+    pairedDevices: new Map(),
+    registerEventListener() { return () => {}; },
+    importPairedDevice(record) { this.imported = record; return record; }
+  };
+  const gateway = new DeviceWebSocketGateway({
+    deviceHub: hub,
+    env: { NODE_ENV: "production", ULTRON_OWNER_USER_ID: "owner-a" },
+    authenticateDeviceToken: async () => ({
+      id: "device-a",
+      ownerUserId: "owner-a",
+      status: "active"
+    }),
+    logger: { warn() {}, error() {} }
+  });
+
+  const result = await gateway.authenticateToken("ultron_dev_" + "a".repeat(64));
+  assert.equal(result.ownerUserId, "owner-a");
+  assert.equal(hub.imported.ownerUserId, "owner-a");
+  gateway.close();
+});
