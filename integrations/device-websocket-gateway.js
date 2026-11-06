@@ -204,9 +204,21 @@ export class DeviceWebSocketGateway {
       return; // Leave for other upgrade handlers if any
     }
 
-    const wsKey = req.headers["sec-websocket-key"];
-    if (!wsKey || req.headers.upgrade?.toLowerCase() !== "websocket") {
-      socket.write("HTTP/1.1 400 Bad Request\r\n\r\n");
+    const wsKey = typeof req.headers["sec-websocket-key"] === "string"
+      ? req.headers["sec-websocket-key"].trim()
+      : "";
+    if (req.headers["sec-websocket-version"] !== "13") {
+      socket.write("HTTP/1.1 426 Upgrade Required\r\nSec-WebSocket-Version: 13\r\nConnection: close\r\n\r\n");
+      socket.destroy();
+      return;
+    }
+    const decodedWsKey = Buffer.from(wsKey, "base64");
+    const validWsKey = decodedWsKey.length === 16 && decodedWsKey.toString("base64") === wsKey;
+    const hasConnectionUpgrade = String(req.headers.connection || "")
+      .split(",")
+      .some(value => value.trim().toLowerCase() === "upgrade");
+    if (!validWsKey || req.headers.upgrade?.toLowerCase() !== "websocket" || !hasConnectionUpgrade) {
+      socket.write("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n");
       socket.destroy();
       return;
     }
