@@ -7,13 +7,14 @@ import os from "node:os";
 import path from "node:path";
 import { createJarvisRouter } from "../jarvis-router.js";
 import { DeviceHub } from "../integrations/device-hub.js";
+import { MultiDeviceManager } from "../integrations/multi-device-manager.js";
 
 async function withDeviceRouter({ env = {
   NODE_ENV: "test",
   ULTRON_ALLOW_LEGACY_DEVICEHUB_AUTH: "true",
   ULTRON_INTEGRATION_OWNER_USER_ID: "owner-user",
   ULTRON_DEVICE_PAIRING_ENABLED: "true"
-}, userId = "owner-user", deviceHub } = {}, run) {
+}, userId = "owner-user", deviceHub, multiDeviceManager } = {}, run) {
   const app = express();
   const requireSupabaseUser = (req, res, next) => {
     if (req.headers["authorization"] || userId) {
@@ -23,7 +24,7 @@ async function withDeviceRouter({ env = {
     return res.status(401).json({ error: { message: "Unauthorized" } });
   };
   app.use(express.json());
-  app.use("/api", createJarvisRouter({ env, requireSupabaseUser, deviceHub }));
+  app.use("/api", createJarvisRouter({ env, requireSupabaseUser, deviceHub, multiDeviceManager }));
   const server = createServer(app);
   await new Promise((resolve, reject) => {
     server.once("error", reject);
@@ -301,5 +302,66 @@ test("Production rejects the legacy static desktop token and requires per-device
     assert.equal(response.status, 401);
     const payload = await response.json();
     assert.equal(payload.error.code, "INVALID_DEVICE_TOKEN");
+  });
+});
+
+test("paired device authentication rejects a companion that belongs to a different owner", async () => {
+  const deviceHub = new DeviceHub();
+  const pairing = deviceHub.createPairingCode({ name: "Foreign Android", platform: "android" });
+  const paired = deviceHub.verifyPairingCode(pairing.code, null, "different-owner");
+  assert.equal(paired.success, true);
+
+  await withDeviceRouter({ deviceHub }, async base => {
+    const response = await fetch(base + "/api/jarvis/devices/tasks", {
+      headers: { "x-device-token": paired.authToken }
+    });
+    assert.equal(response.status, 403);
+    assert.equal((await response.json()).error.code, "ULTRON_OWNER_ONLY");
+  });
+});
+
+test("paired device authentication fails closed when no configured owner identity exists", async () => {
+  const deviceHub = new DeviceHub();
+  const pairing = deviceHub.createPairingCode({ name: "Unbound Windows", platform: "windows" });
+  const paired = deviceHub.verifyPairingCode(pairing.code, null, "owner-user");
+  assert.equal(paired.success, true);
+
+  await withDeviceRouter({
+    deviceHub,
+    env: { NODE_ENV: "test", ULTRON_ALLOW_LEGACY_DEVICEHUB_AUTH: "true" }
+  }, async base => {
+    const response = await fetch(base + "/api/jarvis/devices/tasks", {
+      headers: { "x-device-token": paired.authToken }
+    });
+    assert.equal(response.status, 503);
+    assert.equal((await response.json()).error.code, "ULTRON_OWNER_NOT_CONFIGURED");
+  });
+});
+
+test("authenticated paired devices are registered once in the fleet and fresh presence is synchronized", async () => {
+  const deviceHub = new DeviceHub();
+  const manager = new MultiDeviceManager({ persist: false, seedDefaultFleet: false, deviceHub });
+  const pairing = deviceHub.createPairingCode({ name: "Owner Windows", platform: "windows" });
+  const paired = deviceHub.verifyPairingCode(pairing.code, null, "owner-user");
+  assert.equal(paired.success, true);
+
+  await withDeviceRouter({ deviceHub, multiDeviceManager: manager }, async base => {
+    const headers = { "x-device-token": paired.authToken };
+    const first = await fetch(base + "/api/jarvis/devices/tasks", { headers });
+    assert.equal(first.status, 200);
+
+    const registered = manager.getDevice(paired.deviceId);
+    assert.ok(registered);
+    assert.equal(registered.ownerUserId, "owner-user");
+    assert.equal(registered.online, false);
+    assert.equal(manager.listDevices().length, 1);
+
+    assert.equal(deviceHub.heartbeat(paired.deviceId, paired.authToken).success, true);
+    const second = await fetch(base + "/api/jarvis/devices/tasks", { headers });
+    assert.equal(second.status, 200);
+
+    assert.equal(manager.getDevice(paired.deviceId).online, true);
+    assert.equal(manager.isDeviceOnline(paired.deviceId), true);
+    assert.equal(manager.listDevices().length, 1);
   });
 });
