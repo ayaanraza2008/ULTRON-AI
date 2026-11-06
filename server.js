@@ -469,11 +469,7 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
   });
   app.use("/api", apiRateLimiter);
 
-  const publicDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "public");
-  app.use(express.static(publicDir));
-  const voiceDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "voice");
-  app.use("/voice", express.static(voiceDir));
-
+  // API-only deployment: no public/ or voice source directories are exposed over HTTP.
 
   // Authenticated OpenAI-compatible proxy for the Browser Use bridge.
   // Provider credentials stay server-side and only configured model targets are eligible.
@@ -2134,10 +2130,6 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
       return url.protocol === "https:" ? url.toString().replace(/\/$/, "") : null;
     } catch { return null; }
   })();
-  app.get(["/world-intelligence", "/world-intelligence/"], (_req, res) => {
-    if (!worldIntelligenceUrl) return res.status(503).send("World Intelligence service URL is not configured.");
-    res.redirect(302, worldIntelligenceUrl + "/?embed=1");
-  });
     app.get("/api/discovery/local", (_req, res) => {
     res.setHeader("Cache-Control", "no-store");
     res.json(deviceNetworkingManager.getLocalDiscoveryBeacon());
@@ -2149,6 +2141,15 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
   app.get("/api/world-intelligence/status", (_req, res) => {
     res.setHeader("Cache-Control", "no-store");
     res.json({ workspace: "world-intelligence", mounted: Boolean(worldIntelligenceUrl), serviceUrl: worldIntelligenceUrl, upstream: "bilawalsidhu/gods-eye-view", pinnedCommit: "7be5937fc3e3b10cdfa8d3f833536167268768ad", aiToolBridge: "allowlisted_actions_v1" });
+  });
+  app.get("/", (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    return res.status(404).json({
+      error: {
+        code: "FRONTEND_REMOVED",
+        message: "ULTRON is an API-only service. The web frontend and static assets have been removed."
+      }
+    });
   });
   app.use((err, _req, res, _next) => {
     if (res.headersSent) return res.end();
