@@ -652,24 +652,32 @@ export class MultiDeviceManager {
     if (this.revokedDevices.has(id)) {
       return { success: false, error: "DEVICE_REVOKED", deviceId: id };
     }
+    const previous = this.devices.get(id) || null;
+    const requestedOwnerUserId = String(deviceMeta.ownerUserId || "").trim() || null;
+    if (previous?.ownerUserId && requestedOwnerUserId && previous.ownerUserId !== requestedOwnerUserId) {
+      return { success: false, error: "DEVICE_OWNER_MISMATCH", deviceId: id };
+    }
     const entry = {
       id,
-      name: String(deviceMeta.name || "Connected Device").slice(0, 80),
-      type: deviceMeta.type || DEVICE_TYPES.ANDROID_SMARTPHONE,
-      platform: deviceMeta.platform || "android",
-      ownerUserId: String(deviceMeta.ownerUserId || "").trim() || null,
-      capabilities: Array.isArray(deviceMeta.capabilities) ? deviceMeta.capabilities : ["notifications"],
-      screenLocked: deviceMeta.screenLocked ?? true,
-      online: deviceMeta.online ?? true,
-      battery: deviceMeta.battery || { percent: 100, isCharging: false },
-      lastSeenAt: deviceMeta.lastSeenAt || new Date().toISOString(),
-      heartbeatTimeoutMs: deviceMeta.heartbeatTimeoutMs || ((deviceMeta.platform || "android") === "android" ? 35 * 60 * 1000 : 90_000),
-      currentMedia: null
+      name: String(deviceMeta.name || previous?.name || "Connected Device").slice(0, 80),
+      type: deviceMeta.type || previous?.type || DEVICE_TYPES.ANDROID_SMARTPHONE,
+      platform: deviceMeta.platform || previous?.platform || "android",
+      // Device ownership is immutable once bound. A later registration may
+      // fill a previously unbound owner, but cannot transfer an owned device.
+      ownerUserId: previous?.ownerUserId || requestedOwnerUserId,
+      capabilities: Array.isArray(deviceMeta.capabilities) ? deviceMeta.capabilities : previous?.capabilities || ["notifications"],
+      screenLocked: deviceMeta.screenLocked ?? previous?.screenLocked ?? true,
+      online: deviceMeta.online ?? previous?.online ?? true,
+      battery: deviceMeta.battery || previous?.battery || { percent: 100, isCharging: false },
+      lastSeenAt: deviceMeta.lastSeenAt || previous?.lastSeenAt || new Date().toISOString(),
+      heartbeatTimeoutMs: deviceMeta.heartbeatTimeoutMs || previous?.heartbeatTimeoutMs || ((deviceMeta.platform || previous?.platform || "android") === "android" ? 35 * 60 * 1000 : 90_000),
+      currentMedia: previous?.currentMedia || null
     };
 
     this.devices.set(id, entry);
     if (this.isPersistent && !this.isInitializing && !deferPersistence && !this.saveToDisk()) {
-      this.devices.delete(id);
+      if (previous) this.devices.set(id, previous);
+      else this.devices.delete(id);
       return { success: false, error: "DEVICE_PERSISTENCE_FAILED", deviceId: id };
     }
     return entry;
@@ -899,9 +907,12 @@ export class MultiDeviceManager {
     if (!dev || this.revokedDevices.has(deviceId) || dev.status === "revoked") {
       return { success: false, error: this.revokedDevices.has(deviceId) ? "DEVICE_REVOKED" : "DEVICE_NOT_FOUND" };
     }
-    if (typeof telemetry.ownerUserId === "string" && telemetry.ownerUserId.trim()) {
-      dev.ownerUserId = telemetry.ownerUserId.trim();
+    const requestedOwnerUserId = String(telemetry.ownerUserId || "").trim() || null;
+    if (dev.ownerUserId && requestedOwnerUserId && dev.ownerUserId !== requestedOwnerUserId) {
+      return { success: false, error: "DEVICE_OWNER_MISMATCH", deviceId };
     }
+    const previous = structuredClone(dev);
+    if (!dev.ownerUserId && requestedOwnerUserId) dev.ownerUserId = requestedOwnerUserId;
     if (typeof telemetry.online === "boolean") dev.online = telemetry.online;
     if (telemetry.battery && typeof telemetry.battery.percent === "number") {
       dev.battery = {
@@ -914,7 +925,10 @@ export class MultiDeviceManager {
       dev.heartbeatTimeoutMs = telemetry.heartbeatTimeoutMs;
     }
     dev.lastSeenAt = new Date().toISOString();
-    if (this.isPersistent && !deferPersistence && !this.saveToDisk()) return { success: false, error: "DEVICE_PERSISTENCE_FAILED" };
+    if (this.isPersistent && !deferPersistence && !this.saveToDisk()) {
+      this.devices.set(deviceId, previous);
+      return { success: false, error: "DEVICE_PERSISTENCE_FAILED" };
+    }
     return { success: true, deviceId, online: dev.online, lastSeenAt: dev.lastSeenAt };
   }
 
