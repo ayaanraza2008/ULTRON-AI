@@ -346,108 +346,89 @@ export class JarvisCapabilityBenchmark {
    */
   async evaluate() {
     const results = [];
-    let totalScore = 0;
-    let maxScore = 0;
+    let totalWeightedInventoryCoverage = 0;
+    let maxWeight = 0;
 
     for (const spec of JARVIS_BENCHMARK_SPEC) {
-      maxScore += spec.weight;
-
-      // 1. Verify subsystem files exist in the repository
-      const subsystemsFound = spec.subsystems.map(subPath => {
-        const fullPath = path.join(this.repoRoot, subPath);
-        return {
-          path: subPath,
-          exists: fs.existsSync(fullPath)
-        };
-      });
-
-      // 2. Verify test files exist
-      const testFilesFound = spec.testFiles.map(testPath => {
-        const fullPath = path.join(this.repoRoot, testPath);
-        return {
-          path: testPath,
-          exists: fs.existsSync(fullPath)
-        };
-      });
-
-      const allSubsystemsExist = subsystemsFound.every(s => s.exists);
-      const allTestsExist = testFilesFound.every(t => t.exists);
-
-      // 3. Determine category status & score
-      let categoryScore = 0;
-      let status = "NOT_IMPLEMENTED";
-
-      if (allSubsystemsExist && allTestsExist) {
-        categoryScore = 100;
-        status = "VERIFIED";
-      } else if (allSubsystemsExist) {
-        categoryScore = 75;
-        status = "IMPLEMENTED_UNVERIFIED";
-      } else if (subsystemsFound.some(s => s.exists)) {
-        categoryScore = 50;
-        status = "PARTIALLY_VERIFIED";
-      }
-
-      const weightedContribution = Number(((categoryScore / 100) * spec.weight).toFixed(2));
-      totalScore += weightedContribution;
-
+      maxWeight += spec.weight;
+      const subsystems = spec.subsystems.map(filePath => ({
+        path: filePath,
+        exists: fs.existsSync(path.join(this.repoRoot, filePath))
+      }));
+      const testFiles = spec.testFiles.map(filePath => ({
+        path: filePath,
+        exists: fs.existsSync(path.join(this.repoRoot, filePath))
+      }));
+      const evidence = [...subsystems, ...testFiles];
+      const present = evidence.filter(item => item.exists).length;
+      const total = evidence.length;
+      const inventoryCoveragePercent = total ? Number((present / total * 100).toFixed(1)) : 0;
+      const status = present === total && total > 0
+        ? "SOURCE_AND_TEST_PATHS_PRESENT"
+        : present > 0
+          ? "PARTIAL_SOURCE_TEST_INVENTORY"
+          : "NO_SOURCE_TEST_INVENTORY";
+      const weightedInventoryContribution = Number((inventoryCoveragePercent / 100 * spec.weight).toFixed(2));
+      totalWeightedInventoryCoverage += weightedInventoryContribution;
       results.push({
         id: spec.id,
         name: spec.name,
         weight: spec.weight,
-        score: categoryScore,
-        weightedScore: weightedContribution,
+        inventoryCoveragePercent,
+        weightedInventoryContribution,
+        evidencePathsPresent: present,
+        evidencePathsTotal: total,
         status,
-        subsystems: subsystemsFound,
-        testFiles: testFilesFound,
+        acceptanceCriteriaStatus: "NOT_EVALUATED",
+        subsystems,
+        testFiles,
         acceptanceCriteria: spec.acceptanceCriteria,
         knownLimitations: spec.knownLimitations
       });
     }
 
-    const roundedTotal = Number(totalScore.toFixed(1));
-    const finalScore = Math.min(100, roundedTotal);
-
     return {
       timestamp: new Date().toISOString(),
-      benchmarkVersion: "1.0.0",
-      totalWeightedScore: finalScore,
-      maxPossibleScore: maxScore,
-      targetScore: 100,
-      overallStatus: finalScore >= 100 ? "VERIFIED_100_PERCENT" : "IN_PROGRESS",
-      categoriesCount: JARVIS_BENCHMARK_SPEC.length,
+      benchmarkVersion: "2.0.0-inventory-only",
+      totalInventoryCoveragePercent: Math.min(100, Number(totalWeightedInventoryCoverage.toFixed(1))),
+      maxPossibleScore: maxWeight,
+      overallStatus: results.every(item => item.status === "SOURCE_AND_TEST_PATHS_PRESENT")
+        ? "SOURCE_TEST_INVENTORY_COMPLETE"
+        : "SOURCE_TEST_INVENTORY_INCOMPLETE",
+      runtimeVerificationStatus: "NOT_EVALUATED",
+      liveIntegrationStatus: "NOT_EVALUATED",
+      categoriesCount: results.length,
       categories: results
     };
   }
 
   /**
    * Generates a clean Markdown scorecard report.
-   */
-  generateMarkdownReport(evaluation) {
+   */  generateMarkdownReport(evaluation) {
     const lines = [
       `# ULTRON AI — JARVIS CAPABILITY BENCHMARK SCORECARD`,
       `**Evaluated At:** ${evaluation.timestamp}  `,
       `**Benchmark Version:** ${evaluation.benchmarkVersion}  `,
-      `**Overall Verified Score:** **${evaluation.totalWeightedScore}% / 100%**  `,
+      `**Source/Test Inventory Coverage:** **${evaluation.totalInventoryCoveragePercent}% / 100%**  `,
       `**Status:** **${evaluation.overallStatus}**  `,
       ``,
       `---`,
       ``,
       `## 1. WEIGHTED CATEGORY SCORECARD`,
       ``,
-      `| No. | Capability Category | Weight | Score (%) | Weighted (%) | Status | Test Suites |`,
+      `| No. | Capability Category | Weight | Inventory (%) | Weighted Inventory (%) | Status | Test Suites |`,
       `| :--- | :--- | :---: | :---: | :---: | :---: | :--- |`
     ];
 
     evaluation.categories.forEach((cat, idx) => {
       const tests = cat.testFiles.map(t => path.basename(t.path)).join(", ");
       lines.push(
-        `| ${idx + 1} | **${cat.name}** | ${cat.weight}% | ${cat.score}% | ${cat.weightedScore}% | \`${cat.status}\` | ${tests} |`
+        `| ${idx + 1} | **${cat.name}** | ${cat.weight}% | ${cat.inventoryCoveragePercent}% | ${cat.weightedInventoryContribution}% | \`${cat.status}\` | ${tests} |`
       );
     });
 
     lines.push(``);
-    lines.push(`**TOTAL WEIGHTED SCORE:** **${evaluation.totalWeightedScore}%** (Target: 100%)`);
+    lines.push(`**TOTAL SOURCE/TEST INVENTORY COVERAGE:** **${evaluation.totalInventoryCoveragePercent}%** (path presence only; not capability completion)`);
     lines.push(``);
     lines.push(`---`);
     lines.push(``);
@@ -455,12 +436,12 @@ export class JarvisCapabilityBenchmark {
     lines.push(``);
 
     evaluation.categories.forEach((cat, idx) => {
-      lines.push(`### ${idx + 1}. ${cat.name} (${cat.weight}% Weight — Score: ${cat.score}%)`);
-      lines.push(`- **Status:** \`${cat.status}\` | **Weighted Contribution:** ${cat.weightedScore}%`);
+      lines.push(`### ${idx + 1}. ${cat.name} (${cat.weight}% Weight — Inventory Coverage: ${cat.inventoryCoveragePercent}%)`);
+      lines.push(`- **Status:** \`${cat.status}\` | **Weighted Contribution:** ${cat.weightedInventoryContribution}%`);
       lines.push(`- **Subsystems:** ${cat.subsystems.map(s => `\`${s.path}\``).join(", ")}`);
       lines.push(`- **Test Files:** ${cat.testFiles.map(t => `\`${t.path}\``).join(", ")}`);
-      lines.push(`- **Acceptance Criteria:**`);
-      cat.acceptanceCriteria.forEach(ac => lines.push(`  - [x] ${ac}`));
+      lines.push(`- **Acceptance Criteria:** NOT EVALUATED by file-presence inventory.`);
+      cat.acceptanceCriteria.forEach(ac => lines.push(`  - ${ac}`));
       lines.push(`- **Known Real-World Limitations:** ${cat.knownLimitations}`);
       lines.push(``);
     });
