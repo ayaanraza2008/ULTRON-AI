@@ -242,7 +242,8 @@ test("a rejected device heartbeat is not acknowledged as success and closes the 
   assert.equal(socketEnded, true);
   assert.equal(gateway.clients.has(deviceId), false);
   assert.equal(device.online, false);
-  const ackFrame = socket.writes[0];
+  // AUTH_OK is written during registration; HEARTBEAT_ACK is followed by the close frame.
+  const ackFrame = socket.writes[socket.writes.length - 2];
   assert.ok(ackFrame);
   assert.equal(ackFrame[0] & 0x0f, 0x1);
   const ackLength = ackFrame[1] & 0x7f;
