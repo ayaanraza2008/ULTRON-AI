@@ -477,8 +477,8 @@ export class DatabasePersistenceAdapter extends BaseMultiDevicePersistenceAdapte
           this.logger.warn("DatabasePersistenceAdapter: Supabase REST write returned a non-success status", { status: resp.status });
         }
         return {
-          success: true,
-          backend: "fallback_file",
+          success: fallbackPersisted,
+          backend: fallbackPersisted ? "fallback_file" : "unavailable",
           cloudPersisted: false,
           fallbackPersisted,
           warning: "SUPABASE_REST_WRITE_FAILED",

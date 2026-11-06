@@ -224,6 +224,58 @@ test("DatabasePersistenceAdapter: failed local fallback is not reported as a suc
   assert.equal(outcome.note, "no_db_configured");
 });
 
+test("DatabasePersistenceAdapter: Supabase REST HTTP failure never reports success without a persisted fallback", async () => {
+  const adapter = new DatabasePersistenceAdapter({
+    fallbackAdapter: {
+      async save() { return false; },
+      async load() { return null; }
+    },
+    supabaseRest: {
+      async fetch() { return { ok: false, status: 503 }; }
+    }
+  });
+
+  const outcome = await adapter.save({
+    devices: [],
+    sharedState: [],
+    pendingDeliveries: [],
+    revokedDevices: []
+  });
+
+  assert.equal(outcome.success, false);
+  assert.equal(outcome.backend, "unavailable");
+  assert.equal(outcome.cloudPersisted, false);
+  assert.equal(outcome.fallbackPersisted, false);
+  assert.equal(outcome.warning, "SUPABASE_REST_WRITE_FAILED");
+  assert.equal(outcome.status, 503);
+});
+
+test("DatabasePersistenceAdapter: Supabase REST HTTP failure reports successful local fallback only when it persisted", async () => {
+  const adapter = new DatabasePersistenceAdapter({
+    fallbackAdapter: {
+      async save() { return true; },
+      async load() { return null; }
+    },
+    supabaseRest: {
+      async fetch() { return { ok: false, status: 503 }; }
+    }
+  });
+
+  const outcome = await adapter.save({
+    devices: [],
+    sharedState: [],
+    pendingDeliveries: [],
+    revokedDevices: []
+  });
+
+  assert.equal(outcome.success, true);
+  assert.equal(outcome.backend, "fallback_file");
+  assert.equal(outcome.cloudPersisted, false);
+  assert.equal(outcome.fallbackPersisted, true);
+  assert.equal(outcome.warning, "SUPABASE_REST_WRITE_FAILED");
+  assert.equal(outcome.status, 503);
+});
+
 test("createMultiDevicePersistenceAdapter factory instantiates correct backend", () => {
   // Default without DB returns FilePersistenceAdapter
   const fileAdapter = createMultiDevicePersistenceAdapter({ storagePath: "./test.json" });
