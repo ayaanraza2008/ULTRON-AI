@@ -307,7 +307,7 @@ export class JarvisUltronCapabilityComparator {
 
       if (allSubsystemsExist && allTestsExist) {
         maturityScore = 100;
-        status = cat.implementationStatus || "VERIFIED";
+        status = "SOURCE_AND_TEST_PATHS_PRESENT";
       } else if (allSubsystemsExist) {
         maturityScore = 75;
         status = "IMPLEMENTED_UNVERIFIED";
@@ -353,7 +353,7 @@ export class JarvisUltronCapabilityComparator {
       jarvisAlignmentScore: finalJarvis,
       ultronAlignmentScore: finalUltron,
       maxPossibleScore: maxWeight,
-      status: finalMaturity >= 100 ? "VERIFIED_100_PERCENT" : "IN_PROGRESS",
+      status: finalMaturity >= 100 ? "SOURCE_TEST_INVENTORY_COMPLETE" : "SOURCE_TEST_INVENTORY_INCOMPLETE",
       categoriesCount: COMPARATOR_CATEGORIES.length,
       categories: results
     };
@@ -367,14 +367,14 @@ export class JarvisUltronCapabilityComparator {
       `# ULTRON AI — JARVIS + ULTRON CAPABILITY COMPARISON MATRIX`,
       `**Evaluation Date:** ${evaluation.timestamp}  `,
       `**Comparator Version:** ${evaluation.comparatorVersion}  `,
-      `**Overall Implementation Maturity:** **${evaluation.totalMaturityScore}% / 100%** (\`${evaluation.status}\`)  `,
+      `**Source/Test Inventory Coverage:** **${evaluation.totalMaturityScore}% / 100%** (\`${evaluation.status}\`)  `,
       `**JARVIS Capability Alignment:** **${evaluation.jarvisAlignmentScore}%** | **Marvel ULTRON Autonomy Alignment:** **${evaluation.ultronAlignmentScore}%**  `,
       ``,
       `---`,
       ``,
       `## 8-COLUMN SIDE-BY-SIDE CAPABILITY COMPARISON`,
       ``,
-      `| Category (Weight) | Col A: JARVIS Reference | Col B: ULTRON Reference | Col C: Current ULTRON Implementation | Col D: Gap Analysis | Col E: Required Upgrade | Col F: Status | Col G: Test Evidence | Col H: Verified Score |`,
+      `| Category (Weight) | Col A: JARVIS Reference | Col B: ULTRON Reference | Col C: Current ULTRON Implementation | Col D: Gap Analysis | Col E: Required Upgrade | Col F: Status | Col G: Test Evidence | Col H: Inventory Coverage |`,
       `| :--- | :--- | :--- | :--- | :--- | :--- | :---: | :--- | :---: |`
     ];
 
@@ -389,7 +389,7 @@ export class JarvisUltronCapabilityComparator {
     lines.push(`---`);
     lines.push(``);
     lines.push(`## SUMMARY METRICS`);
-    lines.push(`- **Total Engineering Maturity Score:** **${evaluation.totalMaturityScore}%**`);
+    lines.push(`- **Total Source/Test Inventory Coverage Score:** **${evaluation.totalMaturityScore}%**`);
     lines.push(`- **JARVIS Capability Alignment Score:** **${evaluation.jarvisAlignmentScore}%**`);
     lines.push(`- **Marvel ULTRON Autonomy Alignment Score:** **${evaluation.ultronAlignmentScore}%**`);
     lines.push(`- **All ${evaluation.categoriesCount} Categories Verified:** ${evaluation.categories.every(cat => cat.maturityScore === 100) ? "Yes" : "No"} (static source/test-file inventory only)`);
@@ -409,14 +409,14 @@ export class JarvisUltronCapabilityComparator {
     const benchmarkMd = [
       `# ULTRON AI — JARVIS + ULTRON MASTER CAPABILITY BENCHMARK`,
       `**Timestamp:** ${evaluation.timestamp}  `,
-      `**Overall Implementation Maturity:** **${evaluation.totalMaturityScore}% / 100%**  `,
+      `**Source/Test Inventory Coverage:** **${evaluation.totalMaturityScore}% / 100%**  `,
       `**JARVIS Alignment:** **${evaluation.jarvisAlignmentScore}%** | **Marvel ULTRON Alignment:** **${evaluation.ultronAlignmentScore}%**  `,
       ``,
       `---`,
       ``,
       `## 1. CAPABILITY DISTRIBUTION & WEIGHTS`,
       ``,
-      `| No. | Category | Weight | JARVIS Match | ULTRON Match | Engineering Maturity | Status |`,
+      `| No. | Category | Weight | JARVIS Match | ULTRON Match | Source/Test Inventory Coverage | Status |`,
       `| :--- | :--- | :---: | :---: | :---: | :---: | :---: |`
     ];
 
