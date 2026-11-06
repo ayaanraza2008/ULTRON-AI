@@ -442,3 +442,34 @@ test("DatabasePersistenceAdapter: strict TLS certificate verification enforced (
   assert.equal(customCaConfig.ssl.rejectUnauthorized, true);
   assert.ok(customCaConfig.ssl.ca.includes("MOCK_CA_CERT"));
 });
+
+test("DatabasePersistenceAdapter: remote TLS cannot be disabled by URL, env, or options", () => {
+  const previousOverride = process.env.ULTRON_DATABASE_SSL_REJECT_UNAUTHORIZED;
+  process.env.ULTRON_DATABASE_SSL_REJECT_UNAUTHORIZED = "false";
+  try {
+    const disabledModeAdapter = new DatabasePersistenceAdapter({
+      databaseUrl: "postgres://db.prod.company.com:5432/ultron_multidevice?sslmode=disable",
+      ssl: { rejectUnauthorized: false }
+    });
+    const disabledModeConfig = disabledModeAdapter.resolvePoolConfig();
+    assert.equal(disabledModeConfig.ssl.rejectUnauthorized, true);
+    assert.equal(disabledModeConfig.connectionString.includes("sslmode=disable"), false);
+
+    const noVerifyAdapter = new DatabasePersistenceAdapter({
+      databaseUrl: "postgres://db.prod.company.com:5432/ultron_multidevice?sslmode=no-verify"
+    });
+    const noVerifyConfig = noVerifyAdapter.resolvePoolConfig();
+    assert.equal(noVerifyConfig.ssl.rejectUnauthorized, true);
+    assert.equal(noVerifyConfig.connectionString.includes("sslmode=no-verify"), false);
+
+    const requireModeAdapter = new DatabasePersistenceAdapter({
+      databaseUrl: "postgres://db.prod.company.com:5432/ultron_multidevice?sslmode=require"
+    });
+    const requireModeConfig = requireModeAdapter.resolvePoolConfig();
+    assert.equal(requireModeConfig.ssl.rejectUnauthorized, true);
+    assert.equal(requireModeConfig.connectionString.includes("sslmode="), false);
+  } finally {
+    if (previousOverride === undefined) delete process.env.ULTRON_DATABASE_SSL_REJECT_UNAUTHORIZED;
+    else process.env.ULTRON_DATABASE_SSL_REJECT_UNAUTHORIZED = previousOverride;
+  }
+});
