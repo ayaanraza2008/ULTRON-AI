@@ -233,7 +233,9 @@ internal static class RemoteCommandExecutor
         if (string.IsNullOrWhiteSpace(taskId))
             return Failure("TASK_ID_REQUIRED", "Provide the ULTRON command task ID to stop.");
         if (!TrackedProcesses.TryRemove(taskId, out var process))
-            return Failure("TASK_NOT_FOUND", "The requested task is not a process launched by this companion.");
+            return CompletedTaskResults.TryGetValue(taskId, out var previous)
+                ? previous
+                : Failure("TASK_NOT_FOUND", "The requested task is not a process launched by this companion.");
 
         var processId = SafeProcessId(process);
         try
@@ -417,7 +419,7 @@ internal static class RemoteCommandExecutor
 
     private static object ListSharedFiles(JsonElement payload)
     {
-        var directory = ResolveSharedPath(FirstString(payload, "path", "directory"));
+        var directory = ResolveSharedPath(FirstString(payload, "path", "directory", "folder", "subDir"));
         Directory.CreateDirectory(directory);
         var entries = Directory.EnumerateFileSystemEntries(directory)
             .Where(path => !IsReparsePoint(path))
