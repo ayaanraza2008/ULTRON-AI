@@ -14,6 +14,8 @@ internal static class RemoteCommandExecutor
 {
     private const int MaxSharedFileBytes = 64 * 1024;
     private static readonly ConcurrentDictionary<string, Process> TrackedProcesses = new(StringComparer.Ordinal);
+    private static readonly ConcurrentDictionary<string, object> CompletedTaskResults = new(StringComparer.Ordinal);
+    private static readonly ConcurrentQueue<string> CompletedTaskOrder = new();
     private static readonly Dictionary<string, (string Executable, string ProcessName)> ApprovedApps =
         new(StringComparer.OrdinalIgnoreCase)
         {
@@ -101,8 +103,11 @@ internal static class RemoteCommandExecutor
             {
                 "launch_app" => LaunchApp(payload, FirstString(command, "id")),
                 "close_app" => CloseApp(payload),
+                "open_folder" => ListSharedFiles(payload),
+                "find_file" => FindSharedFile(payload),
                 "inspect_task" => InspectTrackedTasks(),
                 "stop_task" => StopTrackedTask(payload),
+                "get_task_output" => GetTaskOutput(payload),
                 "emergency_stop" => EmergencyStop(),
                 "lock_workstation" => LockWorkstation(),
                 "set_volume" => SetVolume(payload),
@@ -138,6 +143,7 @@ internal static class RemoteCommandExecutor
             return Failure("APP_LAUNCH_FAILED", "Windows did not start the requested application.");
 
         var taskId = string.IsNullOrWhiteSpace(commandId) ? Guid.NewGuid().ToString("N") : commandId;
+        var processId = process.Id;
         if (!TrackedProcesses.TryAdd(taskId, process))
         {
             try { process.Dispose(); } catch { }
@@ -147,12 +153,67 @@ internal static class RemoteCommandExecutor
         process.Exited += (_, _) =>
         {
             if (TrackedProcesses.TryRemove(taskId, out var exited))
+            {
+                RememberTaskResult(taskId, new
+                {
+                    success = true,
+                    taskId,
+                    status = "completed",
+                    output = new { processId, app },
+                    completedAt = DateTimeOffset.UtcNow.ToString("O")
+                });
                 exited.Dispose();
+            }
         };
         if (process.HasExited && TrackedProcesses.TryRemove(taskId, out var completed))
+        {
+            RememberTaskResult(taskId, new
+            {
+                success = true,
+                taskId,
+                status = "completed",
+                output = new { processId, app },
+                completedAt = DateTimeOffset.UtcNow.ToString("O")
+            });
             completed.Dispose();
+        }
 
         return new { success = true, output = "Launched " + app, taskId, processId = process.Id };
+    }
+
+    private static void RememberTaskResult(string taskId, object result)
+    {
+        CompletedTaskResults[taskId] = result;
+        CompletedTaskOrder.Enqueue(taskId);
+        while (CompletedTaskOrder.Count > 100 && CompletedTaskOrder.TryDequeue(out var oldest))
+            CompletedTaskResults.TryRemove(oldest, out _);
+    }
+
+    private static object GetTaskOutput(JsonElement payload)
+    {
+        var taskId = FirstString(payload, "taskId", "id");
+        if (string.IsNullOrWhiteSpace(taskId) || taskId.Length > 128)
+            return Failure("TASK_ID_REQUIRED", "Provide the ULTRON task ID to inspect.");
+
+        if (TrackedProcesses.TryGetValue(taskId, out var process))
+        {
+            var isRunning = false;
+            try { isRunning = !process.HasExited; } catch { }
+            if (isRunning)
+            {
+                return new
+                {
+                    success = true,
+                    taskId,
+                    status = "running",
+                    output = new { processId = SafeProcessId(process), processName = SafeProcessName(process) }
+                };
+            }
+        }
+
+        return CompletedTaskResults.TryGetValue(taskId, out var completed)
+            ? completed
+            : Failure("TASK_NOT_FOUND", "No active or recently completed task was launched by this companion.");
     }
 
     private static object InspectTrackedTasks()
@@ -174,6 +235,7 @@ internal static class RemoteCommandExecutor
         if (!TrackedProcesses.TryRemove(taskId, out var process))
             return Failure("TASK_NOT_FOUND", "The requested task is not a process launched by this companion.");
 
+        var processId = SafeProcessId(process);
         try
         {
             if (!process.HasExited)
@@ -183,7 +245,16 @@ internal static class RemoteCommandExecutor
                     process.Kill(entireProcessTree: true);
                 process.WaitForExit(1500);
             }
-            return new { success = true, output = "Tracked task stopped.", taskId, stopped = process.HasExited };
+            var stopped = process.HasExited;
+            RememberTaskResult(taskId, new
+            {
+                success = stopped,
+                taskId,
+                status = stopped ? "stopped" : "stop_failed",
+                output = new { processId },
+                completedAt = DateTimeOffset.UtcNow.ToString("O")
+            });
+            return new { success = stopped, output = "Tracked task stop requested.", taskId, stopped };
         }
         catch (Exception ex)
         {
@@ -202,6 +273,7 @@ internal static class RemoteCommandExecutor
         foreach (var pair in TrackedProcesses.ToArray())
         {
             if (!TrackedProcesses.TryRemove(pair.Key, out var process)) continue;
+            var processId = SafeProcessId(process);
             try
             {
                 if (!process.HasExited)
@@ -211,7 +283,16 @@ internal static class RemoteCommandExecutor
                         process.Kill(entireProcessTree: true);
                     process.WaitForExit(1500);
                 }
-                if (process.HasExited) stopped.Add(pair.Key);
+                var didStop = process.HasExited;
+                RememberTaskResult(pair.Key, new
+                {
+                    success = didStop,
+                    taskId = pair.Key,
+                    status = didStop ? "stopped" : "stop_failed",
+                    output = new { processId },
+                    completedAt = DateTimeOffset.UtcNow.ToString("O")
+                });
+                if (didStop) stopped.Add(pair.Key);
                 else failed.Add(pair.Key);
             }
             catch
@@ -349,6 +430,25 @@ internal static class RemoteCommandExecutor
             })
             .ToArray();
         return new { success = true, root = "Documents/ULTRON Shared", entries };
+    }
+
+    private static object FindSharedFile(JsonElement payload)
+    {
+        var query = FirstString(payload, "query", "fileName", "name");
+        if (string.IsNullOrWhiteSpace(query) || query.Length > 128)
+            return Failure("FILE_QUERY_REQUIRED", "Provide a file name or search term of at most 128 characters.");
+
+        var directory = ResolveSharedPath(FirstString(payload, "subDir", "folder"));
+        if (!Directory.Exists(directory))
+            return Failure("DIRECTORY_NOT_FOUND", "The requested folder does not exist in ULTRON Shared.");
+
+        var matches = Directory.EnumerateFileSystemEntries(directory)
+            .Where(entry => !IsReparsePoint(entry))
+            .Select(Path.GetFileName)
+            .Where(name => !string.IsNullOrWhiteSpace(name) && name.Contains(query, StringComparison.OrdinalIgnoreCase))
+            .Take(100)
+            .ToArray();
+        return new { success = true, query, matches, totalMatches = matches.Length, root = "Documents/ULTRON Shared" };
     }
 
     private static object ReadSharedFile(JsonElement payload)
