@@ -89,7 +89,7 @@ fun UltronMainDashboard(apiClient: UltronApiClient) {
     LaunchedEffect(Unit) {
         while (true) {
             try {
-                withContext(Dispatchers.IO) {
+                val updatedStatus = withContext(Dispatchers.IO) {
                     val raw = apiClient.fetchWindowsPcStatus()
                     val batteryObject = raw.optJSONObject("battery")
                     val batteryPercent = batteryObject
@@ -107,7 +107,7 @@ fun UltronMainDashboard(apiClient: UltronApiClient) {
                     val activeWindow = raw.optString("activeWindow", "")
                         .takeIf { it.isNotBlank() }
 
-                    pcStatus = PcStatus(
+                    PcStatus(
                         online = raw.optBoolean("online", false),
                         name = raw.optString("name", "Windows PC").ifBlank { "Windows PC" },
                         cpu = cpuName,
@@ -116,6 +116,7 @@ fun UltronMainDashboard(apiClient: UltronApiClient) {
                         activeWin = activeWindow
                     )
                 }
+                pcStatus = updatedStatus
             } catch (_: Exception) {
                 pcStatus = PcStatus(false, "Windows PC", null, null, null, null)
             }
