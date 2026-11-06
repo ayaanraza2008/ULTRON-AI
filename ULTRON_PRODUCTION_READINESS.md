@@ -36,6 +36,18 @@ No overall percentage is published in this ledger. Earlier percentage claims mix
 6. Perform real microphone, speaker and camera acceptance where supported.
 7. Re-run all required checks against the exact latest PR head and review the resulting diff.
 
+## Connected Supabase project inspection (read-only)
+
+The connected ULTRON Supabase project was inspected without changing its schema:
+
+- The live migration ledger currently contains 15 migrations and ends at `20261027185203`.
+- The live `public` schema did not list `paired_devices`, `pending_device_pairings`, or `ultron_multidevice_state`.
+- The repository contains later paired-device migrations, but they are not present in the connected project's migration history.
+- The persistence adapter now constructs the server-side Supabase REST client correctly when `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are configured. This code change does not create missing tables.
+- Until the required schema migrations are reviewed and applied, Supabase-backed companion registration and multi-device state persistence must remain marked **BLOCKED / NOT VERIFIED**. Local file fallback is not cloud durability.
+
+No production schema change was applied during this work. Applying pending migrations remains behind the explicit release authorization boundary.
+
 ## Deployment boundary
 
 Do not merge PR #478 into `main`, because the Render backend tracks `main` for automatic deployment. Do not manually deploy, synchronize a production Blueprint, alter production environment variables, or apply production database migrations without the owner's explicit `DEPLOY` authorization.
