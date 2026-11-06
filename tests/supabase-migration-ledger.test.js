@@ -63,8 +63,8 @@ test("destructive rollback scripts and obsolete worker scaffold are kept outside
 test("multi-device REST state migration is private to the server role", () => {
   const migrationPath = fileURLToPath(new URL("../supabase/migrations/20261106120000_ultron_multidevice_state.sql", import.meta.url));
   const sql = readFileSync(migrationPath, "utf8").toLowerCase();
-  assert.match(sql, /create table if not exists public\\.ultron_multidevice_state/);
+  assert.match(sql, /create table if not exists public\.ultron_multidevice_state/);
   assert.match(sql, /enable row level security/);
-  assert.match(sql, /revoke all on table public\\.ultron_multidevice_state from public, anon, authenticated/);
-  assert.match(sql, /grant all on table public\\.ultron_multidevice_state to service_role/);
+  assert.match(sql, /revoke all on table public\.ultron_multidevice_state from public, anon, authenticated/);
+  assert.match(sql, /grant all on table public\.ultron_multidevice_state to service_role/);
 });
