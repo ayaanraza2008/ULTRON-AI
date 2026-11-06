@@ -214,14 +214,6 @@ export function createJarvisRouter({
   remoteTaskOrchestrator.multiDeviceManager = multiDeviceManagerInstance;
   remoteTaskOrchestrator.telephonyGateway = telephonyGateway;
 
-  // Trigger async durable state load on router creation if persistent
-  if (multiDeviceManagerInstance && typeof multiDeviceManagerInstance.load === "function") {
-    multiDeviceManagerInstance.load().catch(err => {
-      if (logger?.warn) logger.warn("MultiDeviceManager: failed to load durable state at boot", { error: err?.message });
-    });
-  }
-
-
   // --- JARVIS Capability Benchmark ---
   router.get("/jarvis/benchmark", requireOwner, async (_req, res) => {
     res.setHeader("Cache-Control", "no-store");

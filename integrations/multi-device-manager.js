@@ -140,11 +140,8 @@ export class MultiDeviceManager {
   }
 
   saveToDisk() {
-    if (!this.isPersistent) return false;
-    if (this.persistenceAdapter && typeof this.persistenceAdapter.saveSync === "function") {
-      return this.persistenceAdapter.saveSync(this.serializeState());
-    }
-    return false;
+    if (!this.isPersistent || !(this.persistenceAdapter instanceof FilePersistenceAdapter)) return false;
+    return this.persistenceAdapter.saveSync(this.serializeState());
   }
 
   loadFromDisk() {
@@ -213,6 +210,127 @@ export class MultiDeviceManager {
       cloudPersisted: false,
       reason: failure || outcome?.warning || "PERSISTENCE_BACKEND_NOT_DURABLE"
     };
+  }
+
+  async _commitDurableMutation(mutation, errorCode = "STATE_PERSISTENCE_FAILED") {
+    return this._enqueueDurableOperation(async () => {
+      if (await this.ready === false) {
+        return { success: false, error: "PERSISTENCE_INITIALIZATION_FAILED", cloudPersisted: false };
+      }
+      if (!this.isPersistent || !this.persistenceAdapter || this.persistenceAdapter instanceof FilePersistenceAdapter) {
+        return { success: false, error: "DURABLE_PERSISTENCE_NOT_CONFIGURED", cloudPersisted: false };
+      }
+
+      const previousSnapshot = this.serializeState();
+      let result;
+      try {
+        result = mutation();
+      } catch (error) {
+        this._restoreSnapshot(previousSnapshot);
+        return { success: false, error: errorCode, message: String(error?.message || errorCode).slice(0, 300), cloudPersisted: false };
+      }
+      if (result?.success === false) return result;
+
+      const persisted = await this._persistDurableSnapshot(previousSnapshot);
+      if (!persisted.success) {
+        return {
+          success: false,
+          error: errorCode,
+          cloudPersisted: false,
+          persistenceBackend: persisted.backend || null,
+          message: "The lifecycle change was rolled back because cloud persistence was not confirmed."
+        };
+      }
+
+      return {
+        ...(result && typeof result === "object" ? result : { value: result }),
+        success: typeof result?.success === "boolean" ? result.success : true,
+        cloudPersisted: true,
+        persistenceBackend: persisted.backend
+      };
+    });
+  }
+
+  async _runDeviceCommandDurably(command) {
+    return this._enqueueDurableOperation(async () => {
+      if (await this.ready === false) {
+        return { success: false, error: "PERSISTENCE_INITIALIZATION_FAILED", cloudPersisted: false };
+      }
+      if (!this.isPersistent || !this.persistenceAdapter || this.persistenceAdapter instanceof FilePersistenceAdapter) {
+        return { success: false, error: "DURABLE_PERSISTENCE_NOT_CONFIGURED", cloudPersisted: false };
+      }
+
+      const previousSnapshot = this.serializeState();
+      const result = await command();
+      const actionApplied = Array.isArray(result?.devices) && result.devices.some(device => device.success === true);
+      if (!actionApplied) return result;
+
+      const persisted = await this._persistDurableSnapshot(previousSnapshot);
+      if (!persisted.success) {
+        return {
+          ...result,
+          success: false,
+          error: "DEVICE_PERSISTENCE_FAILED",
+          cloudPersisted: false,
+          actionMayHaveExecuted: true,
+          message: "A device acknowledged the command, but its resulting state could not be confirmed in cloud storage."
+        };
+      }
+      return { ...result, cloudPersisted: true, persistenceBackend: persisted.backend };
+    });
+  }
+
+  async registerDeviceDurably(deviceMeta = {}) {
+    return this._commitDurableMutation(
+      () => this.registerDevice(deviceMeta, { deferPersistence: true }),
+      "DEVICE_PERSISTENCE_FAILED"
+    );
+  }
+
+  async revokeDeviceDurably(deviceId, reason = "owner_revoked") {
+    return this._commitDurableMutation(
+      () => this.revokeDevice(deviceId, reason, { deferPersistence: true }),
+      "DEVICE_PERSISTENCE_FAILED"
+    );
+  }
+
+  async disconnectDeviceDurably(deviceId) {
+    return this._commitDurableMutation(
+      () => this.disconnectDevice(deviceId, { deferPersistence: true }),
+      "DEVICE_PERSISTENCE_FAILED"
+    );
+  }
+
+  async reconnectDeviceDurably(deviceId) {
+    return this._commitDurableMutation(
+      () => this.reconnectDevice(deviceId, { deferPersistence: true }),
+      "DEVICE_PERSISTENCE_FAILED"
+    );
+  }
+
+  async updateDevicePresenceDurably(deviceId, telemetry = {}) {
+    return this._commitDurableMutation(
+      () => this.updateDevicePresence(deviceId, telemetry, { deferPersistence: true }),
+      "DEVICE_PERSISTENCE_FAILED"
+    );
+  }
+
+  async clearSharedStateDurably(stateKey = null) {
+    return this._commitDurableMutation(
+      () => this.clearSharedState(stateKey, { deferPersistence: true }),
+      "STATE_PERSISTENCE_FAILED"
+    );
+  }
+
+  async syncSharedMemoryDurably({ memoryKey, memoryData, originDeviceId = null, ownerUserId = null, expectedVersion = null } = {}) {
+    if (!memoryKey || typeof memoryKey !== "string") return { success: false, error: "MEMORY_KEY_REQUIRED" };
+    return this.syncStateAcrossDevicesDurably({
+      stateKey: "memory:" + memoryKey.trim(),
+      payload: memoryData,
+      originDeviceId,
+      ownerUserId,
+      expectedVersion
+    });
   }
 
   async syncStateAcrossDevicesDurably(options = {}) {
@@ -400,7 +518,10 @@ export class MultiDeviceManager {
     };
   }
 
-  revokeDevice(deviceId, reason = "owner_revoked") {
+  revokeDevice(deviceId, reason = "owner_revoked", { deferPersistence = false } = {}) {
+    if (this.isPersistent && !(this.persistenceAdapter instanceof FilePersistenceAdapter) && !deferPersistence) {
+      return { success: false, error: "ASYNC_PERSISTENCE_REQUIRED", message: "Use revokeDeviceDurably for database-backed persistence." };
+    }
     if (!this.devices.has(deviceId)) {
       return { success: false, error: "DEVICE_NOT_FOUND" };
     }
@@ -411,7 +532,7 @@ export class MultiDeviceManager {
     this.revokedDevices.add(deviceId);
     this.pendingDeliveries.delete(deviceId);
     this.unsubscribeDevice(deviceId);
-    if (this.isPersistent && !this.saveToDisk()) {
+    if (this.isPersistent && !deferPersistence && !this.saveToDisk()) {
       return {
         success: false,
         error: "DEVICE_PERSISTENCE_FAILED",
@@ -473,7 +594,10 @@ export class MultiDeviceManager {
     });
   }
 
-  registerDevice(deviceMeta = {}) {
+  registerDevice(deviceMeta = {}, { deferPersistence = false } = {}) {
+    if (this.isPersistent && !this.isInitializing && !(this.persistenceAdapter instanceof FilePersistenceAdapter) && !deferPersistence) {
+      return { success: false, error: "ASYNC_PERSISTENCE_REQUIRED", message: "Use registerDeviceDurably for database-backed persistence." };
+    }
     const id = deviceMeta.id || "dev-" + crypto.randomUUID();
     if (this.revokedDevices.has(id)) {
       return { success: false, error: "DEVICE_REVOKED", deviceId: id };
@@ -493,7 +617,7 @@ export class MultiDeviceManager {
     };
 
     this.devices.set(id, entry);
-    if (this.isPersistent && !this.isInitializing && !this.saveToDisk()) {
+    if (this.isPersistent && !this.isInitializing && !deferPersistence && !this.saveToDisk()) {
       this.devices.delete(id);
       return { success: false, error: "DEVICE_PERSISTENCE_FAILED", deviceId: id };
     }
@@ -543,7 +667,10 @@ export class MultiDeviceManager {
   /**
    * Simultaneously unlocks all registered mobile devices (Phone 1, 2, 3).
    */
-  async unlockMobileDevices() {
+  async unlockMobileDevices({ deferPersistence = false } = {}) {
+    if (this.isPersistent && !(this.persistenceAdapter instanceof FilePersistenceAdapter) && !deferPersistence) {
+      return this._runDeviceCommandDurably(() => this.unlockMobileDevices({ deferPersistence: true }));
+    }
     const mobileDevices = this.listDevices({ platform: "android", online: true });
     if (!mobileDevices.length) {
       return { success: false, error: "NO_ONLINE_ANDROID_DEVICES", targetedCount: 0, unlockedCount: 0, devices: [] };
@@ -573,7 +700,7 @@ export class MultiDeviceManager {
     const failedCount = results.length - unlockedCount;
     this.commandHistory.unshift({ action: "UNLOCK_MOBILE_DEVICES", timestamp: new Date().toISOString(), targetedCount: mobileDevices.length, unlockedCount, failedCount, results });
     if (this.commandHistory.length > 50) this.commandHistory.pop();
-    if (this.isPersistent && unlockedCount > 0 && !this.saveToDisk()) {
+    if (this.isPersistent && !deferPersistence && unlockedCount > 0 && !this.saveToDisk()) {
       return { success: false, error: "DEVICE_PERSISTENCE_FAILED", targetedCount: mobileDevices.length, unlockedCount: 0, failedCount: mobileDevices.length, devices: results };
     }
     return {
@@ -583,7 +710,10 @@ export class MultiDeviceManager {
     };
   }
 
-  async lockMobileDevices() {
+  async lockMobileDevices({ deferPersistence = false } = {}) {
+    if (this.isPersistent && !(this.persistenceAdapter instanceof FilePersistenceAdapter) && !deferPersistence) {
+      return this._runDeviceCommandDurably(() => this.lockMobileDevices({ deferPersistence: true }));
+    }
     const mobileDevices = this.listDevices({ platform: "android", online: true });
     if (!mobileDevices.length) {
       return { success: false, error: "NO_ONLINE_ANDROID_DEVICES", targetedCount: 0, lockedCount: 0, devices: [] };
@@ -611,7 +741,7 @@ export class MultiDeviceManager {
     }
     const lockedCount = results.filter(result => result.success).length;
     const failedCount = results.length - lockedCount;
-    if (this.isPersistent && lockedCount > 0 && !this.saveToDisk()) {
+    if (this.isPersistent && !deferPersistence && lockedCount > 0 && !this.saveToDisk()) {
       return { success: false, error: "DEVICE_PERSISTENCE_FAILED", targetedCount: mobileDevices.length, lockedCount: 0, failedCount: mobileDevices.length, devices: results };
     }
     return {
@@ -621,7 +751,10 @@ export class MultiDeviceManager {
     };
   }
 
-  async playMediaAcrossDevices({ mediaUrl = "", query = "favorite song" } = {}) {
+  async playMediaAcrossDevices({ mediaUrl = "", query = "favorite song", deferPersistence = false } = {}) {
+    if (this.isPersistent && !(this.persistenceAdapter instanceof FilePersistenceAdapter) && !deferPersistence) {
+      return this._runDeviceCommandDurably(() => this.playMediaAcrossDevices({ mediaUrl, query, deferPersistence: true }));
+    }
     const capableDevices = this.listDevices({ platform: "android", online: true }).filter(dev =>
       Array.isArray(dev.capabilities) &&
       (dev.capabilities.includes("media_playback") || dev.capabilities.includes("youtube_launch"))
@@ -657,7 +790,7 @@ export class MultiDeviceManager {
     }
     const playingDevices = results.filter(result => result.success).length;
     const failedCount = results.length - playingDevices;
-    if (this.isPersistent && playingDevices > 0 && !this.saveToDisk()) {
+    if (this.isPersistent && !deferPersistence && playingDevices > 0 && !this.saveToDisk()) {
       return { success: false, error: "DEVICE_PERSISTENCE_FAILED", playingDevices: 0, failedCount: results.length, devices: results };
     }
     const eventRecord = { action: "PLAY_MEDIA_ACROSS_DEVICES", timestamp: new Date().toISOString(), targetedCount: capableDevices.length, mediaUrl: mediaUrl || null, results };
@@ -669,25 +802,31 @@ export class MultiDeviceManager {
     };
   }
 
-  disconnectDevice(deviceId) {
+  disconnectDevice(deviceId, { deferPersistence = false } = {}) {
+    if (this.isPersistent && !(this.persistenceAdapter instanceof FilePersistenceAdapter) && !deferPersistence) {
+      return { success: false, error: "ASYNC_PERSISTENCE_REQUIRED", message: "Use disconnectDeviceDurably for database-backed persistence." };
+    }
     const dev = this.devices.get(deviceId);
     if (!dev || this.revokedDevices.has(deviceId) || dev.status === "revoked") {
       return { success: false, error: this.revokedDevices.has(deviceId) ? "DEVICE_REVOKED" : "DEVICE_NOT_FOUND" };
     }
     dev.online = false;
     dev.lastSeenAt = new Date().toISOString();
-    if (this.isPersistent && !this.saveToDisk()) return { success: false, error: "DEVICE_PERSISTENCE_FAILED" };
+    if (this.isPersistent && !deferPersistence && !this.saveToDisk()) return { success: false, error: "DEVICE_PERSISTENCE_FAILED" };
     return { success: true, deviceId, online: false };
   }
 
-  reconnectDevice(deviceId) {
+  reconnectDevice(deviceId, { deferPersistence = false } = {}) {
+    if (this.isPersistent && !(this.persistenceAdapter instanceof FilePersistenceAdapter) && !deferPersistence) {
+      return { success: false, error: "ASYNC_PERSISTENCE_REQUIRED", message: "Use reconnectDeviceDurably for database-backed persistence." };
+    }
     const dev = this.devices.get(deviceId);
     if (!dev || this.revokedDevices.has(deviceId) || dev.status === "revoked") {
       return { success: false, error: this.revokedDevices.has(deviceId) ? "DEVICE_REVOKED" : "DEVICE_NOT_FOUND" };
     }
     dev.online = true;
     dev.lastSeenAt = new Date().toISOString();
-    if (this.isPersistent && !this.saveToDisk()) return { success: false, error: "DEVICE_PERSISTENCE_FAILED" };
+    if (this.isPersistent && !deferPersistence && !this.saveToDisk()) return { success: false, error: "DEVICE_PERSISTENCE_FAILED" };
     return { success: true, deviceId, online: true };
   }
 
@@ -702,7 +841,10 @@ export class MultiDeviceManager {
   /**
    * Updates presence, battery, vitals and last seen timestamp for a device.
    */
-  updateDevicePresence(deviceId, telemetry = {}) {
+  updateDevicePresence(deviceId, telemetry = {}, { deferPersistence = false } = {}) {
+    if (this.isPersistent && !(this.persistenceAdapter instanceof FilePersistenceAdapter) && !deferPersistence) {
+      return { success: false, error: "ASYNC_PERSISTENCE_REQUIRED", message: "Use updateDevicePresenceDurably for database-backed persistence." };
+    }
     const dev = this.devices.get(deviceId);
     if (!dev || this.revokedDevices.has(deviceId) || dev.status === "revoked") {
       return { success: false, error: this.revokedDevices.has(deviceId) ? "DEVICE_REVOKED" : "DEVICE_NOT_FOUND" };
@@ -716,7 +858,7 @@ export class MultiDeviceManager {
     }
     if (telemetry.vitals) dev.vitals = telemetry.vitals;
     dev.lastSeenAt = new Date().toISOString();
-    if (this.isPersistent && !this.saveToDisk()) return { success: false, error: "DEVICE_PERSISTENCE_FAILED" };
+    if (this.isPersistent && !deferPersistence && !this.saveToDisk()) return { success: false, error: "DEVICE_PERSISTENCE_FAILED" };
     return { success: true, deviceId, online: dev.online, lastSeenAt: dev.lastSeenAt };
   }
 
@@ -945,20 +1087,23 @@ export class MultiDeviceManager {
   /**
    * Clears shared ecosystem state.
    */
-  clearSharedState(stateKey = null) {
+  clearSharedState(stateKey = null, { deferPersistence = false } = {}) {
+    if (this.isPersistent && !(this.persistenceAdapter instanceof FilePersistenceAdapter) && !deferPersistence) {
+      return { success: false, error: "ASYNC_PERSISTENCE_REQUIRED", message: "Use clearSharedStateDurably for database-backed persistence." };
+    }
     const previous = new Map(this.sharedState);
     if (stateKey) {
       const key = String(stateKey).trim();
       const deleted = this.sharedState.delete(key);
       if (!deleted) return { success: false, stateKey: key };
-      if (this.isPersistent && !this.saveToDisk()) {
+      if (this.isPersistent && !deferPersistence && !this.saveToDisk()) {
         this.sharedState = previous;
         return { success: false, error: "STATE_PERSISTENCE_FAILED", stateKey: key };
       }
       return { success: true, stateKey: key };
     }
     this.sharedState.clear();
-    if (this.isPersistent && !this.saveToDisk()) {
+    if (this.isPersistent && !deferPersistence && !this.saveToDisk()) {
       this.sharedState = previous;
       return { success: false, error: "STATE_PERSISTENCE_FAILED" };
     }
