@@ -87,7 +87,7 @@ export function createJarvisRouter({
     throw new TypeError("createJarvisRouter requires the authenticated Supabase user middleware.");
   }
 
-  const ownerUserId = String(env.ULTRON_INTEGRATION_OWNER_USER_ID || "").trim();
+  const ownerUserId = String(env.ULTRON_OWNER_USER_ID || env.ULTRON_INTEGRATION_OWNER_USER_ID || "").trim();
   const requireTelephonyWebhook = createTelephonyWebhookGuard({ env });
   const configuredOwnerNumbers = String(env.ULTRON_OWNER_PHONE_NUMBERS || "")
     .split(",")
@@ -136,6 +136,92 @@ export function createJarvisRouter({
     return null;
   };
 
+  const authorizePairedDeviceOwner = (pairedDevice, res) => {
+    if (!ownerUserId) {
+      return res.status(503).json({
+        error: {
+          code: "ULTRON_OWNER_NOT_CONFIGURED",
+          message: "Paired-device access remains disabled until the ULTRON owner user ID is configured."
+        }
+      });
+    }
+    const pairedOwnerId = String(pairedDevice?.ownerUserId || pairedDevice?.owner_user_id || "").trim();
+    if (!pairedOwnerId || pairedOwnerId !== ownerUserId) {
+      return res.status(403).json({
+        error: {
+          code: "ULTRON_OWNER_ONLY",
+          message: "This paired device does not belong to the configured ULTRON owner."
+        }
+      });
+    }
+    return null;
+  };
+
+  const syncPairedDeviceIntoFleet = async pairedDevice => {
+    const manager = multiDeviceManagerInstance;
+    if (!manager || typeof manager.getDevice !== "function" || !pairedDevice?.id || !pairedDevice?.ownerUserId) return true;
+    if (await manager.ready === false) return true;
+
+    const platform = String(pairedDevice.platform || "unknown").toLowerCase();
+    const heartbeatTimeoutMs = platform === "android" ? 35 * 60 * 1000 : 90 * 1000;
+    const online = typeof deviceHubInstance.isDeviceOnline === "function"
+      ? deviceHubInstance.isDeviceOnline(pairedDevice.id)
+      : pairedDevice.online === true;
+    const existing = manager.getDevice(pairedDevice.id);
+    if (existing?.ownerUserId && existing.ownerUserId !== pairedDevice.ownerUserId) return false;
+
+    const type = platform === "windows"
+      ? "windows_pc"
+      : platform === "android"
+        ? "android_smartphone"
+        : platform === "browser"
+          ? "web_browser"
+          : "generic_companion";
+    const capabilities = Array.isArray(pairedDevice.capabilities)
+      ? pairedDevice.capabilities
+      : Object.keys(pairedDevice.capabilities || {});
+    const metadata = {
+      id: pairedDevice.id,
+      name: pairedDevice.name || pairedDevice.device_name || "Paired Companion",
+      ownerUserId: pairedDevice.ownerUserId,
+      type,
+      platform,
+      capabilities: capabilities.length ? capabilities : ["notifications", "telemetry"],
+      online,
+      battery: pairedDevice.battery || { percent: 100, isCharging: false },
+      heartbeatTimeoutMs
+    };
+
+    if (!existing) {
+      let result = manager.registerDevice(metadata);
+      if (result?.error === "ASYNC_PERSISTENCE_REQUIRED" && typeof manager.registerDeviceDurably === "function") {
+        result = await manager.registerDeviceDurably(metadata);
+      }
+      if (result?.success === false) {
+        logger.warn?.("Paired device could not be registered in the fleet manager", {
+          deviceId: pairedDevice.id,
+          code: result.error || "DEVICE_REGISTRATION_FAILED"
+        });
+      }
+      return result?.error !== "DEVICE_OWNER_MISMATCH";
+    }
+
+    if (online && typeof manager.isDeviceOnline === "function" && !manager.isDeviceOnline(pairedDevice.id)) {
+      const presence = { online: true, battery: pairedDevice.battery, heartbeatTimeoutMs };
+      let result = manager.updateDevicePresence(pairedDevice.id, presence);
+      if (result?.error === "ASYNC_PERSISTENCE_REQUIRED" && typeof manager.updateDevicePresenceDurably === "function") {
+        result = await manager.updateDevicePresenceDurably(pairedDevice.id, presence);
+      }
+      if (result?.success === false) {
+        logger.warn?.("Paired device presence could not be refreshed in the fleet manager", {
+          deviceId: pairedDevice.id,
+          code: result.error || "DEVICE_PRESENCE_UPDATE_FAILED"
+        });
+      }
+    }
+    return true;
+  };
+
   const authenticateOwnerOrDevice = async (req, res, next) => {
     const deviceToken = req.headers["x-device-token"] || (req.headers.authorization && (req.headers.authorization.startsWith("Bearer dev_tok_") || req.headers.authorization.startsWith("Bearer ultron_dev_")) ? req.headers.authorization.slice(7).trim() : null);
     if (deviceToken && typeof deviceToken === "string") {
@@ -151,6 +237,11 @@ export function createJarvisRouter({
           if (!hydratedDevice) {
             return res.status(401).json({ error: { code: "INVALID_DEVICE_IDENTITY", message: "The verified device could not be loaded into the command runtime." } });
           }
+          const ownerRejection = authorizePairedDeviceOwner(hydratedDevice, res);
+          if (ownerRejection) return ownerRejection;
+          if (!await syncPairedDeviceIntoFleet(hydratedDevice)) {
+            return res.status(403).json({ error: { code: "DEVICE_OWNER_MISMATCH", message: "The fleet record belongs to a different owner." } });
+          }
           req.device = hydratedDevice;
           return next();
         }
@@ -163,6 +254,11 @@ export function createJarvisRouter({
       if (env.NODE_ENV !== "production" && env.ULTRON_ALLOW_LEGACY_DEVICEHUB_AUTH === "true") {
         const legacyDevice = deviceHubInstance.findDeviceByToken(deviceToken);
         if (legacyDevice) {
+          const ownerRejection = authorizePairedDeviceOwner(legacyDevice, res);
+          if (ownerRejection) return ownerRejection;
+          if (!await syncPairedDeviceIntoFleet(legacyDevice)) {
+            return res.status(403).json({ error: { code: "DEVICE_OWNER_MISMATCH", message: "The fleet record belongs to a different owner." } });
+          }
           req.device = legacyDevice;
           return next();
         }
@@ -177,7 +273,12 @@ export function createJarvisRouter({
           name: "Legacy Companion",
           platform: "windows",
           authToken: deviceToken
-        }) || { id: "legacy-companion-device", name: "Legacy Companion", authToken: deviceToken };
+        }) || { id: "legacy-companion-device", ownerUserId, name: "Legacy Companion", platform: "windows", authToken: deviceToken };
+        const ownerRejection = authorizePairedDeviceOwner(req.device, res);
+        if (ownerRejection) return ownerRejection;
+        if (!await syncPairedDeviceIntoFleet(req.device)) {
+          return res.status(403).json({ error: { code: "DEVICE_OWNER_MISMATCH", message: "The fleet record belongs to a different owner." } });
+        }
         return next();
       }
       return res.status(401).json({
