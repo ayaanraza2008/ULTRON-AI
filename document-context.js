@@ -133,7 +133,7 @@ function makeChunks(text, maxChars = 1800, overlap = 250) {
     let end = Math.min(text.length, start + maxChars);
     if (end < text.length) {
       const boundary = Math.max(
-        text.lastIndexOf("\\n", end),
+        text.lastIndexOf("\n", end),
         text.lastIndexOf(". ", end),
         text.lastIndexOf("? ", end),
         text.lastIndexOf("! ", end)
