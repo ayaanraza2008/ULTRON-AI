@@ -491,6 +491,7 @@ export function createDevicePairingRouter({
         inMemoryDevice.encryptedAuthToken = null;
         inMemoryDevice.status = "active";
         inMemoryDevice.revokedAt = null;
+        deviceHubInstance.revokedDevices?.delete(rows[0].id);
         inMemoryDevice.online = false;
         inMemoryDevice.lastSeenAt = null;
         deviceHubInstance.saveToDisk();
@@ -525,7 +526,7 @@ export function createDevicePairingRouter({
 
       // Revoke the in-memory identity and close authenticated WebSocket/SSE
       // sessions immediately; database rejection alone affects only reconnects.
-      deviceHubInstance.revokeDevice(rows[0].id, ownerId);
+      deviceHubInstance.revokeDevice(rows[0].id, ownerId, { authoritativeExternal: true });
 
       res.json({ ok: true, revoked: true, deviceId: rows[0].id });
     } catch (error) {
