@@ -78,7 +78,7 @@ test("TelephonyBrain: Dispatches simultaneous unlock across all 3 mobile devices
   const brain = new TelephonyBrain();
   let mobileUnlocked = false;
   const mockMdm = {
-    unlockMobileDevices: async () => { mobileUnlocked = true; return { unlockedCount: 3, totalTargeted: 3 }; }
+    unlockMobileDevices: async () => { mobileUnlocked = true; return { success: true, unlockedCount: 3, totalTargeted: 3 }; }
   };
 
   const outcome = await brain.processCallerUtterance({
@@ -100,7 +100,7 @@ test("TelephonyBrain: Dispatches media playback across all devices", async () =>
   const brain = new TelephonyBrain();
   let mediaPlayed = false;
   const mockMdm = {
-    playMediaAcrossDevices: async () => { mediaPlayed = true; return { playingDevices: 3 }; }
+    playMediaAcrossDevices: async () => { mediaPlayed = true; return { success: true, playingDevices: 3 }; }
   };
 
   const outcome = await brain.processCallerUtterance({
@@ -114,8 +114,8 @@ test("TelephonyBrain: Dispatches media playback across all devices", async () =>
   assert.equal(outcome.permitted, true);
   assert.equal(outcome.intent, TELEPHONY_INTENTS.PLAY_MEDIA_ALL_DEVICES);
   assert.equal(mediaPlayed, true);
-  assert.equal(outcome.spokenResponse, "I could not confirm media playback on any connected device.");
-  assert.equal(outcome.executed, false);
+  assert.equal(outcome.spokenResponse, "Media playback started on 3 devices.");
+  assert.equal(outcome.executed, true);
 });
 
 test("TelephonyBrain: Rejects commands from unauthorized callers", async () => {
