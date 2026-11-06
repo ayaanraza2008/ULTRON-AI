@@ -171,6 +171,9 @@ test("device pairing creates a five-minute owner-approved code and consumes it e
 
 test("device registry isolates owners and rotates/revokes per-device tokens", async () => {
   const db = makeDatabase();
+  const hub = new DeviceHub({ env: { ULTRON_DEVICE_SIGNING_SECRET: SIGNING_SECRET } });
+  const deviceEvents = [];
+  hub.registerEventListener(event => deviceEvents.push(event));
   let deviceId;
   let oldToken;
   await withRouter(db.fetchImpl, async base => {
@@ -214,18 +217,24 @@ test("device registry isolates owners and rotates/revokes per-device tokens", as
     assert.equal(statusAfterRotation.status, 200);
     const statusPayload = await statusAfterRotation.json();
     assert.equal(statusPayload.devices[0].online, false);
+    assert.ok(deviceEvents.some(event =>
+      event.type === "DEVICE_CREDENTIALS_ROTATED" && event.deviceId === deviceId && event.ownerUserId === OWNER_A
+    ));
 
     const revoke = await fetch(base + "/devices/" + deviceId, {
       method: "DELETE", headers: { "x-test-owner": OWNER_A }
     });
     assert.equal(revoke.status, 200);
     assert.equal(db.devices.get(deviceId).status, "revoked");
+    assert.ok(deviceEvents.some(event =>
+      event.type === "DEVICE_REVOKED" && event.deviceId === deviceId && event.ownerUserId === OWNER_A
+    ));
 
     const wrongOwnerRevoke = await fetch(base + "/devices/" + deviceId, {
       method: "DELETE", headers: { "x-test-owner": OWNER_B }
     });
     assert.equal(wrongOwnerRevoke.status, 404);
-  });
+  }, ENV, hub);
 });
 
 test("paired-device token verifier accepts only active token hashes and never returns the token", async () => {
