@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { employeeRoutineCatalog } from "./employee-catalog.js";
 import { buildTaskSkillsGuidance } from "./task-aware-skills.js";
 import { verifyAutonomousOutput } from "./autonomous-quality-gate.js";
+import { createHealthchecksHeartbeat } from "./integrations/healthchecks.js";
 
 const maxTaskAgeMs = 24 * 60 * 60 * 1000;
 const maxFutureTaskClockSkewMs = 5 * 60 * 1000;
@@ -142,6 +143,7 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = s
   const pollMs = Math.max(1500, Math.min(30000, Number(env.ULTRON_WORKER_POLL_MS) || 5000));
   const tavilyKey = env.TAVILY_API_KEY || "";
   const leaseHeartbeatMs = Math.max(10000, Math.min(120000, Number(env.ULTRON_WORKER_LEASE_HEARTBEAT_MS) || 60000));
+  const externalHeartbeat = createHealthchecksHeartbeat({ url: env.ULTRON_WORKER_HEALTHCHECKS_URL, fetchImpl, logger });
   const status = { state: "starting", startedAt: null, lastCycleAt: null, lastCycleSuccessAt: null, lastErrorAt: null, lastErrorCode: null, tasksCompleted: 0, tasksNeedingReview: 0, tasksRetried: 0, tasksFailed: 0, tasksBlocked: 0, tasksDiscarded: 0, taskStateUpdateFailures: 0, taskLeaseRenewalFailures: 0, consecutiveCycleFailures: 0 };
   if (!supabaseUrl || !serviceKey || !/^https:\/\//i.test(supabaseUrl) || !safeResearchUrl(supabaseUrl)) {
     status.state = "disabled";
@@ -640,11 +642,13 @@ export function startWorker({ env = process.env, logger = console, fetchImpl = s
         await tick();
         status.lastCycleSuccessAt = new Date().toISOString();
         status.consecutiveCycleFailures = 0;
+        void externalHeartbeat.success();
       } catch (error) {
         status.consecutiveCycleFailures += 1;
         status.lastErrorAt = new Date().toISOString();
         status.lastErrorCode = bounded(error?.code, 80) || "WORKER_CYCLE_FAILED";
         logger.error?.("Worker cycle failed:", status.lastErrorCode, error.message);
+        void externalHeartbeat.failure();
       }
       // Always throttle the loop, including successful task execution. On repeated
       // infrastructure/provider poll failures, increase the delay to avoid hammering
