@@ -4,31 +4,32 @@
 **Backend service:** `ultron-ai-core`  
 **Backend branch:** `main`  
 **Auto-deploy:** Enabled  
-**Current candidate:** PR #478 — `feat/ultron-operation-infinity-multidevice`
+**Candidate:** [PR #478](https://github.com/ayaanraza2008/ULTRON-AI/pull/478)
 
 ## Decision
 
 **NOT READY FOR PRODUCTION MERGE OR DEPLOYMENT.**
 
-The backend service auto-deploys commits to `main`. Merging the candidate could therefore trigger a production deployment. Keep PR #478 open and unmerged until the owner explicitly authorizes release.
+Merging this candidate may automatically deploy the backend to Render. Keep PR #478 open and unmerged until the owner explicitly authorizes release.
 
-## Verified infrastructure observations
+## Release gates
 
-- Render workspace `Ultron core` contains the backend and related services.
-- The connected Supabase project `ULTRON-AI` is ACTIVE_HEALTHY in Mumbai (`ap-south-1`), under the Free organization plan.
-- The remote migration ledger currently ends at `20261027185203_private_document_storage`.
-- The live schema lacks `paired_devices`, `pending_device_pairings`, and `ultron_multidevice_state`.
-- Candidate migrations now define the paired-device registry, telemetry fields and REST multi-device state table. They have **not** been applied to production.
-- Supabase security advisor reports leaked-password protection disabled; the current plan does not include this feature. No paid upgrade is authorized.
+1. All required CI workflows must pass on the exact latest PR head.
+2. Review candidate Supabase migrations and apply them only after explicit owner authorization.
+3. Verify live authenticated cloud persistence, version conflict handling, acknowledgements, revocation and restart recovery.
+4. Complete genuine live AI inference and automatic provider fallback acceptance.
+5. Verify owner-only production configuration and account isolation.
+6. Complete browser, Windows and Android pairing/synchronization acceptance.
+7. Complete voice and vision acceptance on supported devices.
+8. Review rollback procedure and verify the production revision before any authorized release.
 
-## Required before release
+## Known infrastructure constraints
 
-1. Review and apply the pending migrations only after explicit owner authorization.
-2. Verify cloud persistence and recovery across service restart; confirm no fallback file is mistaken for cloud durability.
-3. Complete authenticated live AI inference and owner-isolation checks.
-4. Complete browser, Windows and Android end-to-end pairing, sync, ACK, reconnect and revoke checks.
-5. Complete physical companion and real voice/vision acceptance.
-6. Re-verify CI/security checks on the exact latest candidate HEAD once pushed.
-7. Review rollback procedure and confirm the production revision.
+- Candidate Supabase migrations have not been applied to production.
+- Live schema/persistence acceptance therefore remains blocked.
+- Supabase leaked-password protection is reported unavailable on the current Free plan; no paid upgrade is authorized.
+- Automated builds and unit tests do not prove live cloud behavior or physical companion operation.
 
-Do not merge, deploy, change production environment variables, sync a production Blueprint or apply production migrations until the owner explicitly issues `DEPLOY`.
+## Authorization boundary
+
+Do not merge, deploy, change production environment variables, sync a production Blueprint or apply production database migrations until the owner explicitly issues `DEPLOY`. Engineering review, source fixes, branch commits and non-production verification may continue without that release authorization.
