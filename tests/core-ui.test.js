@@ -20,9 +20,9 @@ async function startProxy(t, options = {}) {
 }
 
 test("backend and proxy do not expose frontend static assets", () => {
-  assert.doesNotMatch(serverSource, /express\\.static\\s*\\(/);
-  assert.doesNotMatch(serverSource, /app\\.use\\s*\\(\\s*["']\\/voice["']/);
-  assert.match(serverSource, /code:\\s*["']FRONTEND_REMOVED["']/);
+  assert.doesNotMatch(serverSource, /express\.static\s*\(/);
+  assert.doesNotMatch(serverSource, /app\.use\s*\(\s*["']\/voice["']/);
+  assert.match(serverSource, /code:\s*["']FRONTEND_REMOVED["']/);
   assert.doesNotMatch(proxySource, /STATIC_ASSETS|serveAsset/);
 });
 

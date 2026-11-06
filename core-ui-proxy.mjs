@@ -103,7 +103,7 @@ export function createUltronCoreProxy({ fetchImpl = fetch, logger = console, gat
       sendJson(res, 404, {
         error: {
           code: requestUrl.pathname === "/" || requestUrl.pathname === "/index.html" ||
-            /\\.(?:html?|js|css|svg|png|webmanifest|ico)$/i.test(requestUrl.pathname)
+            /\.(?:html?|js|css|svg|png|webmanifest|ico)$/i.test(requestUrl.pathname)
             ? "FRONTEND_REMOVED" : "NOT_FOUND",
           message: "This host is API-only. The ULTRON web frontend and static assets have been removed."
         }
