@@ -111,8 +111,17 @@ services:
     buildCommand: >-
       npm install --ignore-scripts &&
       node --check public/app.js &&
-      node --test --test-timeout=30000 --test-force-exit
+      node --test --test-concurrency=2 --test-timeout=30000 --test-force-exit
       tests/interface-voice-output.test.js
+      tests/core-ui.test.js
+      tests/features.test.js
+      tests/wake-word.test.js
+      tests/auth-methods.test.js
+      tests/auth-rate-limit.test.js
+      tests/auth-readiness.test.js
+      tests/vision-routing.test.js
+      tests/browser-use-model-proxy.test.js
+      tests/supabase-auth-diagnostics.test.js
     startCommand: node core-ui-proxy.mjs
     healthCheckPath: /healthz
     autoDeployTrigger: commit
