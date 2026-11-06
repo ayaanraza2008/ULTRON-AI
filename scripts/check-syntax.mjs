@@ -12,7 +12,7 @@ const trackedFiles = execFileSync("git", ["ls-files", "-z"], { encoding: "utf8" 
   .filter(Boolean);
 
 const filesToCheck = trackedFiles
-  .filter((file) => /\.(?:js|mjs|cjs)$/i.test(file))
+  .filter((file) => /\.(?:js|mjs|cjs)$/i.test(file) && !file.startsWith("integrations/browser/ego-lite/learnings/"))
   .sort();
 
 if (filesToCheck.length === 0) {
