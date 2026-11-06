@@ -114,7 +114,6 @@ export class UltronSelfEvolutionEngine {
       { name: "voice", path: "voice", weight: 0.9 },
       { name: "vision", path: "vision", weight: 0.9 },
       { name: "telephony", path: "telephony", weight: 0.8 },
-      { name: "robotics", path: "robotics", weight: 0.8 },
       { name: "integrations", path: "integrations", weight: 0.9 },
       { name: "tests", path: "tests", weight: 0.9 },
       { name: "public", path: "public", weight: 0.8 },

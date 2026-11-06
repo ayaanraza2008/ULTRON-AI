@@ -254,7 +254,7 @@ test("database-authoritative revocation invalidates local sessions even when the
 
 test("owner-authorized token rotation clears an in-memory revocation tombstone", () => {
   const hub = new DeviceHub({ env: {} });
-  const token = "ultron_dev_" + "g".repeat(64);
+  const token = "ultron_dev_" + "a".repeat(64);
   const device = hub.importPairedDevice({
     id: "rotate-revoked-device",
     ownerUserId: "owner-rotate",
