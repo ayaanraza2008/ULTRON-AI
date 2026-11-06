@@ -93,7 +93,7 @@ export function createUltronCoreProxy({ fetchImpl = fetch, logger = console, gat
     }
 
     if (requestUrl.pathname === "/healthz" && (req.method === "GET" || req.method === "HEAD")) {
-      sendJson(res, 200, { status: "ok", service: "ultron-core-interface" });
+      sendJson(res, 200, { status: "ok", service: "ultron-api-proxy" });
       return;
     }
 
