@@ -43,6 +43,7 @@ class WakeWordService : Service() {
         }
 
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            clearWakeWordOptIn()
             stopSelf()
             return START_NOT_STICKY
         }
@@ -57,7 +58,7 @@ class WakeWordService : Service() {
 
         if (!SpeechRecognizer.isOnDeviceRecognitionAvailable(this)) {
             updateListeningNotification("On-device speech recognition unavailable. Listening stopped.")
-            stopWakeWordService()
+            stopWakeWordService(clearOptIn = true)
             return START_NOT_STICKY
         }
 
@@ -68,7 +69,7 @@ class WakeWordService : Service() {
             scheduleRecognition(300)
         } catch (_: RuntimeException) {
             updateListeningNotification("Could not start local recognition. Listening stopped.")
-            stopWakeWordService()
+            stopWakeWordService(clearOptIn = true)
             return START_NOT_STICKY
         }
         // Request best-effort system restart if Android reclaims this process.
@@ -101,7 +102,7 @@ class WakeWordService : Service() {
             if (!running) return
             if (error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
                 updateListeningNotification("Microphone permission revoked. Listening stopped.")
-                stopWakeWordService()
+                stopWakeWordService(clearOptIn = true)
                 return
             }
             if (error == SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED ||
@@ -110,7 +111,7 @@ class WakeWordService : Service() {
                 languageIndex++
                 if (languageIndex >= languages.size) {
                     updateListeningNotification("No compatible offline English model found. Listening stopped.")
-                    stopWakeWordService()
+                    stopWakeWordService(clearOptIn = true)
                     return
                 }
                 updateListeningNotification("Trying installed offline language: " + languages[languageIndex])
@@ -217,7 +218,13 @@ class WakeWordService : Service() {
         )
     }
 
-    private fun stopWakeWordService() {
+    private fun clearWakeWordOptIn() {
+        getSharedPreferences(WAKE_PREFERENCES, MODE_PRIVATE)
+            .edit().putBoolean(WAKE_ENABLED_KEY, false).apply()
+    }
+
+    private fun stopWakeWordService(clearOptIn: Boolean = false) {
+        if (clearOptIn) clearWakeWordOptIn()
         running = false
         restartQueued = false
         handler.removeCallbacksAndMessages(null)
