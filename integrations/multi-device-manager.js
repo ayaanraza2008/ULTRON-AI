@@ -23,8 +23,9 @@ import {
 } from "./multi-device-persistence.js";
 
 const SENSITIVE_SYNC_KEY_NAMES = new Set([
-  "apikey", "accesstoken", "refreshtoken", "devicetoken", "sessiontoken",
-  "authtoken", "tokenhash", "password", "passwordhash", "passwd",
+  "apikey", "token", "idtoken", "bearertoken", "jwt", "accesstoken",
+  "refreshtoken", "devicetoken", "sessiontoken", "authtoken", "tokenhash",
+  "password", "passwordhash", "passwd",
   "secret", "secretkey", "clientsecret", "privatekey", "authorization",
   "cookie", "credential", "credentials", "servicerolekey", "supabasekey", "signingsecret"
 ]);
