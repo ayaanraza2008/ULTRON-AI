@@ -125,3 +125,13 @@ test("text mode stays selected across reloads and text messages never become spo
   assert.match(appSource, /responseMode === "voice" && state\.preferences\.voice_enabled && !state\.muted/);
   assert.match(appSource, /if \(state\.mode === "text"\) \{\s*if \(state\.recognition\) state\.recognition\.stop\(\);\s*stopSpeech\(\);/);
 });
+
+
+test("spoken output honors the user's installed browser voice selection", () => {
+  assert.match(html, /id="voice-output-select"/);
+  assert.match(html, /Voice output \(installed on this browser\)/);
+  assert.match(appSource, /function populateVoiceOutputOptions\(\)/);
+  assert.match(appSource, /localStorage\.getItem\("ultron-output-voice-uri"\)/);
+  assert.match(appSource, /localStorage\.setItem\("ultron-output-voice-uri", voiceOutputSelect\.value\)/);
+  assert.match(appSource, /voices\.find\(voice => voice\.voiceURI === preferredVoiceUri\)/);
+});
