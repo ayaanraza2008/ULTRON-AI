@@ -106,6 +106,7 @@ export class DeviceHub {
   constructor(options = {}) {
     this.env = options.env || process.env;
     this.pairedDevices = new Map();
+    this.revokedDevices = new Set();
     this.pendingPairings = new Map();
     this.commandQueue = new Map();
     this.notifications = [];
