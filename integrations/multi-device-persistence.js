@@ -25,7 +25,10 @@ const SQL_UPSERT_ROOT_STATE =
   "INSERT INTO ultron_multidevice_state (key, value, version, updated_at) VALUES ('root', $1, 1, NOW()) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, version = ultron_multidevice_state.version + 1, updated_at = NOW()";
 
 const SQL_SELECT_ROOT_STATE =
-  "SELECT value FROM ultron_multidevice_state WHERE key = 'root' LIMIT 1";
+  "SELECT version, value FROM ultron_multidevice_state WHERE key = 'root' LIMIT 1";
+
+const SQL_SELECT_ROOT_VERSION_FOR_UPDATE =
+  "SELECT version FROM ultron_multidevice_state WHERE key = 'root' FOR UPDATE";
 
 const SQL_SELECT_STATE_FOR_UPDATE =
   "SELECT version, value FROM ultron_multidevice_state WHERE key = $1 FOR UPDATE";
@@ -287,6 +290,7 @@ export class DatabasePersistenceAdapter extends BaseMultiDevicePersistenceAdapte
     }
     this._cachedState = null;
     this.lastLoadOutcome = { backend: "not_loaded", authoritative: false, cloudPersisted: false };
+    this.lastRootVersion = null;
   }
 
   resolvePoolConfig() {
@@ -429,12 +433,24 @@ export class DatabasePersistenceAdapter extends BaseMultiDevicePersistenceAdapte
         const client = await pool.connect();
         try {
           await client.query("BEGIN");
+          await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", ["ultron_multidevice_state:root"]);
           await client.query(SQL_CREATE_STATE_TABLE);
+          const currentRes = await client.query(SQL_SELECT_ROOT_VERSION_FOR_UPDATE);
+          const currentVersion = currentRes.rows?.[0] ? Number(currentRes.rows[0].version) || 0 : 0;
+          if (this.lastRootVersion !== null && currentVersion !== this.lastRootVersion) {
+            await client.query("ROLLBACK");
+            return {
+              success: false, backend: "database", cloudPersisted: false,
+              error: "ROOT_STATE_VERSION_CONFLICT", currentVersion, expectedVersion: this.lastRootVersion,
+              fallbackPersisted
+            };
+          }
           const serializedJson = JSON.stringify(stateToPersist);
           await client.query(SQL_UPSERT_ROOT_STATE, [serializedJson]);
           await client.query("COMMIT");
+          this.lastRootVersion = currentVersion + 1;
           this.isOnline = true;
-          return { success: true, backend: "database", cloudPersisted: true };
+          return { success: true, backend: "database", cloudPersisted: true, version: this.lastRootVersion };
         } catch (queryErr) {
           await client.query("ROLLBACK").catch(() => {});
           throw queryErr;
@@ -460,21 +476,37 @@ export class DatabasePersistenceAdapter extends BaseMultiDevicePersistenceAdapte
     // 3. Supabase REST API
     if (this.supabaseRest && typeof this.supabaseRest.fetch === "function") {
       try {
-        const resp = await this.supabaseRest.fetch("/rest/v1/ultron_multidevice_state?on_conflict=key", {
+        if (this.lastRootVersion === null) {
+          const readResp = await this.supabaseRest.fetch("/rest/v1/ultron_multidevice_state?key=eq.root&select=version&limit=1", {
+            method: "GET", headers: { "Accept": "application/json" }
+          });
+          if (!readResp.ok) {
+            this.isOnline = false;
+            return { success: fallbackPersisted, backend: fallbackPersisted ? "fallback_file" : "unavailable", cloudPersisted: false, fallbackPersisted, warning: "SUPABASE_REST_READ_FAILED", status: readResp.status };
+          }
+          const rows = await readResp.json();
+          this.lastRootVersion = Array.isArray(rows) && rows[0] ? Number(rows[0].version) || 0 : 0;
+        }
+        const expectedVersion = this.lastRootVersion;
+        const resp = await this.supabaseRest.fetch("/rest/v1/rpc/save_ultron_multidevice_state", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Prefer": "resolution=merge-duplicates,return=minimal"
-          },
-          body: JSON.stringify({ key: "root", value: stateToPersist, updated_at: new Date().toISOString() })
+          headers: { "Content-Type": "application/json", "Prefer": "return=representation" },
+          body: JSON.stringify({ p_key: "root", p_value: stateToPersist, p_expected_version: expectedVersion })
         });
         if (resp.ok) {
+          const rows = await resp.json();
+          const result = Array.isArray(rows) ? rows[0] : rows;
+          if (!result?.success) {
+            this.isOnline = true;
+            return { success: false, backend: "supabase_rest", cloudPersisted: false, error: result?.error_code || "ROOT_STATE_VERSION_CONFLICT", currentVersion: Number(result?.version) || 0, expectedVersion };
+          }
+          this.lastRootVersion = Number(result.version);
           this.isOnline = true;
-          return { success: true, backend: "supabase_rest", cloudPersisted: true };
+          return { success: true, backend: "supabase_rest", cloudPersisted: true, version: this.lastRootVersion };
         }
         this.isOnline = false;
         if (this.logger?.warn) {
-          this.logger.warn("DatabasePersistenceAdapter: Supabase REST write returned a non-success status", { status: resp.status });
+          this.logger.warn("DatabasePersistenceAdapter: Supabase REST atomic state write returned a non-success status", { status: resp.status });
         }
         return {
           success: fallbackPersisted,
@@ -540,6 +572,7 @@ export class DatabasePersistenceAdapter extends BaseMultiDevicePersistenceAdapte
       try {
         const res = await pool.query(SQL_SELECT_ROOT_STATE);
         let loaded;
+        this.lastRootVersion = res.rows?.[0] ? Number(res.rows[0].version) || 0 : 0;
         if (res.rows?.[0]?.value) {
           const val = res.rows[0].value;
           const parsedVal = typeof val === "string" ? JSON.parse(val) : val;
@@ -572,6 +605,7 @@ export class DatabasePersistenceAdapter extends BaseMultiDevicePersistenceAdapte
         });
         if (resp.ok) {
           const rows = await resp.json();
+          this.lastRootVersion = Array.isArray(rows) && rows[0] ? Number(rows[0].version) || 0 : 0;
           let loaded;
           if (Array.isArray(rows) && rows[0]?.value) {
             const val = rows[0].value;
@@ -677,6 +711,7 @@ export class DatabasePersistenceAdapter extends BaseMultiDevicePersistenceAdapte
         const client = await pool.connect();
         try {
           await client.query("BEGIN");
+          await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", ["ultron_multidevice_state:" + stateRowKey]);
           const selRes = await client.query(SQL_SELECT_STATE_FOR_UPDATE, [stateRowKey]);
           const currentVersion = selRes.rows?.[0] ? Number(selRes.rows[0].version) : 0;
 
@@ -718,56 +753,37 @@ export class DatabasePersistenceAdapter extends BaseMultiDevicePersistenceAdapte
       }
     }
 
-    // Supabase REST branch
+    // Supabase REST uses one transactional RPC so version checks cannot race between GET and POST.
     if (this.supabaseRest && typeof this.supabaseRest.fetch === "function") {
       try {
-        const getResp = await this.supabaseRest.fetch(`/rest/v1/ultron_multidevice_state?key=eq.${encodeURIComponent(stateRowKey)}&limit=1`, {
-          method: "GET",
-          headers: { "Accept": "application/json" }
+        const response = await this.supabaseRest.fetch("/rest/v1/rpc/save_ultron_multidevice_state", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Prefer": "return=representation" },
+          body: JSON.stringify({
+            p_key: stateRowKey,
+            p_value: { payload, originDeviceId: originDeviceId || null },
+            p_expected_version: expectedVersion === undefined ? null : expectedVersion
+          })
         });
-        if (!getResp.ok) {
+        if (!response.ok) {
           this.isOnline = false;
           const fallback = this.fallbackAdapter
             ? await this.fallbackAdapter.saveSharedState(stateUpdate)
-            : { success: false, error: "SUPABASE_REST_READ_FAILED" };
-          return { ...fallback, cloudPersisted: false, warning: "SUPABASE_REST_READ_FAILED", status: getResp.status };
+            : { success: false, error: "SUPABASE_REST_WRITE_FAILED" };
+          return { ...fallback, cloudPersisted: false, warning: "SUPABASE_REST_WRITE_FAILED", status: response.status };
         }
-
-        const rows = await getResp.json();
-        const currentVersion = Array.isArray(rows) && rows[0] ? (Number(rows[0].version) || 0) : 0;
-        if (expectedVersion !== null && expectedVersion !== undefined && Number(expectedVersion) !== currentVersion) {
+        const rows = await response.json();
+        const result = Array.isArray(rows) ? rows[0] : rows;
+        if (!result?.success) {
           return {
-            success: false,
-            error: "VERSION_CONFLICT",
-            currentVersion,
-            expectedVersion: Number(expectedVersion)
+            success: false, error: result?.error_code || "VERSION_CONFLICT",
+            currentVersion: Number(result?.version) || 0,
+            expectedVersion: expectedVersion === undefined ? null : expectedVersion,
+            backend: "supabase_rest", cloudPersisted: false
           };
         }
-
-        const nextVersion = currentVersion + 1;
-        const postResp = await this.supabaseRest.fetch("/rest/v1/ultron_multidevice_state?on_conflict=key", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Prefer": "resolution=merge-duplicates,return=minimal"
-          },
-          body: JSON.stringify({
-            key: stateRowKey,
-            value: { payload, originDeviceId, version: nextVersion },
-            version: nextVersion,
-            updated_at: new Date().toISOString()
-          })
-        });
-        if (postResp.ok) {
-          this.isOnline = true;
-          return { success: true, version: nextVersion, backend: "supabase_rest", cloudPersisted: true };
-        }
-
-        this.isOnline = false;
-        const fallback = this.fallbackAdapter
-          ? await this.fallbackAdapter.saveSharedState(stateUpdate)
-          : { success: false, error: "SUPABASE_REST_WRITE_FAILED" };
-        return { ...fallback, cloudPersisted: false, warning: "SUPABASE_REST_WRITE_FAILED", status: postResp.status };
+        this.isOnline = true;
+        return { success: true, version: Number(result.version), backend: "supabase_rest", cloudPersisted: true };
       } catch (restErr) {
         this.isOnline = false;
         const fallback = this.fallbackAdapter

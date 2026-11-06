@@ -39,7 +39,8 @@ test("new active migrations are unique, ordered after the remote baseline, and n
   assert.deepEqual(additions, [
     "20261101180000_durable_paired_devices.sql",
     "20261104110000_paired_device_telemetry.sql",
-    "20261106120000_ultron_multidevice_state.sql"
+    "20261106120000_ultron_multidevice_state.sql",
+    "20261106130000_atomic_multidevice_state_writes.sql"
   ]);
   const versions = active.map(name => name.slice(0, 14));
   assert.ok(versions.every(version => /^[0-9]{14}$/.test(version)), "Every active migration must use a 14-digit version");
@@ -58,6 +59,17 @@ test("destructive rollback scripts and obsolete worker scaffold are kept outside
     ]
   );
   assert.ok(existsSync(legacyWorkerScaffold), "Keep the historical worker scaffold archived for auditability");
+});
+
+test("atomic multi-device state RPC serializes per-key writes and is service-role only", () => {
+  const migrationPath = fileURLToPath(new URL("../supabase/migrations/20261106130000_atomic_multidevice_state_writes.sql", import.meta.url));
+  const sql = readFileSync(migrationPath, "utf8").toLowerCase();
+  assert.match(sql, /create or replace function public\.save_ultron_multidevice_state/);
+  assert.match(sql, /pg_advisory_xact_lock/);
+  assert.match(sql, /p_expected_version <> current_version/);
+  assert.match(sql, /return query select false, current_version, 'version_conflict'/);
+  assert.match(sql, /revoke all on function public\.save_ultron_multidevice_state\(text, jsonb, integer\) from public, anon, authenticated/);
+  assert.match(sql, /grant execute on function public\.save_ultron_multidevice_state\(text, jsonb, integer\) to service_role/);
 });
 
 test("multi-device REST state migration is private to the server role", () => {
