@@ -231,7 +231,10 @@ test("DatabasePersistenceAdapter: Supabase REST HTTP failure never reports succe
       async load() { return null; }
     },
     supabaseRest: {
-      async fetch() { return { ok: false, status: 503 }; }
+      async fetch(url, init = {}) {
+        if (init.method === "GET") return { ok: true, json: async () => [] };
+        return { ok: false, status: 503 };
+      }
     }
   });
 
@@ -257,7 +260,10 @@ test("DatabasePersistenceAdapter: Supabase REST HTTP failure reports successful 
       async load() { return null; }
     },
     supabaseRest: {
-      async fetch() { return { ok: false, status: 503 }; }
+      async fetch(url, init = {}) {
+        if (init.method === "GET") return { ok: true, json: async () => [] };
+        return { ok: false, status: 503 };
+      }
     }
   });
 
@@ -571,7 +577,8 @@ test("createMultiDevicePersistenceAdapter wires authenticated Supabase REST and 
       supabaseServiceRoleKey: "eyJ.test.signature",
       fetchImpl: async (url, init) => {
         calls.push({ url: String(url), init });
-        return { ok: true, status: 204, json: async () => [] };
+        if (init.method === "GET") return { ok: true, status: 200, json: async () => [] };
+        return { ok: true, status: 200, json: async () => [{ success: true, version: 1, error_code: null }] };
       }
     });
 
@@ -585,12 +592,13 @@ test("createMultiDevicePersistenceAdapter wires authenticated Supabase REST and 
 
     assert.equal(outcome.success, true);
     assert.equal(outcome.backend, "supabase_rest");
-    assert.equal(calls.length, 1);
-    assert.match(calls[0].url, /\/rest\/v1\/ultron_multidevice_state\?on_conflict=key$/);
-    assert.equal(calls[0].init.method, "POST");
-    assert.equal(calls[0].init.headers.get("apikey"), "eyJ.test.signature");
-    assert.equal(calls[0].init.headers.get("Authorization"), "Bearer eyJ.test.signature");
-    assert.match(calls[0].init.headers.get("Prefer"), /resolution=merge-duplicates/);
+    assert.equal(calls.length, 2);
+    assert.match(calls[0].url, /\/rest\/v1\/ultron_multidevice_state\?key=eq\.root/);
+    assert.match(calls[1].url, /\/rest\/v1\/rpc\/save_ultron_multidevice_state$/);
+    assert.equal(calls[1].init.method, "POST");
+    assert.equal(calls[1].init.headers.get("apikey"), "eyJ.test.signature");
+    assert.equal(calls[1].init.headers.get("Authorization"), "Bearer eyJ.test.signature");
+    assert.equal(JSON.parse(calls[1].init.body).p_expected_version, 0);
   } finally {
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
   }
@@ -614,6 +622,7 @@ test("DatabasePersistenceAdapter: delivery ACK and device revocation persist thr
     pendingDeliveries: [["device-a", [{ deliveryId: "delivery-a" }, { deliveryId: "delivery-b" }]]],
     revokedDevices: []
   };
+  let rootVersion = 1;
   const calls = [];
   const adapter = new DatabasePersistenceAdapter({
     storagePath: path.join(tmpDir, "fallback.json"),
@@ -621,12 +630,16 @@ test("DatabasePersistenceAdapter: delivery ACK and device revocation persist thr
       fetch: async (url, init = {}) => {
         calls.push({ url, init });
         if (init.method === "GET") {
-          return { ok: true, json: async () => [{ key: "root", value: stored }] };
+          return { ok: true, json: async () => [{ key: "root", version: rootVersion, value: stored }] };
         }
-        if (init.method === "POST") {
+        if (url.includes("/rpc/save_ultron_multidevice_state") && init.method === "POST") {
           const body = JSON.parse(init.body);
-          stored = body.value;
-          return { ok: true, status: 204 };
+          if (body.p_expected_version !== rootVersion) {
+            return { ok: true, status: 200, json: async () => [{ success: false, version: rootVersion, error_code: "VERSION_CONFLICT" }] };
+          }
+          stored = body.p_value;
+          rootVersion += 1;
+          return { ok: true, status: 200, json: async () => [{ success: true, version: rootVersion, error_code: null }] };
         }
         return { ok: false, status: 405 };
       }
@@ -671,7 +684,7 @@ test("DatabasePersistenceAdapter: missing Supabase state table is reported as lo
     assert.equal(result.success, true);
     assert.equal(result.backend, "file");
     assert.equal(result.cloudPersisted, false);
-    assert.equal(result.warning, "SUPABASE_REST_READ_FAILED");
+    assert.equal(result.warning, "SUPABASE_REST_WRITE_FAILED");
     assert.equal(result.status, 404);
     assert.equal(adapter.isOnline, false);
   } finally {
