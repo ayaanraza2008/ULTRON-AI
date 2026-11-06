@@ -11,7 +11,7 @@ async function withAgent({ memoryEnabled = true, memoryRows = [], assertMemoryCo
   const supabaseRest = async (_req, table, method, query, body) => {
     queries.push({ table, method, query, body });
     if (table === "user_preferences" && method === "GET") return [{ memory_enabled: memoryEnabled }];
-    if (table === "memory_items" && method === "GET" && query.includes("select=kind,title,content")) return memoryRows;
+    if (table === "memory_items" && method === "GET" && query.includes("select=id,user_id,kind,title,content")) return memoryRows;
     if (table === "memory_items" && method === "GET" && query.includes("select=id,metadata")) return [];
     if (table === "memory_items" && method === "POST") {
       writes.push({ query, body });
@@ -32,7 +32,7 @@ async function withAgent({ memoryEnabled = true, memoryRows = [], assertMemoryCo
       const request = JSON.parse(options.body);
       if (assertMemoryContext) {
         assert.ok(request.messages?.some(message =>
-          message.role === "system" && String(message.content).includes("keep the response concise and focused")
+          message.role === "system" && String(message.content).includes("keep the response concise and focused") && String(message.content).includes("Use English explanations")
         ), "ranked cognitive memory should be injected into the model context");
       }
       return new Response(JSON.stringify({
@@ -55,13 +55,25 @@ test("agent injects ranked per-user cognitive memories and learns a generic corr
   const memoryRows = [
     {
       id: "memory-short",
+      user_id: USER_ID,
       kind: "profile_note",
       title: "Response quality lesson",
       content: "When the user asks for a very short answer or quick revision, keep the response concise and focused.",
       source: "conversation_summary",
       created_at: "2026-10-28T12:00:00.000Z",
       updated_at: "2026-10-28T12:00:00.000Z",
-      metadata: { cognitiveLayer: "procedural", confidence: 0.8, reinforcementCount: 2 }
+      metadata: { cognitiveLayer: "procedural", confidence: 0.8, reinforcementCount: 2, relatedMemoryIds: ["memory-language"] }
+    },
+    {
+      id: "memory-language",
+      user_id: USER_ID,
+      kind: "preference",
+      title: "Language preference",
+      content: "Use English explanations.",
+      source: "user_approved",
+      created_at: "2026-10-28T12:00:00.000Z",
+      updated_at: "2026-10-28T12:00:00.000Z",
+      metadata: { cognitiveLayer: "profile", confidence: 1 }
     }
   ];
   await withAgent({ memoryEnabled: true, memoryRows }, async (base, state) => {
@@ -72,7 +84,7 @@ test("agent injects ranked per-user cognitive memories and learns a generic corr
     });
     assert.equal(response.status, 200);
     const result = await response.json();
-    assert.equal(result.cognition.memoryItemsUsed, 1);
+    assert.equal(result.cognition.memoryItemsUsed, 2);
     assert.equal(result.cognition.correctionLearning, "learned");
     assert.equal(state.writes.length, 1);
     const saved = state.writes[0].body;
@@ -82,7 +94,7 @@ test("agent injects ranked per-user cognitive memories and learns a generic corr
     assert.equal(saved.metadata.cognitiveLayer, "procedural");
     assert.equal(saved.metadata.learningSource, "user_correction");
     assert.equal(saved.content.includes("private-test-secret"), false);
-    const memoryQuery = state.queries.find(item => item.table === "memory_items" && item.method === "GET" && item.query.includes("select=kind,title,content"));
+    const memoryQuery = state.queries.find(item => item.table === "memory_items" && item.method === "GET" && item.query.includes("select=id,user_id,kind,title,content"));
     assert.match(memoryQuery.query, /limit=32/);
   });
 });
