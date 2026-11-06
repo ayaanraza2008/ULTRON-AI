@@ -6,6 +6,19 @@ import { deviceHub as defaultDeviceHub } from "./device-hub.js";
 const ALLOWED_PLATFORMS = new Set(["windows", "android", "linux", "macos", "ios"]);
 const MAX_RESPONSE_BYTES = 64 * 1024;
 const PAIRING_TTL_MS = 5 * 60 * 1000;
+const ANDROID_HEARTBEAT_MAX_AGE_MS = 35 * 60 * 1000;
+const DESKTOP_HEARTBEAT_MAX_AGE_MS = 90 * 1000;
+
+function isDeviceRecentlySeen(lastSeenAt, platform, now = Date.now()) {
+  const lastSeen = Date.parse(lastSeenAt || "");
+  if (!Number.isFinite(lastSeen)) return false;
+  const ageMs = now - lastSeen;
+  if (ageMs < 0) return false;
+  const maxAgeMs = platform === "android" || platform === "ios"
+    ? ANDROID_HEARTBEAT_MAX_AGE_MS
+    : DESKTOP_HEARTBEAT_MAX_AGE_MS;
+  return ageMs <= maxAgeMs;
+}
 
 function bounded(value, max = 120) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -267,7 +280,6 @@ export function createDevicePairingRouter({
       );
       const now = Date.now();
       const devices = (Array.isArray(rows) ? rows : []).map(row => {
-        const lastSeen = Date.parse(row.last_seen_at || "");
         return {
           id: row.id,
           name: row.device_name,
@@ -275,7 +287,7 @@ export function createDevicePairingRouter({
           status: row.status,
           pairedAt: row.paired_at,
           lastSeenAt: row.last_seen_at,
-          online: Number.isFinite(lastSeen) && now - lastSeen <= 60_000,
+          online: isDeviceRecentlySeen(row.last_seen_at, row.platform, now),
           battery: typeof row.battery_percent === "number"
             ? { percent: row.battery_percent, isCharging: Boolean(row.is_charging) }
             : null
