@@ -64,3 +64,79 @@ test("importing a durable pairing record never restores stale online presence", 
   assert.equal(heartbeat.success, true);
   assert.equal(hub.isDeviceOnline(imported.id), true);
 });
+
+test("re-importing the same paired identity preserves only its fresh in-process heartbeat", () => {
+  const hub = new DeviceHub({ env: {} });
+  const token = "ultron_dev_" + "b".repeat(64);
+  const identity = {
+    id: "windows-live-session",
+    ownerUserId: "owner-4",
+    authToken: token,
+    status: "active",
+    platform: "windows"
+  };
+
+  const imported = hub.importPairedDevice(identity);
+  assert.equal(imported.online, false);
+
+  const heartbeat = hub.heartbeat(identity.id, token);
+  assert.equal(heartbeat.success, true);
+  const lastSeenAt = hub.pairedDevices.get(identity.id).lastSeenAt;
+
+  // A subsequent authenticated HTTP request re-imports the DB record. Its
+  // stored timestamp must not erase the fresh in-process liveness signal.
+  const reimported = hub.importPairedDevice({
+    ...identity,
+    online: false,
+    lastSeenAt: null
+  });
+  assert.equal(reimported.online, true);
+  assert.equal(reimported.lastSeenAt, lastSeenAt);
+
+  // A rotated credential or changed owner must not inherit the previous session.
+  const rotated = hub.importPairedDevice({
+    ...identity,
+    authToken: "ultron_dev_" + "c".repeat(64)
+  });
+  assert.equal(rotated.online, false);
+});
+
+test("cached device presence uses the real platform heartbeat windows and rejects future timestamps", () => {
+  const hub = new DeviceHub({ env: {} });
+  const androidToken = "ultron_dev_" + "d".repeat(64);
+  const windowsToken = "ultron_dev_" + "e".repeat(64);
+  const now = Date.now();
+
+  hub.importPairedDevice({
+    id: "android-presence-window",
+    ownerUserId: "owner-5",
+    authToken: androidToken,
+    platform: "android",
+    status: "active"
+  });
+  hub.heartbeat("android-presence-window", androidToken);
+  hub.pairedDevices.get("android-presence-window").lastSeenAt =
+    new Date(now - 20 * 60 * 1000).toISOString();
+  assert.equal(hub.isDeviceOnline("android-presence-window"), true);
+
+  hub.pairedDevices.get("android-presence-window").lastSeenAt =
+    new Date(now - 36 * 60 * 1000).toISOString();
+  assert.equal(hub.isDeviceOnline("android-presence-window"), false);
+
+  hub.importPairedDevice({
+    id: "windows-presence-window",
+    ownerUserId: "owner-5",
+    authToken: windowsToken,
+    platform: "windows",
+    status: "active"
+  });
+  hub.heartbeat("windows-presence-window", windowsToken);
+  hub.pairedDevices.get("windows-presence-window").lastSeenAt =
+    new Date(now - 2 * 60 * 1000).toISOString();
+  assert.equal(hub.isDeviceOnline("windows-presence-window"), false);
+
+  hub.pairedDevices.get("android-presence-window").online = true;
+  hub.pairedDevices.get("android-presence-window").lastSeenAt =
+    new Date(now + 60 * 1000).toISOString();
+  assert.equal(hub.isDeviceOnline("android-presence-window"), false);
+});
