@@ -459,6 +459,7 @@ export class DeviceHub {
     device.revokedAt = new Date().toISOString();
     this.commandQueue.delete(deviceId);
     this.saveToDisk();
+    this.emitEvent({ type: "DEVICE_REVOKED", deviceId, ownerUserId: device.ownerUserId });
 
     return { success: true, deviceId, status: "revoked" };
   }
@@ -480,7 +481,10 @@ export class DeviceHub {
     device.encryptedAuthToken = encryptToken(newToken, this.masterKey);
     device.status = "active";
     device.revokedAt = null;
+    device.online = false;
+    device.lastSeenAt = null;
     this.saveToDisk();
+    this.emitEvent({ type: "DEVICE_CREDENTIALS_ROTATED", deviceId, ownerUserId: device.ownerUserId });
 
     return { success: true, deviceId, newDeviceToken: newToken };
   }
