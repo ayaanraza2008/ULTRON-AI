@@ -429,3 +429,63 @@ test("device pairing endpoints fail closed with a clear 503 while durable storag
     assert.equal((await deviceStatus.json()).error.code, "DEVICE_STORAGE_NOT_READY");
   }, ENV);
 });
+
+test("device online freshness matches Android periodic sync and the Windows companion heartbeat cadence", async () => {
+  const db = makeDatabase();
+  const hub = new DeviceHub({ env: { ULTRON_DEVICE_SIGNING_SECRET: SIGNING_SECRET } });
+
+  await withRouter(db.fetchImpl, async base => {
+    const pair = async (deviceName, platform) => {
+      const create = await fetch(base + "/devices/pairings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-test-owner": OWNER_A },
+        body: JSON.stringify({ deviceName, platform })
+      });
+      assert.equal(create.status, 201);
+      const pending = await create.json();
+
+      const claim = await fetch(base + "/devices/pairings/claim", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: pending.pairingCode })
+      });
+      assert.equal(claim.status, 200);
+      return claim.json();
+    };
+
+    const android = await pair("Owner Android", "android");
+    const windows = await pair("Owner Windows", "windows");
+
+    // Android WorkManager is scheduled at 15-minute intervals; Windows sends
+    // a bounded 25-second heartbeat while its remote companion is connected.
+    const twentyMinutesAgo = new Date(Date.now() - 20 * 60 * 1000).toISOString();
+    db.devices.get(android.deviceId).last_seen_at = twentyMinutesAgo;
+    db.devices.get(windows.deviceId).last_seen_at = twentyMinutesAgo;
+
+    const response = await fetch(base + "/devices/me", {
+      headers: { "x-device-token": android.deviceToken }
+    });
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.devices.find(device => device.id === android.deviceId).online, true);
+    assert.equal(payload.devices.find(device => device.id === windows.deviceId).online, false);
+
+    db.devices.get(android.deviceId).last_seen_at =
+      new Date(Date.now() - 36 * 60 * 1000).toISOString();
+    const staleResponse = await fetch(base + "/devices/me", {
+      headers: { "x-device-token": android.deviceToken }
+    });
+    assert.equal(staleResponse.status, 200);
+    const stalePayload = await staleResponse.json();
+    assert.equal(stalePayload.devices.find(device => device.id === android.deviceId).online, false);
+
+    db.devices.get(android.deviceId).last_seen_at =
+      new Date(Date.now() + 60 * 1000).toISOString();
+    const futureResponse = await fetch(base + "/devices/me", {
+      headers: { "x-device-token": android.deviceToken }
+    });
+    assert.equal(futureResponse.status, 200);
+    const futurePayload = await futureResponse.json();
+    assert.equal(futurePayload.devices.find(device => device.id === android.deviceId).online, false);
+  }, ENV, hub);
+});
