@@ -43,6 +43,7 @@ export class MultiDeviceManager {
     this.subscribers = new Map();
     this.pendingDeliveries = new Map();
     this.revokedDevices = new Set();
+    this._durableStateQueue = Promise.resolve();
     this.env = options.env || process.env;
     this.storagePath = options.storagePath || path.resolve(process.cwd(), "data", "multidevice-state.json");
     // Persistence is opt-in for isolated instances; the production singleton
@@ -63,8 +64,28 @@ export class MultiDeviceManager {
       this.initializeDefaultFleet();
     }
     this.isInitializing = false;
-    if (this.isPersistent) {
-      this.loadFromDisk();
+    this.initializationError = null;
+    if (this.isPersistent && this.persistenceAdapter) {
+      if (this.persistenceAdapter instanceof FilePersistenceAdapter) {
+        this.loadFromDisk();
+        this.ready = Promise.resolve(true);
+      } else {
+        this.ready = this.load().then(() => {
+          if (this.persistenceAdapter instanceof DatabasePersistenceAdapter &&
+              this.persistenceAdapter.lastLoadOutcome?.authoritative !== true) {
+            throw new Error("CLOUD_STATE_LOAD_NOT_CONFIRMED");
+          }
+          return true;
+        }).catch(error => {
+          this.initializationError = error;
+          if (options.logger?.warn) {
+            options.logger.warn("MultiDeviceManager: cloud state initialization failed", { error: error?.message });
+          }
+          return false;
+        });
+      }
+    } else {
+      this.ready = Promise.resolve(true);
     }
     if (options.registerDeliveryAckHandler === true && typeof this.deviceGateway?.setStateSyncAckHandler === "function") {
       this.deviceGateway.setStateSyncAckHandler(({ deviceId, ownerUserId, deliveryId }) => {
@@ -72,7 +93,7 @@ export class MultiDeviceManager {
         if (!paired || paired.status === "revoked" || paired.ownerUserId !== ownerUserId) {
           return { success: false, error: "DEVICE_OWNER_MISMATCH" };
         }
-        return this.acknowledgeDelivery(deviceId, deliveryId);
+        return this.acknowledgeDeliveryDurably(deviceId, deliveryId);
       });
     }
   }
@@ -90,6 +111,10 @@ export class MultiDeviceManager {
 
   hydrateState(data) {
     if (!data) return false;
+    this.devices.clear();
+    this.sharedState.clear();
+    this.pendingDeliveries.clear();
+    this.revokedDevices.clear();
     if (Array.isArray(data.devices)) {
       for (const [id, entry] of data.devices) {
         if (id && entry) {
@@ -136,8 +161,168 @@ export class MultiDeviceManager {
     return await this.persistenceAdapter.save(this.serializeState());
   }
 
+  _restoreSnapshot(snapshot) {
+    this.devices = new Map(Array.isArray(snapshot?.devices) ? snapshot.devices : []);
+    this.sharedState = new Map(Array.isArray(snapshot?.sharedState) ? snapshot.sharedState : []);
+    this.pendingDeliveries = new Map(Array.isArray(snapshot?.pendingDeliveries) ? snapshot.pendingDeliveries : []);
+    this.revokedDevices = new Set(Array.isArray(snapshot?.revokedDevices) ? snapshot.revokedDevices : []);
+  }
+
+  _enqueueDurableOperation(operation) {
+    const queued = this._durableStateQueue.then(operation, operation);
+    this._durableStateQueue = queued.then(() => undefined, () => undefined);
+    return queued;
+  }
+
+  async _persistDurableSnapshot(previousSnapshot) {
+    let outcome = null;
+    let failure = null;
+    try {
+      if (!this.persistenceAdapter || typeof this.persistenceAdapter.save !== "function") {
+        failure = "DURABLE_PERSISTENCE_NOT_CONFIGURED";
+      } else {
+        outcome = await this.persistenceAdapter.save(this.serializeState());
+      }
+    } catch (error) {
+      failure = error?.message || "DURABLE_PERSISTENCE_FAILED";
+    }
+
+    const durable = outcome?.success === true &&
+      (outcome.cloudPersisted === true || outcome.backend === "database");
+    if (durable) {
+      return {
+        success: true,
+        backend: outcome.backend || "database",
+        cloudPersisted: outcome.cloudPersisted === true
+      };
+    }
+
+    this._restoreSnapshot(previousSnapshot);
+    const restoreAdapter = this.persistenceAdapter?.fallbackAdapter || this.persistenceAdapter;
+    try {
+      if (typeof restoreAdapter?.save === "function") {
+        await restoreAdapter.save(previousSnapshot);
+      } else if (typeof restoreAdapter?.saveSync === "function") {
+        restoreAdapter.saveSync(previousSnapshot);
+      }
+    } catch {}
+
+    return {
+      success: false,
+      error: "CLOUD_PERSISTENCE_FAILED",
+      backend: outcome?.backend || null,
+      cloudPersisted: false,
+      reason: failure || outcome?.warning || "PERSISTENCE_BACKEND_NOT_DURABLE"
+    };
+  }
+
+  async syncStateAcrossDevicesDurably(options = {}) {
+    return this._enqueueDurableOperation(async () => {
+      if (await this.ready === false) {
+        return { success: false, error: "PERSISTENCE_INITIALIZATION_FAILED" };
+      }
+      if (!this.isPersistent || !this.persistenceAdapter) {
+        return { success: false, error: "DURABLE_PERSISTENCE_NOT_CONFIGURED" };
+      }
+
+      const previousSnapshot = this.serializeState();
+      const staged = this.syncStateAcrossDevices({ ...options, deferDispatch: true });
+      if (!staged.success) return staged;
+
+      const persisted = await this._persistDurableSnapshot(previousSnapshot);
+      if (!persisted.success) {
+        return {
+          success: false,
+          error: "CLOUD_PERSISTENCE_FAILED",
+          message: "State and delivery queue were not committed to durable cloud storage; no devices were notified.",
+          cloudPersisted: false,
+          persistenceBackend: persisted.backend || null
+        };
+      }
+
+      const locallyNotified = [];
+      const websocketSent = [];
+      for (const { targetDeviceId, event } of staged.deliveryEvents || []) {
+        const subscribers = this.subscribers.get(targetDeviceId);
+        if (subscribers && subscribers.size > 0) {
+          let notified = false;
+          for (const callback of subscribers) {
+            try { callback(event); notified = true; } catch {}
+          }
+          if (notified) locallyNotified.push(targetDeviceId);
+        }
+
+        if (staged.ownerUserId && typeof this.deviceGateway?.dispatchStateSync === "function") {
+          const result = this.deviceGateway.dispatchStateSync({
+            ownerUserId: staged.ownerUserId,
+            deviceIds: [targetDeviceId],
+            event
+          });
+          if (result?.success && result.sentDeviceIds?.includes(targetDeviceId)) {
+            websocketSent.push(targetDeviceId);
+          }
+        }
+      }
+
+      const { deliveryEvents: _deliveryEvents, ...publicResult } = staged;
+      return {
+        ...publicResult,
+        locallyNotifiedDevices: locallyNotified,
+        sentToDevices: websocketSent,
+        sentCount: websocketSent.length,
+        deliveredCount: 0,
+        cloudPersisted: persisted.cloudPersisted,
+        persistenceBackend: persisted.backend
+      };
+    });
+  }
+
+  async acknowledgeDeliveryDurably(deviceId, deliveryId) {
+    return this._enqueueDurableOperation(async () => {
+      if (await this.ready === false) {
+        return { success: false, error: "PERSISTENCE_INITIALIZATION_FAILED" };
+      }
+      if (!deviceId || !deliveryId) return { success: false, error: "PARAMS_REQUIRED" };
+
+      const queue = this.pendingDeliveries.get(deviceId);
+      if (!queue) return { success: false, error: "NO_PENDING_QUEUE" };
+      const updated = queue.filter(item => item.deliveryId !== deliveryId);
+      if (updated.length === queue.length) {
+        return {
+          success: false,
+          error: "DELIVERY_NOT_FOUND",
+          acknowledged: false,
+          remainingCount: queue.length
+        };
+      }
+
+      const previousSnapshot = this.serializeState();
+      this.pendingDeliveries.set(deviceId, updated);
+      const persisted = await this._persistDurableSnapshot(previousSnapshot);
+      if (!persisted.success) {
+        return {
+          success: false,
+          error: "STATE_PERSISTENCE_FAILED",
+          deviceId,
+          acknowledged: false,
+          cloudPersisted: false
+        };
+      }
+
+      return {
+        success: true,
+        deviceId,
+        acknowledgedDeliveryId: deliveryId,
+        acknowledged: true,
+        remainingCount: updated.length,
+        cloudPersisted: persisted.cloudPersisted,
+        persistenceBackend: persisted.backend
+      };
+    });
+  }
+
   async load() {
-    if (!this.isPersistent || !this.persistenceAdapter) return false;
+    if (!this.isPersistent || !this.persistenceAdapter || typeof this.persistenceAdapter.load !== "function") return false;
     const data = await this.persistenceAdapter.load();
     return this.hydrateState(data);
   }
@@ -181,6 +366,9 @@ export class MultiDeviceManager {
 
   acknowledgeDelivery(deviceId, deliveryId) {
     if (!deviceId || !deliveryId) return { success: false, error: "PARAMS_REQUIRED" };
+    if (this.isPersistent && !(this.persistenceAdapter instanceof FilePersistenceAdapter)) {
+      return { success: false, error: "ASYNC_PERSISTENCE_REQUIRED", message: "Use acknowledgeDeliveryDurably for database-backed persistence." };
+    }
     const queue = this.pendingDeliveries.get(deviceId);
     if (!queue) return { success: false, error: "NO_PENDING_QUEUE" };
     const initialLen = queue.length;
@@ -563,7 +751,7 @@ export class MultiDeviceManager {
   /**
    * Synchronizes shared ecosystem state across devices with conflict resolution.
    */
-  syncStateAcrossDevices({ stateKey, payload, originDeviceId = null, ownerUserId = null, expectedVersion = null, targetDevices = null } = {}) {
+  syncStateAcrossDevices({ stateKey, payload, originDeviceId = null, ownerUserId = null, expectedVersion = null, targetDevices = null, deferDispatch = false } = {}) {
     if (!stateKey || typeof stateKey !== "string") {
       return { success: false, error: "STATE_KEY_REQUIRED" };
     }
@@ -586,6 +774,13 @@ export class MultiDeviceManager {
         success: false,
         error: "OWNER_CONTEXT_REQUIRED",
         message: "Persistent multi-device synchronization requires a verified owner identity."
+      };
+    }
+    if (this.isPersistent && !(this.persistenceAdapter instanceof FilePersistenceAdapter) && !deferDispatch) {
+      return {
+        success: false,
+        error: "ASYNC_PERSISTENCE_REQUIRED",
+        message: "Database-backed device synchronization must use syncStateAcrossDevicesDurably."
       };
     }
 
@@ -657,7 +852,7 @@ export class MultiDeviceManager {
 
     // Persist state and delivery records before notifying remote clients.
     // A failed local persistence write must never be reported as success.
-    if (this.isPersistent && !this.saveToDisk()) {
+    if (this.isPersistent && !deferDispatch && !this.saveToDisk()) {
       if (existing) this.sharedState.set(cleanKey, existing);
       else this.sharedState.delete(cleanKey);
       for (const [targetId, evt] of eventsByTarget.entries()) {
@@ -667,27 +862,29 @@ export class MultiDeviceManager {
       return { success: false, error: "STATE_PERSISTENCE_FAILED", message: "Shared state could not be durably recorded." };
     }
 
-    for (const targetId of targetList) {
-      const deliveryEvent = eventsByTarget.get(targetId);
-      const subs = this.subscribers.get(targetId);
-      if (subs && subs.size > 0) {
-        let notified = false;
-        for (const cb of subs) {
-          try { cb(deliveryEvent); notified = true; } catch {}
-        }
-        if (notified) locallyNotified.push(targetId);
-      }
-    }
-
     const websocketSent = [];
-    if (resolvedOwnerUserId && typeof this.deviceGateway?.dispatchStateSync === "function") {
+    if (!deferDispatch) {
       for (const targetId of targetList) {
-        const result = this.deviceGateway.dispatchStateSync({
-          ownerUserId: resolvedOwnerUserId,
-          deviceIds: [targetId],
-          event: eventsByTarget.get(targetId)
-        });
-        if (result?.success && result.sentDeviceIds?.includes(targetId)) websocketSent.push(targetId);
+        const deliveryEvent = eventsByTarget.get(targetId);
+        const subs = this.subscribers.get(targetId);
+        if (subs && subs.size > 0) {
+          let notified = false;
+          for (const cb of subs) {
+            try { cb(deliveryEvent); notified = true; } catch {}
+          }
+          if (notified) locallyNotified.push(targetId);
+        }
+      }
+
+      if (resolvedOwnerUserId && typeof this.deviceGateway?.dispatchStateSync === "function") {
+        for (const targetId of targetList) {
+          const result = this.deviceGateway.dispatchStateSync({
+            ownerUserId: resolvedOwnerUserId,
+            deviceIds: [targetId],
+            event: eventsByTarget.get(targetId)
+          });
+          if (result?.success && result.sentDeviceIds?.includes(targetId)) websocketSent.push(targetId);
+        }
       }
     }
 
@@ -706,7 +903,10 @@ export class MultiDeviceManager {
       sentCount: websocketSent.length,
       queuedCount: queuedFor.length,
       transport: resolvedOwnerUserId ? "authenticated_websocket_sse_with_ack_queue" : "in_process_test_callbacks",
-      ownerUserId: resolvedOwnerUserId
+      ownerUserId: resolvedOwnerUserId,
+      ...(deferDispatch ? {
+        deliveryEvents: Array.from(eventsByTarget.entries()).map(([targetDeviceId, event]) => ({ targetDeviceId, event }))
+      } : {})
     };
   }
 

@@ -286,6 +286,7 @@ export class DatabasePersistenceAdapter extends BaseMultiDevicePersistenceAdapte
       this.encryptionKey = crypto.createHash("sha256").update("ULTRON_MULTIDEVICE_PERSISTENCE:").update(this.masterSecret).digest();
     }
     this._cachedState = null;
+    this.lastLoadOutcome = { backend: "not_loaded", authoritative: false, cloudPersisted: false };
   }
 
   resolvePoolConfig() {
@@ -482,85 +483,107 @@ export class DatabasePersistenceAdapter extends BaseMultiDevicePersistenceAdapte
   }
 
   async load() {
-    // 1. In-memory mock database
+    const emptySnapshot = () => ({
+      version: "2.0.0",
+      savedAt: new Date().toISOString(),
+      devices: [],
+      sharedState: [],
+      pendingDeliveries: [],
+      revokedDevices: []
+    });
+
+    // 1. In-memory mock database used only by isolated test suites.
     if (this.inMemoryMockDb) {
       const raw = this.inMemoryMockDb.get("multidevice_state");
       if (raw) {
         try {
           const parsed = JSON.parse(raw);
           this._cachedState = parsed;
+          this.lastLoadOutcome = { backend: "database", authoritative: true, cloudPersisted: false, mock: true };
           return parsed;
         } catch {}
       }
+      this._cachedState = emptySnapshot();
+      this.lastLoadOutcome = { backend: "database", authoritative: true, cloudPersisted: false, mock: true };
+      return this._cachedState;
     }
 
-    // 2. PostgreSQL connection
+    // 2. PostgreSQL. A successful empty query is authoritative: do not resurrect
+    // stale device queues from a local fallback when the cloud has no root row.
     const pool = await this.getPool().catch(() => null);
     if (pool) {
       try {
         const res = await pool.query(SQL_SELECT_ROOT_STATE);
+        let loaded;
         if (res.rows?.[0]?.value) {
           const val = res.rows[0].value;
           const parsedVal = typeof val === "string" ? JSON.parse(val) : val;
-          const decrypted = this._decryptState(parsedVal);
-          this._cachedState = decrypted;
-          if (this.fallbackAdapter) {
-            try { await this.fallbackAdapter.save(decrypted); } catch {}
-          }
-          this.isOnline = true;
-          return decrypted;
+          loaded = this._decryptState(parsedVal);
+        } else {
+          loaded = emptySnapshot();
         }
+        this._cachedState = loaded;
+        this.lastLoadOutcome = { backend: "database", authoritative: true, cloudPersisted: true };
+        if (this.fallbackAdapter) {
+          try { await this.fallbackAdapter.save(loaded); } catch {}
+        }
+        this.isOnline = true;
+        return loaded;
       } catch (err) {
         this.isOnline = false;
         if (this.logger?.warn) {
-          this.logger.warn("DatabasePersistenceAdapter: Database read failed, reading fallback", { error: err?.message });
+          this.logger.warn("DatabasePersistenceAdapter: Database read failed, trying another configured backend", { error: err?.message });
         }
       }
     }
 
-    // 3. Supabase REST API
+    // 3. Supabase REST. A successful empty result means the cloud state is
+    // currently empty; a failed request remains non-authoritative.
     if (this.supabaseRest && typeof this.supabaseRest.fetch === "function") {
       try {
         const resp = await this.supabaseRest.fetch("/rest/v1/ultron_multidevice_state?key=eq.root&limit=1", {
           method: "GET",
-          headers: {
-            "Accept": "application/json"
-          }
+          headers: { "Accept": "application/json" }
         });
         if (resp.ok) {
           const rows = await resp.json();
+          let loaded;
           if (Array.isArray(rows) && rows[0]?.value) {
             const val = rows[0].value;
             const parsedVal = typeof val === "string" ? JSON.parse(val) : val;
-            const decrypted = this._decryptState(parsedVal);
-            this._cachedState = decrypted;
-            if (this.fallbackAdapter) {
-              try { await this.fallbackAdapter.save(decrypted); } catch {}
-            }
-            this.isOnline = true;
-            return decrypted;
+            loaded = this._decryptState(parsedVal);
+          } else {
+            loaded = emptySnapshot();
+          }
+          this._cachedState = loaded;
+          this.lastLoadOutcome = { backend: "supabase_rest", authoritative: true, cloudPersisted: true };
+          if (this.fallbackAdapter) {
+            try { await this.fallbackAdapter.save(loaded); } catch {}
           }
           this.isOnline = true;
-        } else {
-          this.isOnline = false;
-          if (this.logger?.warn) {
-            this.logger.warn("DatabasePersistenceAdapter: Supabase REST read returned a non-success status", { status: resp.status });
-          }
+          return loaded;
+        }
+
+        this.isOnline = false;
+        if (this.logger?.warn) {
+          this.logger.warn("DatabasePersistenceAdapter: Supabase REST read returned a non-success status", { status: resp.status });
         }
       } catch (restErr) {
         this.isOnline = false;
         if (this.logger?.warn) {
-          this.logger.warn("DatabasePersistenceAdapter: Supabase REST read failed, reading fallback", { error: restErr?.message });
+          this.logger.warn("DatabasePersistenceAdapter: Supabase REST read failed", { error: restErr?.message });
         }
       }
     }
 
-    // 4. Fallback file load
+    // 4. Local fallback is useful for recovery, but is never cloud authority.
     if (this.fallbackAdapter) {
       const fileData = await this.fallbackAdapter.load();
       if (fileData) this._cachedState = fileData;
+      this.lastLoadOutcome = { backend: "fallback_file", authoritative: false, cloudPersisted: false };
       return fileData;
     }
+    this.lastLoadOutcome = { backend: "unavailable", authoritative: false, cloudPersisted: false };
     return this._cachedState;
   }
 

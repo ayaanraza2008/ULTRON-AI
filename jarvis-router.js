@@ -962,7 +962,7 @@ export function createJarvisRouter({
     deviceWebSocketGateway.handleSseConnection(req, res, deviceId, req.device.authToken);
   });
 
-  router.post("/jarvis/devices/state/sync", authenticateOwnerOrDevice, express.json(), (req, res) => {
+  router.post("/jarvis/devices/state/sync", authenticateOwnerOrDevice, express.json(), async (req, res) => {
     const ownerUserId = req.device?.ownerUserId || req.supabaseUser?.id;
     if (!ownerUserId) {
       return res.status(401).json({ error: { code: "OWNER_IDENTITY_REQUIRED", message: "A verified owner or paired device is required." } });
@@ -971,7 +971,7 @@ export function createJarvisRouter({
     if (!stateKey || !Object.prototype.hasOwnProperty.call(req.body || {}, "payload")) {
       return res.status(400).json({ error: { code: "STATE_SYNC_INPUT_INVALID", message: "stateKey and payload are required." } });
     }
-    const result = multiDeviceManagerInstance.syncStateAcrossDevices({
+    const result = await multiDeviceManagerInstance.syncStateAcrossDevicesDurably({
       stateKey,
       payload: req.body.payload,
       originDeviceId: req.device?.id || null,
@@ -981,25 +981,28 @@ export function createJarvisRouter({
     if (!result.success) {
       const status = result.error === "VERSION_CONFLICT" ? 409
         : result.error === "OWNER_CONTEXT_REQUIRED" ? 401
-        : result.error === "STATE_PERSISTENCE_FAILED" ? 503 : 400;
+        : ["STATE_PERSISTENCE_FAILED", "CLOUD_PERSISTENCE_FAILED", "PERSISTENCE_INITIALIZATION_FAILED", "DURABLE_PERSISTENCE_NOT_CONFIGURED"].includes(result.error) ? 503 : 400;
       return res.status(status).json({ error: { code: result.error, message: result.message || "State synchronization failed." }, ...result });
     }
     return res.status(202).json(result);
   });
 
-  router.get("/jarvis/devices/my/state/events", authenticateOwnerOrDevice, (req, res) => {
+  router.get("/jarvis/devices/my/state/events", authenticateOwnerOrDevice, async (req, res) => {
     if (!req.device?.id || !req.device?.ownerUserId) {
       return res.status(401).json({ error: { code: "DEVICE_AUTHENTICATION_REQUIRED", message: "A verified paired device is required." } });
     }
     const paired = deviceHubInstance.pairedDevices.get(req.device.id);
     if (!paired || paired.status === "revoked" || paired.ownerUserId !== req.device.ownerUserId) {
       return res.status(403).json({ error: { code: "DEVICE_OWNER_MISMATCH", message: "The paired device is not authorized for this owner." } });
+    }
+    if (await multiDeviceManagerInstance.ready === false) {
+      return res.status(503).json({ error: { code: "PERSISTENCE_INITIALIZATION_FAILED", message: "Device state storage is not ready." } });
     }
     const events = multiDeviceManagerInstance.pollPendingEvents(req.device.id);
     return res.json({ success: true, count: events.length, events });
   });
 
-  router.post("/jarvis/devices/my/state/events/:deliveryId/ack", authenticateOwnerOrDevice, express.json(), (req, res) => {
+  router.post("/jarvis/devices/my/state/events/:deliveryId/ack", authenticateOwnerOrDevice, express.json(), async (req, res) => {
     if (!req.device?.id || !req.device?.ownerUserId) {
       return res.status(401).json({ error: { code: "DEVICE_AUTHENTICATION_REQUIRED", message: "A verified paired device is required." } });
     }
@@ -1007,15 +1010,15 @@ export function createJarvisRouter({
     if (!paired || paired.status === "revoked" || paired.ownerUserId !== req.device.ownerUserId) {
       return res.status(403).json({ error: { code: "DEVICE_OWNER_MISMATCH", message: "The paired device is not authorized for this owner." } });
     }
-    const result = multiDeviceManagerInstance.acknowledgeDelivery(req.device.id, req.params.deliveryId);
+    const result = await multiDeviceManagerInstance.acknowledgeDeliveryDurably(req.device.id, req.params.deliveryId);
     if (!result.success || !result.acknowledged) {
-      return res.status(result.error === "STATE_PERSISTENCE_FAILED" ? 503 : 404)
+      return res.status(["STATE_PERSISTENCE_FAILED", "PERSISTENCE_INITIALIZATION_FAILED"].includes(result.error) ? 503 : 404)
         .json({ error: { code: result.error || "DELIVERY_NOT_FOUND", message: "The state-sync delivery was not acknowledged." }, ...result });
     }
     return res.json(result);
   });
 
-  router.get("/jarvis/devices/:id/state/events", authenticateOwnerOrDevice, (req, res) => {
+  router.get("/jarvis/devices/:id/state/events", authenticateOwnerOrDevice, async (req, res) => {
     if (!req.device?.id || req.device.id !== req.params.id) {
       return res.status(403).json({ error: { code: "DEVICE_ID_MISMATCH", message: "A device may only poll its own state events." } });
     }
@@ -1023,11 +1026,14 @@ export function createJarvisRouter({
     if (!paired || paired.status === "revoked" || paired.ownerUserId !== req.device.ownerUserId) {
       return res.status(403).json({ error: { code: "DEVICE_OWNER_MISMATCH", message: "The paired device is not authorized for this owner." } });
     }
+    if (await multiDeviceManagerInstance.ready === false) {
+      return res.status(503).json({ error: { code: "PERSISTENCE_INITIALIZATION_FAILED", message: "Device state storage is not ready." } });
+    }
     const events = multiDeviceManagerInstance.pollPendingEvents(req.device.id);
     return res.json({ success: true, count: events.length, events });
   });
 
-  router.post("/jarvis/devices/:id/state/events/:deliveryId/ack", authenticateOwnerOrDevice, express.json(), (req, res) => {
+  router.post("/jarvis/devices/:id/state/events/:deliveryId/ack", authenticateOwnerOrDevice, express.json(), async (req, res) => {
     if (!req.device?.id || req.device.id !== req.params.id) {
       return res.status(403).json({ error: { code: "DEVICE_ID_MISMATCH", message: "A device may only acknowledge its own state events." } });
     }
@@ -1035,9 +1041,9 @@ export function createJarvisRouter({
     if (!paired || paired.status === "revoked" || paired.ownerUserId !== req.device.ownerUserId) {
       return res.status(403).json({ error: { code: "DEVICE_OWNER_MISMATCH", message: "The paired device is not authorized for this owner." } });
     }
-    const result = multiDeviceManagerInstance.acknowledgeDelivery(req.device.id, req.params.deliveryId);
+    const result = await multiDeviceManagerInstance.acknowledgeDeliveryDurably(req.device.id, req.params.deliveryId);
     if (!result.success || !result.acknowledged) {
-      return res.status(result.error === "STATE_PERSISTENCE_FAILED" ? 503 : 404).json({ error: { code: result.error || "DELIVERY_NOT_FOUND", message: "The state-sync delivery was not pending for this device." }, ...result });
+      return res.status(["STATE_PERSISTENCE_FAILED", "PERSISTENCE_INITIALIZATION_FAILED"].includes(result.error) ? 503 : 404).json({ error: { code: result.error || "DELIVERY_NOT_FOUND", message: "The state-sync delivery was not pending for this device." }, ...result });
     }
     return res.json(result);
   });
