@@ -363,7 +363,7 @@ test("paired device self status and heartbeat are owner-scoped and update durabl
 
     const android = await pair(OWNER_A, "Owner Android", "android");
     const windows = await pair(OWNER_A, "Owner Windows", "windows");
-    const foreign = seedPairedDevice(db, {
+    seedPairedDevice(db, {
       id: "00000000-0000-4000-8000-000000000099",
       ownerUserId: OWNER_B,
       name: "Other Owner Windows",
