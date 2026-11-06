@@ -1,5 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { MultiDeviceManager } from "../integrations/multi-device-manager.js";
 import { DeviceHub } from "../integrations/device-hub.js";
 
@@ -115,4 +118,89 @@ test("DeviceHub fleet import rejects an existing device ID bound to another owne
   assert.equal(result.success, false);
   assert.equal(result.error, "DEVICE_OWNER_MISMATCH");
   assert.equal(manager.getDevice(paired.deviceId).ownerUserId, "different-owner");
+});
+
+test("fleet device ownership cannot be changed by duplicate registration or a presence update", () => {
+  const manager = new MultiDeviceManager({ persist: false, seedDefaultFleet: false });
+  const registered = manager.registerDevice({
+    id: "immutable-owner-device",
+    ownerUserId: "owner-original",
+    name: "Original workstation",
+    platform: "windows",
+    online: false
+  });
+  assert.equal(registered.ownerUserId, "owner-original");
+
+  const duplicate = manager.registerDevice({
+    id: "immutable-owner-device",
+    ownerUserId: "owner-attacker",
+    name: "Rebound workstation",
+    platform: "windows",
+    online: true
+  });
+  assert.equal(duplicate.success, false);
+  assert.equal(duplicate.error, "DEVICE_OWNER_MISMATCH");
+  assert.equal(manager.getDevice("immutable-owner-device").ownerUserId, "owner-original");
+  assert.equal(manager.getDevice("immutable-owner-device").name, "Original workstation");
+
+  const update = manager.updateDevicePresence("immutable-owner-device", {
+    ownerUserId: "owner-attacker",
+    online: true,
+    battery: { percent: 1, isCharging: true }
+  });
+  assert.equal(update.success, false);
+  assert.equal(update.error, "DEVICE_OWNER_MISMATCH");
+  assert.equal(manager.getDevice("immutable-owner-device").ownerUserId, "owner-original");
+  assert.equal(manager.getDevice("immutable-owner-device").online, false);
+  assert.equal(manager.getDevice("immutable-owner-device").battery.percent, 100);
+});
+
+test("failed file persistence rolls back existing fleet registration and presence mutations", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "ultron-mdm-owner-"));
+  const storagePath = path.join(tempDir, "fleet.json");
+  try {
+    const manager = new MultiDeviceManager({
+      storagePath,
+      persist: true,
+      seedDefaultFleet: false
+    });
+    const original = manager.registerDevice({
+      id: "rollback-device",
+      ownerUserId: "owner-rollback",
+      name: "Original device",
+      platform: "windows",
+      online: true,
+      battery: { percent: 80, isCharging: false }
+    });
+    assert.equal(original.id, "rollback-device");
+    assert.equal(fs.existsSync(storagePath), true);
+
+    // Replace the valid state file with a directory so the next atomic rename
+    // deterministically fails; do not leave a partially written state.
+    fs.unlinkSync(storagePath);
+    fs.mkdirSync(storagePath);
+
+    const duplicate = manager.registerDevice({
+      id: "rollback-device",
+      ownerUserId: "owner-rollback",
+      name: "Mutated device",
+      online: false
+    });
+    assert.equal(duplicate.success, false);
+    assert.equal(duplicate.error, "DEVICE_PERSISTENCE_FAILED");
+    assert.equal(manager.getDevice("rollback-device").name, "Original device");
+    assert.equal(manager.getDevice("rollback-device").online, true);
+
+    const presence = manager.updateDevicePresence("rollback-device", {
+      online: false,
+      battery: { percent: 1, isCharging: true }
+    });
+    assert.equal(presence.success, false);
+    assert.equal(presence.error, "DEVICE_PERSISTENCE_FAILED");
+    assert.equal(manager.getDevice("rollback-device").online, true);
+    assert.equal(manager.getDevice("rollback-device").battery.percent, 80);
+    assert.equal(manager.getDevice("rollback-device").ownerUserId, "owner-rollback");
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
 });
