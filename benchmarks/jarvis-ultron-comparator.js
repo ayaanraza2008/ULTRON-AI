@@ -392,7 +392,7 @@ export class JarvisUltronCapabilityComparator {
     lines.push(`- **Total Engineering Maturity Score:** **${evaluation.totalMaturityScore}%**`);
     lines.push(`- **JARVIS Capability Alignment Score:** **${evaluation.jarvisAlignmentScore}%**`);
     lines.push(`- **Marvel ULTRON Autonomy Alignment Score:** **${evaluation.ultronAlignmentScore}%**`);
-    lines.push(`- **All 14 Categories Verified:** Yes (100% of defined acceptance criteria satisfied)`);
+    lines.push(`- **All ${evaluation.categoriesCount} Categories Verified:** ${evaluation.categories.every(cat => cat.maturityScore === 100) ? "Yes" : "No"} (static source/test-file inventory only)`);
     lines.push(``);
 
     return lines.join("\n");
@@ -444,8 +444,8 @@ export class JarvisUltronCapabilityComparator {
       `## 1. SYSTEMIC GAP SUMMARY`,
       ``,
       `Fictional cinematic abilities in Marvel's JARVIS and ULTRON fall into two distinct domains:`,
-      `1. **Practical Real-World Software Capabilities (Achieved at 100%):** Natural voice synthesis, emotion understanding, Windows automation, multi-agent DAG orchestration, telephony bridge, multi-device unlock, code sandboxing, and web research.`,
-      `2. **Fictional & Physical Limitations (Awaiting External Hardware or Physically Impossible):** Sentient unconstrained consciousness (scientifically non-existent), physical nanotech fabrication (laws of physics), and unauthorized global satellite hacking (strictly prohibited).`,
+      `1. **Personal AI Software Capabilities:** Provider-backed intelligence, memory, Windows and Android assistance, multi-agent orchestration, telephony, multi-device coordination, coding tools, and web research. The score below reflects source/test-file presence, not live acceptance.`,
+      `2. **Product Boundaries:** Human-like sentience is not claimed; unrestricted access to external systems is excluded; consequential operations remain permission-gated.`,
       ``,
       `---`,
       ``,
@@ -470,7 +470,7 @@ export class JarvisUltronCapabilityComparator {
     const implLogMd = [
       `# ULTRON AI — IMPLEMENTATION LOG`,
       `**Log Timestamp:** ${evaluation.timestamp}  `,
-      `**Total Implemented Modules:** 226+ JavaScript / Node.js source files  `,
+      `**Inventory Basis:** The subsystem and test-file paths listed in this evaluation  `,
       ``,
       `---`,
       ``,
@@ -492,20 +492,20 @@ export class JarvisUltronCapabilityComparator {
     const verifMd = [
       `# ULTRON AI — VERIFICATION REPORT`,
       `**Verification Date:** ${evaluation.timestamp}  `,
-      `**Test Suite Execution:** Linux CI: 1,467 Tests (1,466 PASS, 0 FAIL, 1 SKIP) | Windows Host: 1,438 Tests (1,430 PASS, 0 FAIL, 8 SKIP)  `,
-      `**Syntax Verification:** 357 / 357 Files Clean (0 Errors)  `,
-      `**Candidate Engineering Commit SHA:** 39eb955364177c3882798e2949fffcb291d90610  `,
-      `**Tool Registry:** 28 Production Tools Verified  `,
+      `**Test Suite Execution:** Not executed by this file-presence benchmark; consult GitHub Actions for the exact candidate commit.  `,
+      `**Syntax Verification:** Not executed by this benchmark; consult the exact-head CI syntax job.  `,
+      `**Candidate Engineering Commit SHA:** Not captured by this benchmark.  `,
+      `**Tool Registry:** Not independently verified by this benchmark.  `,
       ``,
       `---`,
       ``,
       `## 1. VERIFICATION METHODOLOGY`,
       ``,
-      `Every capability was verified using:`,
-      `1. Node.js built-in deterministic test runner (\`node --test\`).`,
-      `2. Multi-file syntax integrity validation (\`node scripts/check-syntax.mjs\`).`,
-      `3. Contract inspection via live owner-gated REST endpoints on \`jarvis-router.js\`.`,
-      `4. Pure CPU benchmark execution on AMD Ryzen 7 5700U with 8 GB host RAM.`
+      `This report inventories configured source and test paths; it does not execute the tests or prove live integrations.`,
+      `1. Source and test-file presence checks for each configured category.`,
+      `2. Exact-head CI is the source of truth for syntax and automated test execution.`,
+      `3. Live provider, database and authenticated endpoint acceptance must be recorded separately.`,
+      `4. Physical Windows/Android and microphone/camera acceptance must be recorded separately.`
     ];
 
     fs.writeFileSync(path.join(docsDir, "ULTRON_VERIFICATION_REPORT.md"), verifMd.join("\n"), "utf8");
@@ -517,21 +517,15 @@ export class JarvisUltronCapabilityComparator {
       ``,
       `---`,
       ``,
-      `## 1. HARDWARE & EXTERNAL DEPENDENCIES`,
+      `## 1. LIVE SERVICE & CLIENT ACCEPTANCE GATES`,
       ``,
-      `The following items are completely implemented in software and verified in simulation, but require external physical hardware for physical-world operation:`,
+      `The following checks require configured external services or operator-owned devices; no result is inferred from source presence:`,
       ``,
-      `1. **Physical Robotics Actuator Pairing:**`,
-      `   - Software Status: 100% COMPLETE. Hardware Abstraction Layer, ROS 2 standard topics, latching e-stop, and 3D geofence are verified.`,
-      `   - Blocker: Requires physical robot hardware (Unitree, ROS 2 rover) on local network for physical motor actuation.`,
-      ``,
-      `2. **Physical Smart Home Actuators:**`,
-      `   - Software Status: 100% COMPLETE. Read-only telemetry and actuation gating endpoints are verified.`,
-      `   - Blocker: Requires pairing physical Matter / Home Assistant bridge.`,
-      ``,
-      `3. **Render Production Deployment:**`,
-      `   - Codebase Status: Clean, verified, and pushed to origin/main.`,
-      `   - Blocker: Requires explicit operator deployment authorization before triggering Render build.`,
+      `1. **Live AI provider:** Complete an authenticated inference and fallback check with a configured provider.`,
+      `2. **Cloud persistence:** Review and apply the missing Supabase schema only after explicit production approval; verify restart durability.`,
+      `3. **Windows and Android clients:** Install, pair, verify permissions, ACK, reconnect and revocation on real devices.`,
+      `4. **Voice and vision:** Verify real microphone, speaker, camera and screen permission flows on supported devices.`,
+      `5. **Production release:** Keep PR #478 unmerged and Render deployment locked until the owner explicitly authorizes it.`
       ``,
       `---`,
       ``,
