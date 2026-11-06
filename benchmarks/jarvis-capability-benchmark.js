@@ -411,6 +411,8 @@ export class JarvisCapabilityBenchmark {
       `**Benchmark Version:** ${evaluation.benchmarkVersion}  `,
       `**Source/Test Inventory Coverage:** **${evaluation.totalInventoryCoveragePercent}% / 100%**  `,
       `**Status:** **${evaluation.overallStatus}**  `,
+      `**Runtime Verification:** **${evaluation.runtimeVerificationStatus || "NOT_EVALUATED"}**  `,
+      `**Live Integration:** **${evaluation.liveIntegrationStatus || "NOT_EVALUATED"}**  `,
       ``,
       `---`,
       ``,
