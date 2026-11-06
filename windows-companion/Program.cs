@@ -670,6 +670,7 @@ internal sealed class CompanionContext : ApplicationContext
                 if (!string.IsNullOrWhiteSpace(existingDeviceId))
                 {
                     SaveDeviceIdentity(existingDeviceId, entered);
+                    _lastHeartbeatUtc = DateTime.MinValue;
                     if (_remoteCommandsCheckBox.Checked) _commandPollTimer.Start();
                     ShowStatus("Updated the paired device identity securely in this Windows user's profile.");
                 }
@@ -752,6 +753,7 @@ internal sealed class CompanionContext : ApplicationContext
             }
 
             SaveDeviceIdentity(deviceId, token);
+            _lastHeartbeatUtc = DateTime.MinValue;
             if (_remoteCommandsCheckBox.Checked) _commandPollTimer.Start();
             _pairingCodeBox.Clear();
             ShowStatus("Paired securely" + (string.IsNullOrWhiteSpace(deviceName) ? "." : " as " + deviceName + ".") + " Token protected with Windows DPAPI.");
