@@ -32,6 +32,10 @@ services:
         - "DEVELOPMENT_STATE.md"
         - ".env.example"
         - ".gitignore"
+        - "rea-gateway/**"
+        - "browser-use-bridge/**"
+        - "android-companion/**"
+        - "windows-companion/**"
 
   - type: web
     name: ultron-browser-use-core
@@ -41,7 +45,6 @@ services:
     branch: main
     buildCommand: >-
       pip install -r browser-use-bridge/requirements.txt &&
-      python -m playwright install --with-deps chromium &&
       python -m py_compile browser-use-bridge/main.py
       browser-use-bridge/navigation_policy.py browser-use-bridge/startup_smoke.py &&
       python browser-use-bridge/test_navigation_policy.py &&
