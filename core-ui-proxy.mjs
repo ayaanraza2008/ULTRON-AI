@@ -1,9 +1,19 @@
 import { createServer } from "node:http";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Readable } from "node:stream";
 
 const CORE_API_ORIGIN = process.env.CORE_API_ORIGIN || "https://ultron-ai-core.onrender.com";
+const PUBLIC_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "public");
+const STATIC_ASSETS = new Map([
+  ["/", ["index.html", "text/html; charset=utf-8"]],
+  ["/index.html", ["index.html", "text/html; charset=utf-8"]],
+  ["/styles.css", ["styles.css", "text/css; charset=utf-8"]],
+  ["/app.js", ["app.js", "text/javascript; charset=utf-8"]],
+  ["/particle-swarm-engine.js", ["particle-swarm-engine.js", "text/javascript; charset=utf-8"]],
+  ["/favicon.svg", ["favicon.svg", "image/svg+xml; charset=utf-8"]]
+]);
 const MAX_REQUEST_BYTES = 12 * 1024 * 1024;
 const LEGACY_SERVICE_WORKER_RETIREMENT_SCRIPT = "self.addEventListener(\"install\", event => event.waitUntil(self.skipWaiting()));\nself.addEventListener(\"activate\", event => {\n  event.waitUntil((async () => {\n    const openClients = await self.clients.matchAll({ type: \"window\", includeUncontrolled: true });\n    await self.registration.unregister();\n    const cacheKeys = await caches.keys();\n    await Promise.all(cacheKeys.filter(key => key.startsWith(\"ultron-core-shell-\")).map(key => caches.delete(key)));\n    await Promise.all(openClients.map(client => client.navigate(client.url).catch(() => null)));\n  })());\n});\n";
 const ALLOWED_PROXY_METHODS = new Set(["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"]);
@@ -47,6 +57,24 @@ function sendJson(res, statusCode, payload) {
   res.setHeader("Cache-Control", "no-store");
   res.setHeader("Content-Length", String(body.length));
   res.end(body);
+}
+
+async function serveAsset(req, res, asset) {
+  const [filename, contentType] = asset;
+  let bytes;
+  try {
+    bytes = await readFile(path.join(PUBLIC_ROOT, filename));
+  } catch {
+    sendJson(res, 404, { error: { code: "ASSET_NOT_FOUND", message: "This interface asset is missing." } });
+    return;
+  }
+  securityHeaders(res);
+  res.statusCode = 200;
+  res.setHeader("Content-Type", contentType);
+  res.setHeader("Cache-Control", filename === "index.html" ? "no-store" : "public, max-age=300");
+  res.setHeader("Content-Length", String(bytes.length));
+  if (req.method === "HEAD") res.end();
+  else res.end(bytes);
 }
 
 function forwardedRequestHeaders(req) {
@@ -93,6 +121,12 @@ export function createUltronCoreProxy({ fetchImpl = fetch, logger = console, gat
       return;
     }
 
+    const staticAsset = STATIC_ASSETS.get(requestUrl.pathname);
+    if (staticAsset && (req.method === "GET" || req.method === "HEAD")) {
+      await serveAsset(req, res, staticAsset);
+      return;
+    }
+
     if (requestUrl.pathname === "/service-worker.js" && (req.method === "GET" || req.method === "HEAD")) {
       securityHeaders(res);
       const body = Buffer.from(LEGACY_SERVICE_WORKER_RETIREMENT_SCRIPT);
@@ -118,8 +152,8 @@ export function createUltronCoreProxy({ fetchImpl = fetch, logger = console, gat
         error: {
           code: requestUrl.pathname === "/" || requestUrl.pathname === "/index.html" ||
             /\.(?:html?|js|css|svg|png|webmanifest|ico)$/i.test(requestUrl.pathname)
-            ? "FRONTEND_REMOVED" : "NOT_FOUND",
-          message: "This host is API-only. The ULTRON web frontend and static assets have been removed."
+            ? "NOT_FOUND" : "NOT_FOUND",
+          message: "No ULTRON interface or API route matches this path."
         }
       });
       return;
