@@ -255,6 +255,7 @@ async function signOut() {
   state.conversations = [];
   state.memoryItems = [];
   state.documents = [];
+  state.selectedDocumentIds = [];
   state.conversationId = null;
   state.session = null;
   state.models = [];
