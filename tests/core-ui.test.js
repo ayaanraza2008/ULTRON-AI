@@ -24,6 +24,8 @@ test("backend and proxy do not expose frontend static assets", () => {
   assert.doesNotMatch(serverSource, /app\.use\s*\(\s*["']\/voice["']/);
   assert.match(serverSource, /code:\s*["']FRONTEND_REMOVED["']/);
   assert.doesNotMatch(proxySource, /STATIC_ASSETS|serveAsset/);
+  assert.match(serverSource, /app\\.get\\(["']\\/service-worker\\.js/);
+  assert.ok(serverSource.includes("ultron-core-shell-"));
 });
 
 test("API proxy health remains available and the root is API-only", async t => {
@@ -36,18 +38,31 @@ test("API proxy health remains available and the root is API-only", async t => {
   assert.equal((await root.json()).error.code, "FRONTEND_REMOVED");
 });
 
-test("HTML, JS, CSS, manifest, service-worker and icon paths are no longer served", async t => {
+test("HTML, JS, CSS, manifest and icon paths are no longer served", async t => {
   const calls = [];
   const base = await startProxy(t, { fetchImpl: async (...args) => {
     calls.push(args);
     return new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } });
   }});
-  for (const path of ["/index.html", "/app.js", "/styles.css", "/manifest.webmanifest", "/service-worker.js", "/icons/icon-512.png"]) {
+  for (const path of ["/index.html", "/app.js", "/styles.css", "/manifest.webmanifest", "/icons/icon-512.png"]) {
     const response = await fetch(base + path);
     assert.equal(response.status, 404, path);
     assert.equal((await response.json()).error.code, "FRONTEND_REMOVED", path);
   }
   assert.equal(calls.length, 0);
+});
+
+test("legacy PWA service worker unregisters itself and clears only ULTRON shell caches", async t => {
+  const base = await startProxy(t);
+  const response = await fetch(base + "/service-worker.js");
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type") || "", /application\\/javascript/);
+  assert.equal(response.headers.get("cache-control"), "no-store, max-age=0");
+  const script = await response.text();
+  assert.ok(script.includes("self.registration.unregister()"));
+  assert.ok(script.includes('key.startsWith("ultron-core-shell-")'));
+  assert.ok(script.includes("client.navigate(client.url)"));
+  assert.doesNotMatch(script, /delete\\(\\s*key\\s*\\).*all|caches\\.delete\\([^)]*\\)(?!.*ultron-core-shell)/s);
 });
 
 test("API proxy preserves auth cookies and uses the fixed backend origin", async t => {

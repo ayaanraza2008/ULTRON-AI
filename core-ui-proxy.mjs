@@ -5,6 +5,7 @@ import { Readable } from "node:stream";
 
 const CORE_API_ORIGIN = process.env.CORE_API_ORIGIN || "https://ultron-ai-core.onrender.com";
 const MAX_REQUEST_BYTES = 12 * 1024 * 1024;
+const LEGACY_SERVICE_WORKER_RETIREMENT_SCRIPT = "self.addEventListener(\"install\", event => event.waitUntil(self.skipWaiting()));\nself.addEventListener(\"activate\", event => {\n  event.waitUntil((async () => {\n    const openClients = await self.clients.matchAll({ type: \"window\", includeUncontrolled: true });\n    await self.registration.unregister();\n    const cacheKeys = await caches.keys();\n    await Promise.all(cacheKeys.filter(key => key.startsWith(\"ultron-core-shell-\")).map(key => caches.delete(key)));\n    await Promise.all(openClients.map(client => client.navigate(client.url).catch(() => null)));\n  })());\n});\n";
 const ALLOWED_PROXY_METHODS = new Set(["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"]);
 const RESPONSE_HEADERS = [
   "cache-control", "content-type", "content-disposition", "location",
@@ -89,6 +90,19 @@ export function createUltronCoreProxy({ fetchImpl = fetch, logger = console, gat
       requestUrl = new URL(req.url || "/", "http://ultron-api-proxy.local");
     } catch {
       sendJson(res, 400, { error: { code: "INVALID_URL", message: "Request URL is invalid." } });
+      return;
+    }
+
+    if (requestUrl.pathname === "/service-worker.js" && (req.method === "GET" || req.method === "HEAD")) {
+      securityHeaders(res);
+      const body = Buffer.from(LEGACY_SERVICE_WORKER_RETIREMENT_SCRIPT);
+      res.statusCode = 200;
+      res.setHeader("Content-Type", "application/javascript; charset=utf-8");
+      res.setHeader("Cache-Control", "no-store, max-age=0");
+      res.setHeader("Service-Worker-Allowed", "/");
+      res.setHeader("Content-Length", String(body.length));
+      if (req.method === "HEAD") res.end();
+      else res.end(body);
       return;
     }
 
