@@ -99,3 +99,6 @@ This change remains unverified until the CI job and a Render build complete succ
 The production readiness smoke test had a configuration gap: `runReaMcpSelfTest` required an analysis root, but the existing Render service did not set `REA_ANALYSIS_ROOT`. The repository already contains a safe, tiny fixture at `rea-gateway/targets/demo-app`, documented as the default analysis fixture.
 
 The gateway now defaults an unset/blank `REA_ANALYSIS_ROOT` to the package-local `targets` directory. An explicit configured root is still honored. A focused unit test covers both the default and explicit override. This avoids hard-coding Render's absolute checkout path and allows the startup readiness gate to complete on Render.
+
+
+A live Render readiness probe exposed one more contract mismatch: the gateway passed `detail: "complete"` to `analyze_javascript_application`, but the REA MCP tool uses complete Evidence by default and its strict input schema does not accept an explicit `"complete"` value. The gateway now sends only the supported `input_path`, `format`, and `integrity_policy` fields; a focused test locks this contract down. The deployment must still complete its new readiness check before being marked live.
