@@ -25,7 +25,17 @@ function makeGateway() {
     destroy() { this.destroyed = true; },
     end() {}
   });
-  return { gateway, device, deviceId, makeSocket };
+  return { gateway, device, deviceHub, deviceId, makeSocket };
+}
+
+
+function maskedTextFrame(value) {
+  const payload = Buffer.from(value, "utf8");
+  const mask = Buffer.from([0x12, 0x34, 0x56, 0x78]);
+  if (payload.length > 125) throw new Error("test frame too large");
+  const masked = Buffer.alloc(payload.length);
+  for (let i = 0; i < payload.length; i++) masked[i] = payload[i] ^ mask[i % 4];
+  return Buffer.concat([Buffer.from([0x81, 0x80 | payload.length]), mask, masked]);
 }
 
 test("a replaced WebSocket closing cannot remove its successor or mark the device offline", () => {
@@ -150,5 +160,28 @@ test("configured owner policy also protects the development-only legacy token pa
   });
 
   assert.equal(await gateway.authenticateToken("legacy-token"), null);
+  gateway.close();
+});
+
+test("a replaced WebSocket cannot execute commands from bytes already buffered by the runtime", async () => {
+  const { gateway, deviceId, deviceHub, makeSocket } = makeGateway();
+  let heartbeatCount = 0;
+  deviceHub.heartbeat = () => { heartbeatCount += 1; return { success: true }; };
+  const oldSession = {
+    socket: makeSocket(),
+    device: { id: deviceId, authToken: "old-device-token" },
+    deviceId,
+    authenticated: true,
+    buffer: Buffer.alloc(0),
+    pingTimer: null,
+    authTimeout: null
+  };
+  const newSession = { socket: makeSocket(), pingTimer: null, authTimeout: null };
+  gateway.registerConnectedClient(deviceId, oldSession);
+  gateway.registerConnectedClient(deviceId, newSession);
+
+  await gateway.handleSocketData(oldSession, maskedTextFrame(JSON.stringify({ type: "HEARTBEAT" })));
+  assert.equal(heartbeatCount, 0);
+  assert.equal(gateway.clients.get(deviceId), newSession);
   gateway.close();
 });
