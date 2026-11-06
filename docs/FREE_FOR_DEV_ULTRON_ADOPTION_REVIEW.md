@@ -51,3 +51,19 @@ Keep ULTRON's existing GitHub + Render + Supabase setup, and use Cloudflare sele
 ## Review outcome
 
 This review is a discovery and architecture decision record only. It does not claim any listed provider is connected, configured, live, or currently free under its latest terms. No provider account, API key, package, source adapter, production setting, database, or deployment was changed.
+
+
+## Implementation update — Healthchecks.io worker heartbeat
+
+A first code-level adoption has been added on this branch:
+
+- New optional adapter: `integrations/healthchecks.js`.
+- The existing Supabase task worker sends a throttled success ping after healthy polling cycles and a failure ping when a worker cycle throws.
+- The adapter accepts only an HTTPS UUID ping URL on the exact `hc-ping.com` host, uses HEAD requests with redirects disabled and a short timeout, and never sends task content, user identifiers, logs, or diagnostic payloads.
+- Repeated signals are throttled; monitoring network failures are swallowed and cannot fail or stall the worker loop.
+- Configuration is opt-in via server-only `ULTRON_WORKER_HEALTHCHECKS_URL`; it is blank by default. No account, check, URL, or secret was created, and no Render setting was changed.
+- Focused tests were added in `tests/healthchecks.test.js`. CI must pass before this is treated as verified.
+
+Official protocol reference: https://healthchecks.io/docs/http_api/. The vendor documents UUID ping URLs and HEAD requests; it also warns against more than five pings per minute. ULTRON's adapter sends no more than one signal per minute for a stable state and applies a minimum interval to state transitions.
+
+This is an optional external worker heartbeat, not a replacement for Render's native health check or ULTRON's authenticated runtime diagnostics. Sentry/error tracking and external uptime monitors remain separate candidates; they should be added only after data minimization, account/plan terms, and the existing logging/health architecture are reviewed.
