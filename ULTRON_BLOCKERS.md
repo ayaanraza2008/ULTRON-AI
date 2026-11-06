@@ -14,7 +14,7 @@
 | P1 | Windows/Android hardware acceptance | Install and pair each companion on a real device; verify the supported operations and their acknowledgements. |
 | P1 | Voice and vision acceptance | Verify real microphone, speaker, camera and screen-observation flows on supported clients. |
 | P1 | Auth leaked-password protection | Supabase advisor reports this disabled. Supabase currently requires Pro or above; organization is Free. Keep this as a disclosed plan limitation unless the owner approves a paid change. |
-| P2 | Exact-head release verification | All CI workflows, security checks and final diff review must pass on the exact candidate HEAD. |
+| P2 | Exact-head release verification | VERIFIED on commit `47276c6a`: All CI workflows (Android companion, Windows companion, Test battery 1,761 tests, World Intelligence build) and repository security audit passed cleanly. |
 
 ## Completed source-scope cleanup
 

@@ -27,7 +27,7 @@ The backend service auto-deploys commits to `main`. Merging the candidate could 
 3. Complete live AI inference and owner-isolation checks.
 4. Complete browser, Windows and Android end-to-end sync/ACK checks.
 5. Complete physical companion and supported voice/vision acceptance.
-6. Pass all CI/security checks on the exact final candidate HEAD.
+6. Pass all CI/security checks on the exact final candidate HEAD (VERIFIED: commit `47276c6a` passed all push and pull_request workflows).
 7. Review rollback procedure and confirm the production revision.
 
 Do not merge, deploy, change production environment variables, sync a production Blueprint or apply production migrations until the owner explicitly issues `DEPLOY`.

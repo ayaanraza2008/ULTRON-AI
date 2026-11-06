@@ -7,7 +7,16 @@
 
 import { execFileSync } from "node:child_process";
 
-const trackedFiles = execFileSync("git", ["ls-files", "-z"], { encoding: "utf8" })
+let gitBin = "git";
+if (process.platform === "win32") {
+  try {
+    const whereOut = execFileSync("where.exe", ["git"], { encoding: "utf8" });
+    const firstLine = whereOut.trim().split(/\r?\n/)[0];
+    if (firstLine) gitBin = firstLine;
+  } catch {}
+}
+
+const trackedFiles = execFileSync(gitBin, ["ls-files", "-z"], { encoding: "utf8" })
   .split("\0")
   .filter(Boolean);
 
