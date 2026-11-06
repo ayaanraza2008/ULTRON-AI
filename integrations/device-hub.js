@@ -142,26 +142,41 @@ export class DeviceHub {
     const id = String(record.id || "").trim();
     const ownerUserId = String(record.ownerUserId || record.owner_user_id || "").trim();
     const authToken = String(record.authToken || "").trim();
-    if (!id || !ownerUserId || !/^ultron_dev_[a-f0-9]{64}$/i.test(authToken) || record.status === "revoked") return null;
+    if (!id || !ownerUserId || !/^ultron_dev_[a-f0-9]{64}$/i.test(authToken) ||
+        record.status === "revoked" || this.revokedDevices.has(id)) return null;
 
     const previous = this.pairedDevices.get(id);
+    const platform = String(record.platform || previous?.platform || "unknown").toLowerCase();
+    const incomingTokenHash = hashToken(authToken);
+    const maxStaleMs = platform === "android" ? 35 * 60 * 1000 : 90 * 1000;
+    // Preserve only a fresh, already-authenticated in-process session for the
+    // same owner and credential. DB identity/timestamps alone never restore it.
+    const previousSessionIsLive = Boolean(
+      previous &&
+      previous.ownerUserId === ownerUserId &&
+      previous.tokenHash === incomingTokenHash &&
+      previous.status !== "revoked" &&
+      this.isDeviceOnline(id, maxStaleMs)
+    );
     const now = new Date().toISOString();
     const device = {
       ...(previous || {}),
       id,
       name: String(record.name || record.device_name || previous?.name || "Companion Device").slice(0, 120),
-      platform: String(record.platform || previous?.platform || "unknown").toLowerCase(),
+      platform,
       authToken,
-      tokenHash: hashToken(authToken),
+      tokenHash: incomingTokenHash,
       tokenPrefix: authToken.slice(0, 20),
       ownerUserId,
       status: "active",
       pairedAt: record.pairedAt || record.paired_at || previous?.pairedAt || now,
-      lastSeenAt: record.lastSeenAt || record.last_seen_at || previous?.lastSeenAt || null,
+      lastSeenAt: previousSessionIsLive
+        ? previous.lastSeenAt
+        : (record.lastSeenAt || record.last_seen_at || previous?.lastSeenAt || null),
       battery: previous?.battery || null,
       // A durable pairing record proves identity, not current connectivity.
-      // Only a live authenticated heartbeat or WebSocket session marks it online.
-      online: false,
+      // Only a still-fresh authenticated in-process heartbeat/socket is trusted.
+      online: previousSessionIsLive,
       source: "supabase"
     };
     this.pairedDevices.set(id, device);
@@ -738,12 +753,15 @@ export class DeviceHub {
    * Checks whether a device is currently active and has communicated recently.
    * If the last contact exceeds maxStaleMs, the device is marked OFFLINE.
    */
-  isDeviceOnline(deviceId, maxStaleMs = 60_000) {
+  isDeviceOnline(deviceId, maxStaleMs = null) {
     const device = this.pairedDevices.get(deviceId);
-    if (!device || device.status === "revoked") return false;
-    if (device.online === false) return false;
-    const lastSeen = Date.parse(device.lastSeenAt || 0);
-    const isFresh = Number.isFinite(lastSeen) && (Date.now() - lastSeen) < maxStaleMs;
+    if (!device || device.status === "revoked" || this.revokedDevices.has(deviceId)) return false;
+    if (device.online !== true) return false;
+    const platformWindow = device.platform === "android" ? 35 * 60 * 1000 : 90 * 1000;
+    const freshnessWindow = Number.isFinite(maxStaleMs) && maxStaleMs >= 0 ? maxStaleMs : platformWindow;
+    const lastSeen = Date.parse(device.lastSeenAt || "");
+    const ageMs = Date.now() - lastSeen;
+    const isFresh = Number.isFinite(lastSeen) && ageMs >= 0 && ageMs <= freshnessWindow;
     if (!isFresh) {
       device.online = false;
       return false;
