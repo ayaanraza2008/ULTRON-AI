@@ -318,21 +318,21 @@ export const JARVIS_BENCHMARK_SPEC = [
     id: "reliability_self_monitoring",
     name: "Reliability and self-monitoring",
     weight: 5,
-    subsystems: ["system/connection-controller.js", "robotics/robot-controller.js", "runtime-readiness.js"],
+    subsystems: ["system/connection-controller.js", "system/remote-task-orchestrator.js", "runtime-readiness.js"],
     acceptanceCriteria: [
       "True offline + online connection controller supporting 3 operational modes (ONLINE, OFFLINE, HYBRID)",
       "Bounded offline sync queue (up to 100 items) flushing automatically upon reconnection",
-      "Non-bypassable latching emergency stop with cryptographic token authorization",
+      "Owner-authorized emergency stop cancels active ULTRON tasks and blocks new work until reset",
       "Graceful server shutdown with SIGTERM signal handling and clean socket draining",
       "Self-improvement failure analysis ledger with protected core file boundaries"
     ],
     testFiles: [
       "tests/offline-online-modes.test.js",
-      "tests/robotics-hal.test.js",
+      "tests/remote-task-orchestrator.test.js",
       "tests/runtime-readiness.test.js",
       "tests/server-shutdown.test.js"
     ],
-    knownLimitations: "Robotics HAL actuator commands are fully simulated and ROS 2 topic-ready; physical robot motion requires pairing external physical hardware."
+    knownLimitations: "Emergency stop is scoped to ULTRON software tasks and does not claim control over external hardware."
   }
 ];
 
