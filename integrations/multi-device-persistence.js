@@ -793,7 +793,7 @@ export function createMultiDevicePersistenceAdapter(options = {}) {
     if (baseUrl.protocol !== "https:" && !(baseUrl.protocol === "http:" && isLoopback)) {
       throw new Error("SUPABASE_URL_MUST_USE_HTTPS");
     }
-    baseUrl.pathname = baseUrl.pathname.replace(/\\/+$/, "");
+    baseUrl.pathname = baseUrl.pathname.replace(/\/+$/, "");
 
     supabaseRest = {
       fetch: (requestPath, init = {}) => {
