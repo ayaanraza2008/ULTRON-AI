@@ -419,9 +419,12 @@ export class DeviceWebSocketGateway {
    * Processes incoming data chunks from a client socket.
    */
   async handleSocketData(clientSession, chunk) {
+    // A superseded or explicitly closed socket must not process bytes that
+    // were already queued by the runtime before its close event was delivered.
+    if (clientSession.socket?.destroyed) return;
     clientSession.buffer = Buffer.concat([clientSession.buffer, chunk]);
 
-    while (clientSession.buffer.length > 0) {
+    while (clientSession.buffer.length > 0 && !clientSession.socket?.destroyed) {
       let frame;
       try {
         frame = parseFrame(clientSession.buffer);
@@ -460,6 +463,7 @@ export class DeviceWebSocketGateway {
       if (frame.opcode === 0x1) {
         const text = frame.payload.toString("utf8");
         await this.handleClientMessage(clientSession, text);
+        if (clientSession.socket?.destroyed) return;
       }
     }
   }
