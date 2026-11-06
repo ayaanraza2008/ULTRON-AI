@@ -23,6 +23,11 @@ ULTRON is a private personal AI software ecosystem for Windows, Android and brow
 - Implemented 6-point durable persistence verification (write, read, version update, revocation, unauthorized rejection, restart recovery) and explicitly distinguished mock/local fallback from cloud durability.
 - Added protected live-inference acceptance test (tests/live-inference-acceptance.test.js) guaranteeing zero secret leakage and genuine fallback.
 - Updated .github/workflows/model-live-acceptance.yml to enable manual execution directly on the candidate branch.
+- Deep-cloned device state snapshots via structuredClone in MultiDeviceManager.serializeState to ensure rollback immutability on persistence failures.
+- Connected TelephonyBrain conversational requests to the live BrainRouter with graceful fallback and zero fabricated responses.
+- Fixed TelephonyBrain mobile unlock and media status reporting to truthfully distinguish partial unlocks from complete simultaneous fleet unlock.
+- Disabled legacy process-local DeviceHub pairing in production with HTTP 410, directing callers to canonical Supabase-backed /api/devices endpoints.
+- Disabled static desktop token authentication in production, requiring per-device cryptographic token hashes.
 
 ## Live infrastructure observations
 
@@ -43,7 +48,7 @@ The Supabase security advisor reports leaked-password protection disabled. The o
 
 ## Verification policy
 
-The latest candidate commit `104e09cbe0e3167fb214e7e8bdad4abcafea3017` passed all 6 PR #478 workflows green. CI builds do not prove live external services or physical-device behavior. No overall completion percentage is certified.
+The candidate branch passed all 6 PR #478 CI workflows green on prior candidate commits and the latest commit `af2e0116` has been submitted for verification. Local verification confirms 490/490 files clean syntax, zero security vulnerabilities, and all core test suites passing (177/177 passing across multi-device, persistence, voice, vision, Windows desktop agent, and telephony). CI builds do not prove live external services or physical-device behavior. No overall completion percentage is certified.
 
 ## Release boundary
 

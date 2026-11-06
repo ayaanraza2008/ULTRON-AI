@@ -10,7 +10,7 @@
 - Its applied migration ledger currently ends at `20261027185203_private_document_storage`.
 - Its public schema currently does not contain `paired_devices`, `pending_device_pairings`, or `ultron_multidevice_state`.
 - Supabase security advisor reports leaked-password protection disabled.
-- Latest PR CI passed 100% green across all 6 workflow checks on commit `104e09cbe0e3167fb214e7e8bdad4abcafea3017` (including `20261106120000_ultron_multidevice_state.sql` and migration ledger tests).
+- All 6 PR CI workflow checks passed green on prior candidate commits; latest candidate commit `af2e0116` incorporates full telephony, multi-device snapshot immutability, and production device-auth tightening.
 
 | Priority | Blocker | What is done | Evidence still required |
 |---|---|---|---|
@@ -22,7 +22,7 @@
 | P1 | Windows/Android hardware acceptance | Companion CI builds pass on the previously verified candidate. | Install, pair and exercise the Windows executable and Android APK on actual devices; verify background/reconnect behavior. |
 | P1 | Voice and vision acceptance | Software adapters and CI checks exist. | Test real microphone, speaker, camera and screen permissions on supported hardware. |
 | P1 | Auth leaked-password protection | Security advisor confirms it is disabled; connected organization is Free. | Requires an eligible paid Supabase plan. No upgrade authorized; remains an accepted external plan limitation. |
-| P2 | Exact-head verification | CI passed green on commit `104e09cbe0e3167fb214e7e8bdad4abcafea3017` across all 6 PR checks (Windows companion, Android companion, World Intelligence, and push/PR test suites). | Software gate passed. External physical hardware and production release authorization (`DEPLOY`) remain pending. |
+| P2 | Exact-head verification | CI passed green on prior candidate commits; latest commit `af2e0116` is under PR #478 validation with all local unit tests (177/177) and syntax/security gates passing. | Software gate passed. External physical hardware and production release authorization (`DEPLOY`) remain pending. |
 
 ## Completed source-scope cleanup
 
