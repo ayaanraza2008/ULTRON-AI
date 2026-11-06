@@ -470,6 +470,23 @@ test("device online freshness matches Android periodic sync and the Windows comp
     assert.equal(payload.devices.find(device => device.id === android.deviceId).online, true);
     assert.equal(payload.devices.find(device => device.id === windows.deviceId).online, false);
 
+    // The Windows tray companion sends an authenticated heartbeat with an
+    // empty JSON body because it has no battery payload in this code path.
+    const windowsHeartbeat = await fetch(base + "/devices/me/heartbeat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-device-token": windows.deviceToken },
+      body: "{}"
+    });
+    assert.equal(windowsHeartbeat.status, 200);
+    assert.equal((await windowsHeartbeat.json()).success, true);
+
+    const afterWindowsHeartbeat = await fetch(base + "/devices/me", {
+      headers: { "x-device-token": android.deviceToken }
+    });
+    assert.equal(afterWindowsHeartbeat.status, 200);
+    const windowsRefresh = await afterWindowsHeartbeat.json();
+    assert.equal(windowsRefresh.devices.find(device => device.id === windows.deviceId).online, true);
+
     db.devices.get(android.deviceId).last_seen_at =
       new Date(Date.now() - 36 * 60 * 1000).toISOString();
     const staleResponse = await fetch(base + "/devices/me", {
