@@ -401,7 +401,7 @@ export class DatabasePersistenceAdapter extends BaseMultiDevicePersistenceAdapte
     // 1. In-memory mock database (used in unit test suites without external daemons)
     if (this.inMemoryMockDb) {
       this.inMemoryMockDb.set("multidevice_state", JSON.stringify(serialized));
-      return { success: true, backend: "database_mock", cloudPersisted: false, fallbackPersisted, note: "mock_pg_saved" };
+      return { success: true, backend: "database", cloudPersisted: false, fallbackPersisted, note: "mock_pg_saved" };
     }
 
     // Encrypt at rest before storing in database if encryption key is configured
