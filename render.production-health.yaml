@@ -68,6 +68,8 @@ services:
     branch: main
     buildCommand: >-
       pip install -r browser-use-bridge/requirements.txt &&
+      python -m pip check &&
+      python -m playwright install chromium &&
       python -m py_compile browser-use-bridge/main.py
       browser-use-bridge/navigation_policy.py browser-use-bridge/startup_smoke.py &&
       python browser-use-bridge/test_navigation_policy.py &&
