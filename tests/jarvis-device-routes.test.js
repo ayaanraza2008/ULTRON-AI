@@ -244,3 +244,39 @@ test("JARVIS direct command enqueue rejects actions and applications outside the
     assert.equal((await unapprovedApp.json()).error.code, "REMOTE_APP_NOT_APPROVED");
   });
 });
+
+
+test("Production disables process-local DeviceHub pairing and security lifecycle routes", async () => {
+  const productionEnv = {
+    NODE_ENV: "production",
+    ULTRON_INTEGRATION_OWNER_USER_ID: "owner-user",
+    ULTRON_DEVICE_PAIRING_ENABLED: "true",
+    ULTRON_ALLOW_LEGACY_DEVICEHUB_AUTH: "false"
+  };
+  await withDeviceRouter({ env: productionEnv }, async base => {
+    const cases = [
+      ["GET", "/api/jarvis/devices"],
+      ["POST", "/api/jarvis/devices/pair/request"],
+      ["POST", "/api/jarvis/devices/pair/approve"],
+      ["POST", "/api/jarvis/devices/pair/claim"],
+      ["POST", "/api/jarvis/devices/pair/verify"],
+      ["POST", "/api/jarvis/devices/pair/qr"],
+      ["POST", "/api/jarvis/devices/device-123/revoke"],
+      ["DELETE", "/api/jarvis/devices/device-123"],
+      ["POST", "/api/jarvis/devices/device-123/rotate-token"]
+    ];
+
+    for (const [method, route] of cases) {
+      const response = await fetch(base + route, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: method === "GET" ? undefined : JSON.stringify({ pairingCode: "123456" })
+      });
+      assert.equal(response.status, 410, `${method} ${route}`);
+      const payload = await response.json();
+      assert.equal(payload.error.code, "LEGACY_DEVICEHUB_PAIRING_DISABLED");
+      assert.equal(payload.canonicalEndpoints.createPairing, "/api/devices/pairings");
+      assert.equal(payload.canonicalEndpoints.revoke, "/api/devices/:id");
+    }
+  });
+});

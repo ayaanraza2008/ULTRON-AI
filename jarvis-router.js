@@ -803,8 +803,28 @@ export function createJarvisRouter({
     res.json(result);
   });
 
+  // --- Legacy process-local DeviceHub pairing (development only) ---
+  // Production pairing, listing, token rotation and revocation are handled by
+  // the authenticated Supabase-backed /api/devices routes.
+  const rejectLegacyDeviceHubPairingInProduction = (_req, res, next) => {
+    if (env.NODE_ENV !== "production") return next();
+    return res.status(410).json({
+      error: {
+        code: "LEGACY_DEVICEHUB_PAIRING_DISABLED",
+        message: "This process-local device registry is disabled in production. Use the authenticated Supabase-backed /api/devices endpoints."
+      },
+      canonicalEndpoints: {
+        list: "/api/devices",
+        createPairing: "/api/devices/pairings",
+        claimPairing: "/api/devices/pairings/claim",
+        rotateToken: "/api/devices/:id/rotate-token",
+        revoke: "/api/devices/:id"
+      }
+    });
+  };
+
   // --- Multi-Device Hub & Companion Pairing ---
-  router.post("/jarvis/devices/pair/request", express.json(), (req, res) => {
+  router.post("/jarvis/devices/pair/request", rejectLegacyDeviceHubPairingInProduction, express.json(), (req, res) => {
     const isPairingEnabled = (env.ULTRON_DEVICE_PAIRING_ENABLED === "true" || Boolean(env.ULTRON_DESKTOP_AGENT_TOKEN)) && deviceHubInstance.isPersistent;
     if (!isPairingEnabled) {
       return res.status(503).json({
@@ -824,7 +844,7 @@ export function createJarvisRouter({
     });
   });
 
-  router.post("/jarvis/devices/pair/approve", requireOwner, express.json(), (req, res) => {
+  router.post("/jarvis/devices/pair/approve", requireOwner, rejectLegacyDeviceHubPairingInProduction, express.json(), (req, res) => {
     const pairingReady = (env.ULTRON_DEVICE_PAIRING_ENABLED === "true" || Boolean(env.ULTRON_DESKTOP_AGENT_TOKEN)) && deviceHubInstance.isPersistent;
     if (!pairingReady) return res.status(503).json({ error: { code: "DEVICE_PAIRING_NOT_DURABLE", message: "Configure ULTRON_DEVICE_STORE_PATH and a dedicated ULTRON_DEVICE_SIGNING_SECRET (32+ characters) before pairing devices." } });
     const { pairingCode } = req.body || {};
@@ -838,7 +858,7 @@ export function createJarvisRouter({
     res.json(approved);
   });
 
-  router.post("/jarvis/devices/pair/claim", express.json(), (req, res) => {
+  router.post("/jarvis/devices/pair/claim", rejectLegacyDeviceHubPairingInProduction, express.json(), (req, res) => {
     const pairingReady = (env.ULTRON_DEVICE_PAIRING_ENABLED === "true" || Boolean(env.ULTRON_DESKTOP_AGENT_TOKEN)) && deviceHubInstance.isPersistent;
     if (!pairingReady) return res.status(503).json({ error: { code: "DEVICE_PAIRING_NOT_DURABLE", message: "Device pairing is unavailable until durable storage and its encryption secret are configured." } });
     const { pairingCode } = req.body || {};
@@ -853,7 +873,7 @@ export function createJarvisRouter({
     res.json(claimed);
   });
 
-  router.post("/jarvis/devices/pair/verify", requireOwner, express.json(), (req, res) => {
+  router.post("/jarvis/devices/pair/verify", requireOwner, rejectLegacyDeviceHubPairingInProduction, express.json(), (req, res) => {
     const isPairingEnabled = (env.ULTRON_DEVICE_PAIRING_ENABLED === "true" || Boolean(env.ULTRON_DESKTOP_AGENT_TOKEN)) && deviceHubInstance.isPersistent;
     if (!isPairingEnabled) {
       return res.status(503).json({
@@ -872,7 +892,7 @@ export function createJarvisRouter({
   });
 
   // --- Multi-Device QR Pairing & Cross-Device Routing ---
-  router.post("/jarvis/devices/pair/qr", requireOwner, express.json(), (req, res) => {
+  router.post("/jarvis/devices/pair/qr", requireOwner, rejectLegacyDeviceHubPairingInProduction, express.json(), (req, res) => {
     const isPairingEnabled = (env.ULTRON_DEVICE_PAIRING_ENABLED === "true" || Boolean(env.ULTRON_DESKTOP_AGENT_TOKEN)) && deviceHubInstance.isPersistent;
     if (!isPairingEnabled) {
       return res.status(503).json({ error: { code: "DEVICE_PAIRING_NOT_DURABLE", message: "Device pairing is not configured for durable storage." } });
@@ -1057,7 +1077,7 @@ export function createJarvisRouter({
     res.json(deviceNetworkingManager.getLocalDiscoveryBeacon());
   });
 
-  router.get("/jarvis/devices", requireOwner, (req, res) => {
+  router.get("/jarvis/devices", requireOwner, rejectLegacyDeviceHubPairingInProduction, (req, res) => {
     const isPairingEnabled = (env.ULTRON_DEVICE_PAIRING_ENABLED === "true" || Boolean(env.ULTRON_DESKTOP_AGENT_TOKEN)) && deviceHubInstance.isPersistent;
     if (!isPairingEnabled) {
       return res.json({ devices: [], connected: false, status: "NOT_CONFIGURED" });
@@ -1068,7 +1088,7 @@ export function createJarvisRouter({
     res.json({ devices, connected: devices.length > 0, status: devices.length > 0 ? "CONFIGURED" : "READY" });
   });
 
-  router.post("/jarvis/devices/:id/revoke", requireOwner, (req, res) => {
+  router.post("/jarvis/devices/:id/revoke", requireOwner, rejectLegacyDeviceHubPairingInProduction, (req, res) => {
     const deviceId = req.params.id;
     const result = deviceHubInstance.revokeDevice(deviceId, req.supabaseUser?.id);
     if (!result.success) {
@@ -1083,7 +1103,7 @@ export function createJarvisRouter({
     res.json(result);
   });
 
-  router.delete("/jarvis/devices/:id", requireOwner, (req, res) => {
+  router.delete("/jarvis/devices/:id", requireOwner, rejectLegacyDeviceHubPairingInProduction, (req, res) => {
     const deviceId = req.params.id;
     const device = deviceHubInstance.pairedDevices.get(deviceId);
     if (!device) {
@@ -1106,7 +1126,7 @@ export function createJarvisRouter({
     res.json(result);
   });
 
-  router.post("/jarvis/devices/:id/rotate-token", requireOwner, (req, res) => {
+  router.post("/jarvis/devices/:id/rotate-token", requireOwner, rejectLegacyDeviceHubPairingInProduction, (req, res) => {
     const deviceId = req.params.id;
     const result = deviceHubInstance.rotateDeviceToken(deviceId, req.supabaseUser?.id);
     if (!result.success) {
