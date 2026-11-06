@@ -217,3 +217,56 @@ test("durable revoke, token rotation and unpair roll back when registry writes f
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
+
+
+test("database-authoritative revocation invalidates local sessions even when the local cache cannot be written", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "ultron-device-external-revoke-"));
+  const blockedPath = path.join(tempDir, "blocked-registry");
+  fs.mkdirSync(blockedPath);
+  try {
+    const hub = new DeviceHub({
+      env: {},
+      durableStoragePath: blockedPath,
+      masterSecret: "ultron-test-device-signing-secret-0123456789"
+    });
+    const token = "ultron_dev_" + "f".repeat(64);
+    const device = hub.importPairedDevice({
+      id: "external-revoke-device",
+      ownerUserId: "owner-external",
+      authToken: token,
+      status: "active"
+    });
+    assert.ok(device);
+    const events = [];
+    hub.registerEventListener(event => events.push(event));
+
+    const result = hub.revokeDevice(device.id, "owner-external", { authoritativeExternal: true });
+    assert.equal(result.success, true);
+    assert.equal(result.localPersistenceWarning, "AUTHORITATIVE_EXTERNAL_REVOCATION_APPLIED");
+    assert.equal(device.status, "revoked");
+    assert.equal(hub.revokedDevices.has(device.id), true);
+    assert.equal(hub.authenticateDevice(device.id, token), null);
+    assert.ok(events.some(event => event.type === "DEVICE_REVOKED" && event.deviceId === device.id));
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("owner-authorized token rotation clears an in-memory revocation tombstone", () => {
+  const hub = new DeviceHub({ env: {} });
+  const token = "ultron_dev_" + "g".repeat(64);
+  const device = hub.importPairedDevice({
+    id: "rotate-revoked-device",
+    ownerUserId: "owner-rotate",
+    authToken: token,
+    status: "active"
+  });
+  hub.revokedDevices.add(device.id);
+
+  const rotated = hub.rotateDeviceToken(device.id, "owner-rotate");
+  assert.equal(rotated.success, true);
+  assert.equal(hub.revokedDevices.has(device.id), false);
+  assert.equal(device.status, "active");
+  assert.notEqual(rotated.newDeviceToken, token);
+  assert.equal(hub.authenticateDevice(device.id, rotated.newDeviceToken), device);
+});
