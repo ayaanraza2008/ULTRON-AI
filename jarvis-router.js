@@ -3,15 +3,6 @@ import { evaluateNotificationWindow, loadNotificationPolicy } from "./system/not
 import { ultronAutonomy } from "./autonomy/ultron-autonomy.js";
 import { genesisEngine } from "./genesis/genesis-engine.js";
 import { forgeEngine } from "./forge/forge-engine.js";
-import { RobotDigitalTwin, simToRealGate } from "./robotics/robot-digital-twin.js";
-import {
-  SIMREADY_ASSET_CATALOG,
-  TRAINING_SCENARIOS,
-  simReadyEngine,
-  playbackEngine,
-  hilBridge,
-  simReadyCentralExplorer
-} from "./robotics/simready-simulation-engine.js";
 import { ultronVision } from "./vision/ultron-vision.js";
 import { ultronEyesManager, SESSION_STATES } from "./vision/ultron-eyes-manager.js";
 import { ultronCyberCore, CYBER_AGENTS } from "./security/cyber-core.js";
@@ -57,7 +48,6 @@ import { kokoroEngine } from "./voice/kokoro-engine.js";
 import { proactiveDaemon } from "./system/proactive-daemon.js";
 import { proactiveCommunicationEngine } from "./system/proactive-communication.js";
 import { screenObserver } from "./vision/screen-observer.js";
-import { robotController } from "./robotics/robot-controller.js";
 import { connectionController } from "./system/connection-controller.js";
 import { knowledgeEngine } from "./knowledge/knowledge-engine.js";
 import { cyberSecurityIntel } from "./security/cyber-intel.js";
@@ -1700,53 +1690,6 @@ export function createJarvisRouter({
   });
 
   
-  // --- Robotics & HAL (Singularity) ---
-  router.post("/jarvis/robotics/register", requireOwner, express.json(), (req, res) => {
-    const result = robotController.registerRobot(req.body || {});
-    res.json(result);
-  });
-
-  router.post("/jarvis/robotics/motion", requireOwner, express.json(), (req, res) => {
-    const { robotId, command } = req.body || {};
-    const result = robotController.dispatchMotionCommand(robotId, command || {});
-    if (!result.permitted) {
-      return res.status(403).json(result);
-    }
-    res.json(result);
-  });
-
-  router.post("/jarvis/robotics/emergency-stop", requireOwner, express.json(), (req, res) => {
-    const reason = req.body?.reason || "Operator emergency stop triggered";
-    const result = robotController.triggerEmergencyStop(reason);
-    res.json(result);
-  });
-
-  router.post("/jarvis/robotics/clear-emergency-stop", requireOwner, express.json(), (req, res) => {
-    const authorizationKey = req.body?.authorizationKey;
-    const result = robotController.clearEmergencyStop(authorizationKey);
-    if (!result.success) {
-      return res.status(403).json(result);
-    }
-    res.json(result);
-  });
-
-  router.get("/jarvis/robotics/status", requireOwner, (_req, res) => {
-    res.json(robotController.getFleetStatus());
-  });
-
-  router.post("/jarvis/robotics/export-brain", requireOwner, express.json(), (req, res) => {
-    const exported = robotController.exportBrainPackage(req.body || {});
-    res.json({ success: true, package: exported });
-  });
-
-  router.post("/jarvis/robotics/import-brain", requireOwner, express.json(), (req, res) => {
-    const result = robotController.importBrainPackage(req.body?.package, req.body?.targetDevice);
-    if (!result.success) {
-      return res.status(400).json(result);
-    }
-    res.json(result);
-  });
-
   // --- True Offline & Online Connection Controller (Singularity) ---
   router.get("/jarvis/connection/status", requireOwner, (_req, res) => {
     res.json(connectionController.getStatus());
@@ -2241,7 +2184,7 @@ export function createJarvisRouter({
 
 
   // =========================================================================
-  // NEXT-GENERATION AUTONOMOUS INTELLIGENCE UPGRADE ROUTES (9 SYSTEMS)
+  // NEXT-GENERATION AUTONOMOUS INTELLIGENCE UPGRADE ROUTES (8 SYSTEMS)
   // =========================================================================
 
   router.get("/jarvis/nextgen/status", requireOwner, (_req, res) => {
@@ -2252,7 +2195,6 @@ export function createJarvisRouter({
         ultronAutonomy: { status: "ACTIVE", version: "2.0.0" },
         ultronGenesis: { status: "ACTIVE", version: "2.0.0" },
         ultronForge: { status: "ACTIVE", version: "2.0.0" },
-        ultronRobotics: { status: "ACTIVE", version: "2.0.0" },
         ultronVision: { status: "ACTIVE", version: "2.0.0" },
         ultronNexus: { status: "ACTIVE", version: "2.0.0" },
         ultronGuardian: { status: "ACTIVE", version: "2.0.0" },
@@ -2316,95 +2258,6 @@ export function createJarvisRouter({
       const { code } = req.body || {};
       const secReport = forgeEngine.analyzeSecurity(code);
       res.json(secReport);
-    } catch (err) {
-      res.status(500).json({ error: { message: err.message } });
-    }
-  });
-
-  router.post("/jarvis/nextgen/robotics/sim-step", requireOwner, express.json(), (req, res) => {
-    try {
-      const { command, dt, obstacles } = req.body || {};
-      const twin = new RobotDigitalTwin();
-      const stepRes = twin.step(command, dt, obstacles);
-      const lidar = twin.scanLidar(obstacles);
-      res.json({ success: true, stepRes, lidar });
-    } catch (err) {
-      res.status(500).json({ error: { message: err.message } });
-    }
-  });
-
-  router.post("/jarvis/nextgen/robotics/sim-to-real", requireOwner, express.json(), (req, res) => {
-    try {
-      const { robotId, trajectory } = req.body || {};
-      const passport = simToRealGate.issueDeploymentPassport(robotId, trajectory);
-      if (!passport.success) return res.status(409).json(passport);
-      res.json(passport);
-    } catch (err) {
-      res.status(400).json({ error: { message: err.message } });
-    }
-  });
-
-  // --- SimReady & OpenUSD Robotics Simulation (Category Q) ---
-  router.get("/jarvis/robotics/simready/assets", requireOwner, (_req, res) => {
-    res.json({ success: true, count: SIMREADY_ASSET_CATALOG.length, assets: SIMREADY_ASSET_CATALOG });
-  });
-
-  router.get("/jarvis/robotics/simready/scenarios", requireOwner, (_req, res) => {
-    res.json({ success: true, scenarios: Object.values(TRAINING_SCENARIOS) });
-  });
-
-  router.post("/jarvis/robotics/simready/scenario/run", requireOwner, express.json(), (req, res) => {
-    try {
-      const { scenarioKey, maxSteps } = req.body || {};
-      if (scenarioKey) simReadyEngine.loadScenario(scenarioKey);
-      const episode = simReadyEngine.runEpisode(Number(maxSteps) || 40);
-      const evaluation = playbackEngine.evaluateAndPlayback(episode);
-      res.json({ success: true, episode, evaluation });
-    } catch (err) {
-      res.status(500).json({ error: { message: err.message } });
-    }
-  });
-
-  router.get("/jarvis/robotics/simready/dataset", requireOwner, (req, res) => {
-    try {
-      const format = String(req.query?.format || "json").toLowerCase();
-      if (format === "csv") {
-        res.setHeader("Content-Type", "text/csv");
-        return res.send(simReadyEngine.exportDatasetCSV());
-      }
-      res.json(simReadyEngine.exportDatasetJSON());
-    } catch (err) {
-      res.status(500).json({ error: { message: err.message } });
-    }
-  });
-
-  router.post("/jarvis/robotics/simready/hil/handshake", requireOwner, express.json(), async (_req, res) => {
-    const result = await hilBridge.handshake();
-    if (!result.success) return res.status(501).json(result);
-    res.json(result);
-  });
-
-  router.get("/jarvis/robotics/simready/central/search", requireOwner, (req, res) => {
-    try {
-      const query = String(req.query?.q || "");
-      const category = req.query?.category ? String(req.query.category) : null;
-      const limit = Number(req.query?.limit) || 10;
-      const results = simReadyCentralExplorer.searchAssets({ query, category, limit });
-      res.json(results);
-    } catch (err) {
-      res.status(500).json({ error: { message: err.message } });
-    }
-  });
-
-  router.post("/jarvis/robotics/simready/central/import", requireOwner, express.json(), (req, res) => {
-    try {
-      const { assetId } = req.body || {};
-      if (!assetId) {
-        return res.status(400).json({ success: false, error: "MISSING_ASSET_ID" });
-      }
-      const result = simReadyCentralExplorer.importAssetToProject(assetId, simReadyEngine);
-      if (!result.success) return res.status(404).json(result);
-      res.json(result);
     } catch (err) {
       res.status(500).json({ error: { message: err.message } });
     }
