@@ -10,6 +10,7 @@ import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.speech.tts.TextToSpeech
 import android.text.InputType
 import android.view.Gravity
 import android.widget.ArrayAdapter
@@ -28,6 +29,7 @@ import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 class MainActivity : Activity() {
@@ -36,10 +38,23 @@ class MainActivity : Activity() {
     private lateinit var pairingStatus: TextView
     private lateinit var languagePicker: Spinner
     private var commandRecognizer: SpeechRecognizer? = null
+    private var textToSpeech: TextToSpeech? = null
+    private var textToSpeechReady = false
+    private var pendingVoiceReply: Pair<String, String>? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         buildLayout()
+        textToSpeech = TextToSpeech(this) { result ->
+            textToSpeechReady = result == TextToSpeech.SUCCESS
+            if (textToSpeechReady) {
+                textToSpeech?.setSpeechRate(0.96f)
+                pendingVoiceReply?.let { (text, language) ->
+                    pendingVoiceReply = null
+                    speakVoiceReply(text, language)
+                }
+            }
+        }
         updatePairingStatus()
         if (DeviceTokenStore.isPaired(this)) {
             scheduleTelemetrySync()
@@ -286,6 +301,35 @@ class MainActivity : Activity() {
         else -> "en-IN"
     }
 
+    private fun speakVoiceReply(text: String, languageTag: String) {
+        val cleanText = text.trim().take(3000)
+        if (cleanText.isBlank()) return
+        val engine = textToSpeech
+        if (engine == null || !textToSpeechReady) {
+            pendingVoiceReply = cleanText to languageTag
+            return
+        }
+
+        try {
+            val requestedLocale = Locale.forLanguageTag(languageTag)
+            val languageStatus = engine.setLanguage(requestedLocale)
+            if (languageStatus == TextToSpeech.LANG_MISSING_DATA ||
+                languageStatus == TextToSpeech.LANG_NOT_SUPPORTED
+            ) {
+                engine.setLanguage(Locale.getDefault())
+            }
+            engine.setSpeechRate(0.96f)
+            engine.speak(
+                cleanText,
+                TextToSpeech.QUEUE_FLUSH,
+                null,
+                "ultron-voice-reply-${System.currentTimeMillis()}"
+            )
+        } catch (_: RuntimeException) {
+            // Keep the recognised response visible even when the device TTS engine fails.
+        }
+    }
+
     private fun dispatchVoiceCommand(command: String) {
         val token = DeviceTokenStore.load(this)
         if (token.isNullOrBlank()) {
@@ -307,7 +351,12 @@ class MainActivity : Activity() {
                 )
                 val reply = result.optString("textResponse").take(1200)
                 runOnUiThread {
-                    status.text = if (reply.isBlank()) "ULTRON received the command." else "ULTRON: $reply"
+                    status.text = if (reply.isBlank()) {
+                        "ULTRON returned an empty response."
+                    } else {
+                        "ULTRON: $reply"
+                    }
+                    if (reply.isNotBlank()) speakVoiceReply(reply, language)
                 }
             } catch (error: Exception) {
                 runOnUiThread {
@@ -432,6 +481,11 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         stopCommandRecognition()
+        textToSpeech?.stop()
+        textToSpeech?.shutdown()
+        textToSpeech = null
+        textToSpeechReady = false
+        pendingVoiceReply = null
         super.onDestroy()
     }
 
