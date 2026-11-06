@@ -59,3 +59,32 @@ test("the current WebSocket session can still disconnect normally", () => {
 
   gateway.close();
 });
+
+test("an authenticated WebSocket cannot rebind itself with a second device AUTH token", async () => {
+  const { gateway, deviceId, makeSocket } = makeGateway();
+  let authenticationAttempted = false;
+  gateway.authenticateToken = async () => {
+    authenticationAttempted = true;
+    return { id: "another-device", ownerUserId: "another-owner", authToken: "token" };
+  };
+  const session = {
+    socket: makeSocket(),
+    device: { id: deviceId, ownerUserId: "00000000-0000-4000-8000-000000000001" },
+    deviceId,
+    authenticated: true,
+    buffer: Buffer.alloc(0),
+    pingTimer: null,
+    authTimeout: null
+  };
+  gateway.clients.set(deviceId, session);
+
+  await gateway.handleClientMessage(session, JSON.stringify({
+    type: "AUTH",
+    token: "another-valid-device-token"
+  }));
+
+  assert.equal(authenticationAttempted, false);
+  assert.equal(session.socket.destroyed, true);
+  assert.equal(gateway.clients.get(deviceId), session);
+  gateway.close();
+});
