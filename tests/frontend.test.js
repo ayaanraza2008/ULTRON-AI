@@ -78,6 +78,15 @@ test("frontend wires existing same-origin auth, chat, memory and activity APIs",
   assert.match(appSource, /credentials:\s*"same-origin"/);
 });
 
+test("the core stop control aborts in-flight chat requests and auth overlay makes the main app inert", () => {
+  assert.ok(appSource.includes("state.requestController?.abort()"));
+  assert.ok(appSource.includes("signal: state.requestController.signal"));
+  assert.ok(appSource.includes('error?.name === "AbortError"'));
+  assert.ok(appSource.includes("app.inert = true"));
+  assert.ok(appSource.includes("app.inert = false"));
+  assert.ok(html.includes('role="dialog" aria-modal="true"'));
+});
+
 test("particle count adapts to mobile and desktop viewports", () => {
   assert.equal(particleCountForViewport(390), 12000);
   assert.equal(particleCountForViewport(700), 16000);
