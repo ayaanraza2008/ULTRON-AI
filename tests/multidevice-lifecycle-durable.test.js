@@ -181,3 +181,65 @@ test("Android command reports possible execution when cloud state commit fails",
   assert.equal(result.actionMayHaveExecuted, true);
   assert.equal(manager.getDevice("phone-android-2").screenLocked, true);
 });
+
+
+test("Switching to a database adapter waits for its authoritative cloud state", async () => {
+  const initialAdapter = makeAdapter();
+  const manager = new MultiDeviceManager({
+    persist: true,
+    persistenceAdapter: initialAdapter,
+    seedDefaultFleet: false
+  });
+  await manager.ready;
+  manager.registerDevice({
+    id: "old-local-device",
+    name: "Old Local Device",
+    platform: "windows"
+  });
+
+  const cloudAdapter = makeAdapter({
+    load: () => ({
+      ...emptySnapshot(),
+      devices: [[
+        "cloud-device",
+        {
+          id: "cloud-device",
+          name: "Cloud Authoritative Device",
+          platform: "android",
+          online: false,
+          lastSeenAt: new Date().toISOString()
+        }
+      ]]
+    })
+  });
+  const ready = manager.setPersistenceAdapter(cloudAdapter);
+  assert.equal(await ready, true);
+  assert.equal(manager.getDevice("cloud-device").name, "Cloud Authoritative Device");
+  assert.equal(manager.getDevice("old-local-device"), null);
+});
+
+test("Binding a DeviceHub to a database-backed manager imports only after cloud commit", async () => {
+  const adapter = makeAdapter();
+  const manager = new MultiDeviceManager({
+    persist: true,
+    persistenceAdapter: adapter,
+    seedDefaultFleet: false
+  });
+  await manager.ready;
+
+  const binding = await manager.bindWithDeviceHub({
+    listPairedDevices: () => [{
+      id: "paired-browser-1",
+      name: "Owner Browser",
+      platform: "browser",
+      capabilities: { notifications: true, telemetry: true },
+      online: true
+    }]
+  });
+
+  assert.equal(binding.success, true);
+  assert.equal(binding.cloudPersisted, true);
+  assert.equal(binding.importedCount, 1);
+  assert.equal(manager.getDevice("paired-browser-1").platform, "browser");
+  assert.equal(adapter.writes.length, 1);
+});

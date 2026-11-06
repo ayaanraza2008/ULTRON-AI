@@ -229,7 +229,10 @@ export class MultiDeviceManager {
         this._restoreSnapshot(previousSnapshot);
         return { success: false, error: errorCode, message: String(error?.message || errorCode).slice(0, 300), cloudPersisted: false };
       }
-      if (result?.success === false) return result;
+      if (result?.success === false) {
+        this._restoreSnapshot(previousSnapshot);
+        return result;
+      }
 
       const persisted = await this._persistDurableSnapshot(previousSnapshot);
       if (!persisted.success) {
@@ -447,6 +450,30 @@ export class MultiDeviceManager {
   setPersistenceAdapter(adapter) {
     this.persistenceAdapter = adapter;
     this.isPersistent = Boolean(adapter);
+    this.initializationError = null;
+
+    if (!adapter) {
+      this.ready = Promise.resolve(true);
+      return this.ready;
+    }
+
+    // Switching to a file adapter preserves the current in-memory state;
+    // switching to a database adapter must load the cloud authority first.
+    if (adapter instanceof FilePersistenceAdapter) {
+      this.ready = Promise.resolve(true);
+      return this.ready;
+    }
+
+    this.ready = this.load().then(() => {
+      if (adapter instanceof DatabasePersistenceAdapter && adapter.lastLoadOutcome?.authoritative !== true) {
+        throw new Error("CLOUD_STATE_LOAD_NOT_CONFIRMED");
+      }
+      return true;
+    }).catch(error => {
+      this.initializationError = error;
+      return false;
+    });
+    return this.ready;
   }
 
   subscribeDevice(deviceId, callback) {
@@ -1115,28 +1142,45 @@ export class MultiDeviceManager {
    */
   bindWithDeviceHub(deviceHub) {
     this.deviceHub = deviceHub;
-    if (!deviceHub) return;
-    if (typeof deviceHub.listPairedDevices === "function") {
-      const paired = deviceHub.listPairedDevices();
-      for (const dev of paired) {
-        if (!this.devices.has(dev.id)) {
-          let type = DEVICE_TYPES.GENERIC_COMPANION;
-          if (dev.platform === "windows") type = DEVICE_TYPES.WINDOWS_PC;
-          else if (dev.platform === "android") type = DEVICE_TYPES.ANDROID_SMARTPHONE;
-          else if (dev.platform === "browser") type = DEVICE_TYPES.WEB_BROWSER;
-
-          this.registerDevice({
-            id: dev.id,
-            name: dev.name,
-            type,
-            platform: dev.platform,
-            capabilities: dev.capabilities ? Object.keys(dev.capabilities) : ["notifications", "telemetry"],
-            online: dev.online ?? true,
-            battery: dev.battery || { percent: 100, isCharging: false }
-          });
-        }
-      }
+    if (!deviceHub || typeof deviceHub.listPairedDevices !== "function") {
+      return { success: false, error: "DEVICE_HUB_UNAVAILABLE", importedCount: 0 };
     }
+
+    if (this.isPersistent && !(this.persistenceAdapter instanceof FilePersistenceAdapter)) {
+      return this._commitDurableMutation(
+        () => this._importPairedDevicesInMemory(deviceHub, { deferPersistence: true }),
+        "DEVICE_PERSISTENCE_FAILED"
+      );
+    }
+    return this._importPairedDevicesInMemory(deviceHub);
+  }
+
+  _importPairedDevicesInMemory(deviceHub, { deferPersistence = false } = {}) {
+    const paired = deviceHub.listPairedDevices();
+    const importedDeviceIds = [];
+    for (const dev of paired) {
+      if (!dev?.id || this.devices.has(dev.id)) continue;
+      let type = DEVICE_TYPES.GENERIC_COMPANION;
+      if (dev.platform === "windows") type = DEVICE_TYPES.WINDOWS_PC;
+      else if (dev.platform === "android") type = DEVICE_TYPES.ANDROID_SMARTPHONE;
+      else if (dev.platform === "browser") type = DEVICE_TYPES.WEB_BROWSER;
+
+      const registered = this.registerDevice({
+        id: dev.id,
+        name: dev.name,
+        type,
+        platform: dev.platform,
+        capabilities: dev.capabilities ? Object.keys(dev.capabilities) : ["notifications", "telemetry"],
+        online: dev.online ?? true,
+        battery: dev.battery || { percent: 100, isCharging: false }
+      }, { deferPersistence });
+
+      if (registered?.success === false) {
+        return { success: false, error: registered.error || "DEVICE_IMPORT_FAILED", importedDeviceIds };
+      }
+      importedDeviceIds.push(dev.id);
+    }
+    return { success: true, importedCount: importedDeviceIds.length, importedDeviceIds };
   }
 }
 
