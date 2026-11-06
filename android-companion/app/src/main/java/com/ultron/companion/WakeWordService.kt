@@ -36,6 +36,8 @@ class WakeWordService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
+            getSharedPreferences(WAKE_PREFERENCES, MODE_PRIVATE)
+                .edit().putBoolean(WAKE_ENABLED_KEY, false).apply()
             stopWakeWordService()
             return START_NOT_STICKY
         }
@@ -246,5 +248,7 @@ class WakeWordService : Service() {
         private const val OPEN_REQUEST_CODE = 3104
         private const val OPEN_VOICE_REQUEST_CODE = 3105
         private const val WAKE_COOLDOWN_MS = 8_000L
+        private const val WAKE_PREFERENCES = "ultron_wake_word_preferences"
+        private const val WAKE_ENABLED_KEY = "wake_word_enabled"
     }
 }
