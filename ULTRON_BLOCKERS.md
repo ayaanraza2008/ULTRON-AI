@@ -1,33 +1,33 @@
-# ULTRON AI — Remaining Blockers
+# ULTRON AI — Remaining Acceptance Blockers
 
 **Development PR:** [#478](https://github.com/ayaanraza2008/ULTRON-AI/pull/478)  
 **Branch:** `feat/ultron-operation-infinity-multidevice`  
 **Release decision:** Not ready for production merge/deployment.
 
-## Live evidence checked
+## Scope boundary
 
-- Connected Supabase project `ULTRON-AI` (`opdjfhwepmcprbqojpat`) is ACTIVE_HEALTHY in `ap-south-1`.
-- Its applied migration ledger currently ends at `20261027185203_private_document_storage`.
-- Its public schema currently does not contain `paired_devices`, `pending_device_pairings`, or `ultron_multidevice_state`.
-- Supabase security advisor reports leaked-password protection disabled.
-- All 6 PR CI workflow checks passed green on prior candidate commits; latest candidate commit `af2e0116` incorporates full telephony, multi-device snapshot immutability, and production device-auth tightening.
+Physical robotics, simulation, actuation and robot hardware are excluded. The PR removes the dedicated robotics implementation, routes, device type and robotics-specific tests. Browser, Windows, Android, AI, voice, vision and multi-device software remain in scope.
 
-| Priority | Blocker | What is done | Evidence still required |
-|---|---|---|---|
-| P0 | Supabase schema drift | Candidate branch contains durable paired-device and telemetry migrations; added `20261106120000_ultron_multidevice_state.sql` for the REST adapter's actual table contract, with service-role-only grants and RLS. | Review and apply the ordered migrations to the connected project only after explicit production authorization; then verify the remote migration ledger and tables. |
-| P0 | Cloud persistence/recovery | 6-point verification battery implemented and verified in `tests/multidevice-persistence.test.js` (write, read, version update, revocation, unauthorized rejection, and restart recovery). REST/PG adapters explicitly distinguish `cloudPersisted: true` from mock/local fallback. Migration `20261106120000_ultron_multidevice_state.sql` defines private table contract. | Authenticated live write/read/ACK/revoke and restart recovery must prove `cloudPersisted: true` against production Supabase after authorized migration application. |
-| P0 | Live AI inference | Protected live-inference test `tests/live-inference-acceptance.test.js` verified (zero-leakage, genuine inference, fallback, and clean unconfigured blocking). Workflow `.github/workflows/model-live-acceptance.yml` updated to support manual execution directly on `feat/ultron-operation-infinity-multidevice` without requiring prior merge. | Trigger manual acceptance workflow with protected `ULTRON_OPENROUTER_API_KEY` repository secret on branch. |
-| P0 | Owner-only production configuration | Owner gating code and tests exist. | Verify deployed personal-mode settings, owner identity, signup restrictions and non-owner rejection without exposing secret values. |
-| P1 | Cross-client protocol | Pairing, state sync, ACK/retry/revoke code and automated tests exist. | End-to-end acceptance across browser, Windows and Android against the live schema and service. |
-| P1 | Windows/Android hardware acceptance | Companion CI builds pass on the previously verified candidate. | Install, pair and exercise the Windows executable and Android APK on actual devices; verify background/reconnect behavior. |
-| P1 | Voice and vision acceptance | Software adapters and CI checks exist. | Test real microphone, speaker, camera and screen permissions on supported hardware. |
-| P1 | Auth leaked-password protection | Security advisor confirms it is disabled; connected organization is Free. | Requires an eligible paid Supabase plan. No upgrade authorized; remains an accepted external plan limitation. |
-| P2 | Exact-head verification | CI passed green on prior candidate commits; latest commit `af2e0116` is under PR #478 validation with all local unit tests (177/177) and syntax/security gates passing. | Software gate passed. External physical hardware and production release authorization (`DEPLOY`) remain pending. |
+## P0 — Software release gates
 
-## Completed source-scope cleanup
+| Blocker | Current state | Required evidence |
+|---|---|---|
+| Exact-head CI | A benchmark-source syntax defect and a stale test assertion were found and corrected in this PR. | All required GitHub Actions checks green on the latest PR head, including tests, syntax, security and both companion builds. |
+| Durable cloud persistence | Candidate adapter, migration and 6-point automated persistence tests exist. | Live authenticated write/read/version/ACK/revoke/restart test with `cloudPersisted: true` after authorized migration. |
+| Live AI inference | Protected acceptance test and candidate-branch manual workflow exist. | Successful genuine inference and fallback using the protected repository secret; no secret values in logs. |
+| Owner-only configuration | Owner gating code and automated tests exist. | Verify production owner identity, signup restrictions and non-owner rejection without exposing secrets. |
 
-The dedicated physical robotics/simulation implementation, routes and device type are excluded from the software product scope. A regression test guards this boundary. Windows, Android, browser, AI, voice, vision and multi-device software capabilities remain in scope.
+## P1 — Integration acceptance
+
+- Verify browser, Windows and Android pairing, synchronization, acknowledgements, reconnect and revoke.
+- Install and exercise companion applications on supported Windows and Android devices.
+- Verify real microphone, speaker, camera and screen-observation permissions.
+- Confirm external provider failures are surfaced honestly and never represented as successful execution.
+
+## External plan limitation
+
+Supabase leaked-password protection is reported unavailable on the connected Free plan. No paid upgrade is authorized. Record this as an accepted external limitation unless the owner chooses a plan change.
 
 ## Release lock
 
-Do not merge PR #478 into `main` or deploy to Render. The backend tracks `main` with automatic deploy enabled. Production schema changes and deployment remain locked until the owner explicitly authorizes them with `DEPLOY`.
+Do not merge PR #478, deploy to Render, change production environment variables, sync a production Blueprint or apply production migrations until the owner explicitly authorizes release with `DEPLOY`.
