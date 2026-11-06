@@ -363,7 +363,7 @@ export class JarvisUltronCapabilityComparator {
 
     evaluation.categories.forEach((c, idx) => {
       benchmarkMd.push(
-        `| ${idx + 1} | **${c.name}** | ${c.weight}% | NOT MEASURED | NOT MEASURED | ${c.inventoryCoveragePercent}% | \\`${c.implementationStatus}\\` |`
+        `| ${idx + 1} | **${c.name}** | ${c.weight}% | NOT MEASURED | NOT MEASURED | ${c.inventoryCoveragePercent}% | ${c.implementationStatus} |`
       );
     });
 
