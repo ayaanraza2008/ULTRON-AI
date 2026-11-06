@@ -233,7 +233,7 @@ export class FilePersistenceAdapter extends BaseMultiDevicePersistenceAdapter {
 
     current.sharedState = Array.from(sharedMap.entries());
     const ok = this.saveSync(current);
-    return { success: ok, version: nextVersion, backend: "file" };
+    return { success: ok, version: nextVersion, backend: "file", cloudPersisted: false };
   }
 
   async acknowledgeDelivery(deviceId, deliveryId) {
@@ -245,7 +245,7 @@ export class FilePersistenceAdapter extends BaseMultiDevicePersistenceAdapter {
     pendingMap.set(deviceId, filtered);
     current.pendingDeliveries = Array.from(pendingMap.entries());
     const ok = this.saveSync(current);
-    return { success: ok, backend: "file", remainingCount: filtered.length };
+    return { success: ok, backend: "file", cloudPersisted: false, remainingCount: filtered.length };
   }
 
   async revokeDevice(deviceId) {
@@ -257,7 +257,7 @@ export class FilePersistenceAdapter extends BaseMultiDevicePersistenceAdapter {
     pendingMap.delete(deviceId);
     current.pendingDeliveries = Array.from(pendingMap.entries());
     const ok = this.saveSync(current);
-    return { success: ok, backend: "file" };
+    return { success: ok, backend: "file", cloudPersisted: false };
   }
 }
 
@@ -387,17 +387,21 @@ export class DatabasePersistenceAdapter extends BaseMultiDevicePersistenceAdapte
 
     this._cachedState = serialized;
 
-    // Update fallback file first for durability
+    // Keep a local recovery copy, but track its outcome separately from cloud durability.
+    let fallbackPersisted = false;
     if (this.fallbackAdapter) {
       try {
-        await this.fallbackAdapter.save(serialized);
-      } catch {}
+        const fallbackResult = await this.fallbackAdapter.save(serialized);
+        fallbackPersisted = fallbackResult === true || fallbackResult?.success === true;
+      } catch {
+        fallbackPersisted = false;
+      }
     }
 
     // 1. In-memory mock database (used in unit test suites without external daemons)
     if (this.inMemoryMockDb) {
       this.inMemoryMockDb.set("multidevice_state", JSON.stringify(serialized));
-      return { success: true, backend: "database", cloudPersisted: false, note: "mock_pg_saved" };
+      return { success: true, backend: "database_mock", cloudPersisted: false, fallbackPersisted, note: "mock_pg_saved" };
     }
 
     // Encrypt at rest before storing in database if encryption key is configured
@@ -442,7 +446,14 @@ export class DatabasePersistenceAdapter extends BaseMultiDevicePersistenceAdapte
         if (this.logger?.warn) {
           this.logger.warn("DatabasePersistenceAdapter: Database write failed, used fallback", { error: dbErr?.message });
         }
-        return { success: true, backend: "fallback_file", warning: "DB_WRITE_FAILED_FALLBACK_USED", error: dbErr?.message };
+        return {
+          success: fallbackPersisted,
+          backend: fallbackPersisted ? "fallback_file" : "unavailable",
+          cloudPersisted: false,
+          fallbackPersisted,
+          warning: "DB_WRITE_FAILED_FALLBACK_USED",
+          error: dbErr?.message
+        };
       }
     }
 
@@ -469,17 +480,31 @@ export class DatabasePersistenceAdapter extends BaseMultiDevicePersistenceAdapte
           success: true,
           backend: "fallback_file",
           cloudPersisted: false,
+          fallbackPersisted,
           warning: "SUPABASE_REST_WRITE_FAILED",
           status: resp.status
         };
       } catch (restErr) {
         this.isOnline = false;
-        return { success: true, backend: "fallback_file", cloudPersisted: false, warning: "SUPABASE_REST_WRITE_FAILED", error: restErr?.message };
+        return {
+          success: fallbackPersisted,
+          backend: fallbackPersisted ? "fallback_file" : "unavailable",
+          cloudPersisted: false,
+          fallbackPersisted,
+          warning: "SUPABASE_REST_WRITE_FAILED",
+          error: restErr?.message
+        };
       }
     }
 
     // Default: local fallback only; this is not cloud durability.
-    return { success: true, backend: "fallback_file", cloudPersisted: false, note: "no_db_configured" };
+    return {
+      success: fallbackPersisted,
+      backend: fallbackPersisted ? "fallback_file" : "unavailable",
+      cloudPersisted: false,
+      fallbackPersisted,
+      note: "no_db_configured"
+    };
   }
 
   async load() {
@@ -681,9 +706,15 @@ export class DatabasePersistenceAdapter extends BaseMultiDevicePersistenceAdapte
       } catch (dbErr) {
         this.isOnline = false;
         if (this.fallbackAdapter) {
-          return await this.fallbackAdapter.saveSharedState(stateUpdate);
+          const fallback = await this.fallbackAdapter.saveSharedState(stateUpdate);
+          return {
+            ...fallback,
+            cloudPersisted: false,
+            warning: "DATABASE_WRITE_FAILED",
+            error: dbErr?.message
+          };
         }
-        return { success: false, error: "DATABASE_UNAVAILABLE", details: dbErr?.message };
+        return { success: false, backend: "unavailable", cloudPersisted: false, error: "DATABASE_UNAVAILABLE", details: dbErr?.message };
       }
     }
 
