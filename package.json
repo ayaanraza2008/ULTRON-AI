@@ -26,7 +26,9 @@
     "security:secrets": "node scripts/security-secrets.mjs",
     "security:report": "node scripts/security-report.mjs",
     "test:ui": "node --test tests/core-ui.test.js",
-    "start:proxy": "node core-ui-proxy.mjs"
+    "start:proxy": "node core-ui-proxy.mjs",
+    "console": "node scripts/ultron-console.mjs",
+    "start:all": "node scripts/start-all.mjs"
   },
   "dependencies": {
     "express": "^4.21.2",

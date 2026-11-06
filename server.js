@@ -23,6 +23,7 @@ import { createMobileRouter } from "./mobile/mobile-router.js";
 import { createCompanionRouter } from "./system/companion-router.js";
 import { deviceWebSocketGateway } from "./integrations/device-websocket-gateway.js";
 import { deviceNetworkingManager } from "./integrations/device-networking.js";
+import { proactiveDaemon } from "./system/proactive-daemon.js";
 
 const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
 const SESSION_COOKIE = "ultron_session";
@@ -2169,6 +2170,10 @@ if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToP
     worker = startWorker();
     app.locals.workerRuntime = worker.getStatus;
   }
+  if (process.env.ULTRON_PROACTIVE_DAEMON_ENABLED !== "false") {
+    proactiveDaemon.start();
+    console.log("ULTRON Proactive Living Assistant Daemon started (vitals & anomaly monitoring).");
+  }
 
   let shutdownStarted = false;
   const shutdown = signal => {
@@ -2176,6 +2181,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToP
     shutdownStarted = true;
     console.info(`ULTRON AI received ${signal}; draining HTTP connections and stopping background work.`);
     worker?.stop();
+    proactiveDaemon.stop();
     deviceWebSocketGateway.close();
     httpServer.close(error => {
       if (error) {
