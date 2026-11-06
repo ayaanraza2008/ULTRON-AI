@@ -1,0 +1,46 @@
+# Narrow Render reconciliation: preserve existing services and env vars.
+# This file intentionally declares no envVars so existing secrets/config remain untouched.
+services:
+  - type: web
+    name: ultron-ai-core
+    runtime: node
+    plan: free
+    region: singapore
+    branch: main
+    buildCommand: npm install --ignore-scripts
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+
+  - type: web
+    name: ultron-browser-use-core
+    runtime: python
+    plan: free
+    region: singapore
+    branch: main
+    buildCommand: pip install -r browser-use-bridge/requirements.txt
+    startCommand: cd browser-use-bridge && uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+
+  - type: web
+    name: ultron-rea-gateway
+    runtime: node
+    plan: free
+    region: singapore
+    branch: main
+    buildCommand: cd rea-gateway && npm install --omit=dev && npm ls zod --all && npm audit --omit=dev --audit-level=high
+    startCommand: cd rea-gateway && npm start
+    healthCheckPath: /healthz
+    autoDeployTrigger: commit
+
+  - type: web
+    name: ultron-core-interface
+    runtime: node
+    plan: free
+    region: singapore
+    branch: feature/ultron-live-core-interface-20261029
+    buildCommand: npm install --ignore-scripts
+    startCommand: node core-ui-proxy.mjs
+    healthCheckPath: /healthz
+    autoDeployTrigger: commit
