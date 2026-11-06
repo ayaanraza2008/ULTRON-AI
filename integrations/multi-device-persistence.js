@@ -290,31 +290,54 @@ export class DatabasePersistenceAdapter extends BaseMultiDevicePersistenceAdapte
 
   resolvePoolConfig() {
     if (!this.databaseUrl) return null;
-    const isLocal = /localhost|127\.0\.0\.1|::1/i.test(this.databaseUrl);
+
+    let connectionUrl;
+    try {
+      connectionUrl = new URL(this.databaseUrl);
+    } catch {
+      throw new Error("INVALID_DATABASE_URL");
+    }
+
+    const hostname = connectionUrl.hostname.toLowerCase();
+    const isLocal = hostname === "localhost"
+      || hostname === "127.0.0.1"
+      || hostname === "::1"
+      || hostname.endsWith(".localhost");
+
     const poolConfig = {
       connectionString: this.databaseUrl,
       max: 4,
       connectionTimeoutMillis: 4000,
       idleTimeoutMillis: 30000
     };
-    if (!isLocal && !this.databaseUrl.includes("sslmode=disable")) {
-      // Enforce strict TLS certificate verification by default. Never bypass unless explicitly configured.
+
+    if (!isLocal) {
+      // Remote database connections must always use TLS with certificate verification.
+      // Strip libpq SSL mode parameters so the URL cannot silently override this policy.
+      for (const parameter of ["sslmode", "sslrootcert", "sslcert", "sslkey"]) {
+        connectionUrl.searchParams.delete(parameter);
+      }
+      poolConfig.connectionString = connectionUrl.toString();
+
       const sslConfig = { rejectUnauthorized: true };
-      const customCa = this.options.ssl?.ca || process.env.DATABASE_CA_CERT || process.env.PGSSLROOTCERT || process.env.SUPABASE_SSL_CA;
-      if (customCa) {
-        sslConfig.ca = customCa;
-      }
-      if (this.databaseUrl.includes("sslmode=no-verify") || process.env.ULTRON_DATABASE_SSL_REJECT_UNAUTHORIZED === "false") {
-        sslConfig.rejectUnauthorized = false;
-      }
+      const customCa = this.options.ssl?.ca
+        || process.env.DATABASE_CA_CERT
+        || process.env.PGSSLROOTCERT
+        || process.env.SUPABASE_SSL_CA;
+      if (customCa) sslConfig.ca = customCa;
+
+      // Allow certificate material and protocol tuning, but never allow callers or
+      // environment variables to disable peer verification.
       if (typeof this.options.ssl === "object" && this.options.ssl !== null) {
-        Object.assign(sslConfig, this.options.ssl);
+        for (const key of ["cert", "key", "minVersion", "maxVersion", "servername"]) {
+          if (this.options.ssl[key] !== undefined) sslConfig[key] = this.options.ssl[key];
+        }
       }
       poolConfig.ssl = sslConfig;
     }
+
     return poolConfig;
   }
-
   async getPool() {
     if (this.pgPool) return this.pgPool;
     if (this._internalPool) return this._internalPool;
