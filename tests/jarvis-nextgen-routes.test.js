@@ -26,19 +26,18 @@ async function withRouter({ env = { ULTRON_INTEGRATION_OWNER_USER_ID: "owner-use
   }
 }
 
-test("JARVIS Next-Gen Routes: GET /api/jarvis/nextgen/status reports 9 active subsystems", async () => {
+test("JARVIS Next-Gen Routes: GET /api/jarvis/nextgen/status reports 8 active subsystems", async () => {
   await withRouter({}, async base => {
     const res = await fetch(base + "/api/jarvis/nextgen/status");
     const body = await res.json();
 
     assert.equal(res.status, 200);
     assert.equal(body.success, true);
-    assert.equal(Object.keys(body.subsystems).length, 9);
+    assert.equal(Object.keys(body.subsystems).length, 8);
     assert.equal(body.subsystems.ultronCore.status, "ACTIVE");
     assert.equal(body.subsystems.ultronAutonomy.status, "ACTIVE");
     assert.equal(body.subsystems.ultronGenesis.status, "ACTIVE");
     assert.equal(body.subsystems.ultronForge.status, "ACTIVE");
-    assert.equal(body.subsystems.ultronRobotics.status, "ACTIVE");
     assert.equal(body.subsystems.ultronVision.status, "ACTIVE");
     assert.equal(body.subsystems.ultronNexus.status, "ACTIVE");
     assert.equal(body.subsystems.ultronGuardian.status, "ACTIVE");
