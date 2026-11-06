@@ -95,7 +95,7 @@ test("E2E Test 2: Inbound telephone call processes Hindi/Hinglish instructions",
   });
 });
 
-test("E2E Test 4, 5, 6, 7: Telephone instruction checks PC and executes screen unlock", async () => {
+test("E2E Test 4, 5, 6, 7: Telephone instruction refuses to bypass Windows sign-in", async () => {
   await withRouter({}, async base => {
     telephonyGateway.ownerPhoneNumbers.add("+919876543210");
     telephonyGateway.handleIncomingCall({ callSid: "CA_unlock_screen", from: "+919876543210" });
@@ -110,8 +110,9 @@ test("E2E Test 4, 5, 6, 7: Telephone instruction checks PC and executes screen u
     });
     const replyTwiml = await speechRes.text();
     assert.equal(speechRes.status, 200);
-    assert.ok(replyTwiml.includes("Okay. Screen unlocked."));
-    assert.equal(windowsDesktopAgent.screenState, "SYSTEM_UNLOCKED");
+    assert.ok(replyTwiml.includes("I cannot bypass Windows sign-in"));
+    assert.ok(replyTwiml.includes("Unlock the PC locally"));
+    assert.equal(windowsDesktopAgent.screenState, "SYSTEM_LOCKED");
   });
 });
 
@@ -198,7 +199,16 @@ test("E2E Test 12: Remote task orchestrator tracks diagnostic task and progress 
     const taskData = await taskRes.json();
     assert.equal(taskRes.status, 200);
     assert.equal(taskData.success, true);
-    assert.ok(taskData.result.storageAvailableGb > 0);
+    if (taskData.result.storageCheckAvailable === true) {
+      assert.equal(typeof taskData.result.storageAvailableGb, "number");
+      assert.ok(Number.isFinite(taskData.result.storageAvailableGb));
+      assert.ok(taskData.result.storageAvailableGb >= 0);
+      assert.equal(taskData.result.canRun, taskData.result.storageAvailableGb > 10);
+    } else {
+      assert.equal(taskData.result.storageAvailableGb, null);
+      assert.equal(taskData.result.canRun, null);
+      assert.match(taskData.result.verdict, /could not be measured/i);
+    }
 
     // Verify history
     const historyRes = await fetch(base + "/api/jarvis/devices/remote-task/history");

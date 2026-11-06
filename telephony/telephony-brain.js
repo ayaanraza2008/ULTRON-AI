@@ -172,154 +172,217 @@ export class TelephonyBrain {
 
     switch (classification.intent) {
       case TELEPHONY_INTENTS.UNLOCK_PC_SCREEN: {
-        let unlockResult = { success: true };
-        if (wda) {
-          unlockResult = await wda.unlockScreen();
-        }
+        const unlockResult = wda
+          ? await wda.unlockScreen()
+          : {
+              success: false,
+              error: "WINDOWS_AGENT_UNAVAILABLE",
+              message: "Windows desktop companion is not connected."
+            };
+        const unlocked = unlockResult?.success === true;
         return {
           permitted: true,
           intent: classification.intent,
-          executed: true,
-          spokenResponse: "Okay. Screen unlocked.",
+          executed: unlocked,
+          spokenResponse: unlocked
+            ? "The workstation is unlocked."
+            : unlockResult?.error === "UNLOCK_REQUIRES_LOCAL_AUTHENTICATION"
+              ? "I cannot bypass Windows sign-in. Unlock the PC locally, then reconnect ULTRON."
+              : "I could not unlock the workstation because the Windows companion did not confirm the action.",
           details: unlockResult
         };
       }
 
       case TELEPHONY_INTENTS.LOCK_PC_SCREEN: {
-        let lockResult = { success: true };
-        if (wda) {
-          lockResult = await wda.lockScreen();
-        }
+        const lockResult = wda
+          ? await wda.lockScreen()
+          : {
+              success: false,
+              error: "WINDOWS_AGENT_UNAVAILABLE",
+              message: "Windows desktop companion is not connected."
+            };
+        const physicallyLocked = lockResult?.success === true && lockResult?.simulated !== true;
         return {
           permitted: true,
           intent: classification.intent,
-          executed: true,
-          spokenResponse: "Screen locked. System secure.",
+          executed: physicallyLocked,
+          spokenResponse: physicallyLocked
+            ? "Windows confirmed that the workstation is locked."
+            : lockResult?.success === true && lockResult?.simulated === true
+              ? "The lock request was simulated. No physical Windows workstation was locked."
+              : "I could not confirm that the workstation was locked.",
           details: lockResult
         };
       }
 
       case TELEPHONY_INTENTS.UNLOCK_MOBILE_DEVICES: {
-        let mobileResult = { unlockedCount: 3, totalTargeted: 3 };
-        if (mdm) {
-          mobileResult = await mdm.unlockMobileDevices();
-        }
+        const mobileResult = mdm
+          ? await mdm.unlockMobileDevices()
+          : {
+              success: false,
+              error: "MULTI_DEVICE_MANAGER_UNAVAILABLE",
+              message: "The multi-device manager is not configured."
+            };
+        const unlockedCount = Number.isFinite(mobileResult?.unlockedCount) ? mobileResult.unlockedCount : 0;
+        const totalTargeted = Number.isFinite(mobileResult?.totalTargeted) ? mobileResult.totalTargeted : null;
+        const succeeded = mobileResult?.success === true && unlockedCount > 0;
+        const spokenResponse = mobileResult?.success === false
+          ? "I could not unlock the mobile devices. " + (mobileResult.message || mobileResult.error || "The device operation failed.")
+          : unlockedCount > 0 && totalTargeted !== null
+            ? `ULTRON unlocked ${unlockedCount} of ${totalTargeted} targeted mobile devices.`
+            : "No mobile devices confirmed an unlock.";
         return {
           permitted: true,
           intent: classification.intent,
-          executed: true,
-          spokenResponse: "Checking... One second... All three unlocked.",
+          executed: succeeded,
+          spokenResponse,
           details: mobileResult
         };
       }
 
       case TELEPHONY_INTENTS.PLAY_MEDIA_ALL_DEVICES: {
-        let mediaResult = { playingDevices: 3 };
-        if (mdm) {
-          mediaResult = await mdm.playMediaAcrossDevices({
-            mediaUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-            query: classification.mediaQuery || "favorite song"
-          });
-        }
+        const mediaResult = mdm
+          ? await mdm.playMediaAcrossDevices({
+              query: classification.mediaQuery || "favorite song"
+            })
+          : {
+              success: false,
+              error: "MULTI_DEVICE_MANAGER_UNAVAILABLE",
+              message: "The multi-device manager is not configured."
+            };
+        const playingDevices = Number.isFinite(mediaResult?.playingDevices) ? mediaResult.playingDevices : 0;
+        const succeeded = mediaResult?.success === true && playingDevices > 0;
         return {
           permitted: true,
           intent: classification.intent,
-          executed: true,
-          spokenResponse: "Playing.",
+          executed: succeeded,
+          spokenResponse: succeeded
+            ? `Media playback started on ${playingDevices} devices.`
+            : "I could not confirm media playback on any connected device.",
           details: mediaResult
         };
       }
 
       case TELEPHONY_INTENTS.CHECK_PROJECT_TESTS: {
-        let projectResult = {
-          testsTotal: 800,
-          testsPassing: 799,
-          failingTests: 0,
-          summary: "ULTRON AI codebase verified. All 800 tests clean."
-        };
-        if (wda) {
-          projectResult = await wda.checkProjectStatus();
-        }
+        const projectResult = wda
+          ? await wda.checkProjectStatus()
+          : {
+              success: false,
+              error: "WINDOWS_AGENT_UNAVAILABLE",
+              message: "Windows desktop companion is not connected."
+            };
+        const inspected = projectResult?.success === true;
         return {
           permitted: true,
           intent: classification.intent,
-          executed: true,
-          spokenResponse: `Connecting to your authorized computer. I have checked your ULTRON AI project. All tests are passing and the repository is healthy.`,
+          executed: inspected,
+          spokenResponse: inspected
+            ? "Connecting to your authorized computer. I inspected the ULTRON AI repository metadata. The automated test suite was not run, so I cannot claim that tests are passing."
+            : "I could not inspect the ULTRON AI project because the Windows companion is unavailable.",
           details: projectResult
         };
       }
 
       case TELEPHONY_INTENTS.CHECK_SYSTEM_VITALS: {
-        let vitals = { storageAvailableGb: 184, ramAvailablePercent: 64, cpuLoadPercent: 18 };
-        if (wda) {
-          vitals = await wda.getSystemVitals();
-        }
+        const vitals = wda
+          ? await wda.getSystemVitals()
+          : {
+              success: false,
+              error: "WINDOWS_AGENT_UNAVAILABLE",
+              message: "Windows desktop companion is not connected."
+            };
+        const storageAvailableGb = typeof vitals?.storageAvailableGb === "number" &&
+          Number.isFinite(vitals.storageAvailableGb) && vitals.storageAvailableGb >= 0
+          ? vitals.storageAvailableGb
+          : null;
+        const freeRamGb = typeof vitals?.freeRamGb === "number" && Number.isFinite(vitals.freeRamGb)
+          ? vitals.freeRamGb
+          : null;
+        const measured = vitals?.success !== false;
+        const facts = [];
+        if (storageAvailableGb !== null) facts.push(`${storageAvailableGb} gigabytes of free storage`);
+        if (freeRamGb !== null) facts.push(`${freeRamGb} gigabytes of free RAM`);
         return {
           permitted: true,
           intent: classification.intent,
-          executed: true,
-          spokenResponse: `Computer storage has ${vitals.storageAvailableGb || 150} gigabytes available. Your project has ample headroom to execute.`,
-          details: vitals
+          executed: measured,
+          spokenResponse: measured
+            ? facts.length
+              ? `The connected computer reports ${facts.join(" and ")}. These are hardware readings, not a full readiness assessment.`
+              : "The computer responded, but free storage and memory could not be measured."
+            : "I could not collect computer vitals because the Windows companion is unavailable.",
+          details: { ...vitals, storageAvailableGb }
         };
       }
 
       case TELEPHONY_INTENTS.SEARCH_DRIVE: {
+        const query = String(speechText || "").trim();
+        const searchResult = this.remoteTaskOrchestrator
+          ? await this.remoteTaskOrchestrator.executeRemoteTask({
+              callerId: callId || callerNumber || "telephony-owner",
+              isOwner: true,
+              action: "FIND_PC_FILE",
+              payload: { query }
+            })
+          : {
+              success: false,
+              error: "REMOTE_TASK_ORCHESTRATOR_UNAVAILABLE",
+              message: "The remote PC task service is not configured."
+            };
+        const matches = searchResult?.result?.matches;
         return {
           permitted: true,
           intent: classification.intent,
-          executed: true,
-          spokenResponse: "Searching your authorized storage drives for matching media files.",
-          details: { query: speechText }
+          executed: searchResult?.success === true,
+          spokenResponse: searchResult?.success === true
+            ? Array.isArray(matches) && matches.length
+              ? `The PC search found ${matches.length} matching files.`
+              : "The PC search completed and found no matching files."
+            : "I could not search the PC because the remote file-search service is unavailable or failed.",
+          details: searchResult
         };
       }
 
-      case TELEPHONY_INTENTS.CREATE_CINEMATIC_EDIT: {
-        return {
-          permitted: true,
-          intent: classification.intent,
-          executed: true,
-          spokenResponse: "Initializing autonomous production pipeline. Analyzing your footage and building a cinematic timeline.",
-          details: { prompt: speechText }
-        };
-      }
-
-      case TELEPHONY_INTENTS.STOP_RENDERING: {
-        return {
-          permitted: true,
-          intent: classification.intent,
-          executed: true,
-          spokenResponse: "Rendering halted. Active export task has been cancelled.",
-          details: { cancelled: true }
-        };
-      }
-
-      case TELEPHONY_INTENTS.OPEN_FINAL_VIDEO: {
-        return {
-          permitted: true,
-          intent: classification.intent,
-          executed: true,
-          spokenResponse: "Opening your exported video in the media player.",
-          details: { action: "open_exported_video" }
-        };
-      }
-
+      case TELEPHONY_INTENTS.CREATE_CINEMATIC_EDIT:
+      case TELEPHONY_INTENTS.STOP_RENDERING:
+      case TELEPHONY_INTENTS.OPEN_FINAL_VIDEO:
       case TELEPHONY_INTENTS.ORGANIZE_FOLDER: {
+        const unavailable = {
+          success: false,
+          error: "CAPABILITY_EXECUTOR_NOT_CONNECTED",
+          message: "This voice intent is classified, but no execution adapter is connected to it yet."
+        };
         return {
           permitted: true,
           intent: classification.intent,
-          executed: true,
-          spokenResponse: "Organizing your folder into categorized media subdirectories with a backup snapshot.",
-          details: { target: "Downloads" }
+          executed: false,
+          spokenResponse: "I understood the request, but the execution service for this action is not connected. I have not changed any files or tasks.",
+          details: unavailable
         };
       }
 
       case TELEPHONY_INTENTS.CHECK_SYSTEM_PERFORMANCE: {
+        const vitals = wda
+          ? await wda.getSystemVitals()
+          : {
+              success: false,
+              error: "WINDOWS_AGENT_UNAVAILABLE",
+              message: "Windows desktop companion is not connected."
+            };
+        const measured = vitals?.success !== false;
+        const ramUsedPercent = typeof vitals?.ramUsedPercent === "number" && Number.isFinite(vitals.ramUsedPercent)
+          ? vitals.ramUsedPercent
+          : null;
         return {
           permitted: true,
           intent: classification.intent,
-          executed: true,
-          spokenResponse: "System performance is optimal. CPU load is normal and memory headroom is well within safety thresholds.",
-          details: { status: "NOMINAL" }
+          executed: measured,
+          spokenResponse: !measured
+            ? "I could not measure system performance because the Windows companion is unavailable."
+            : ramUsedPercent !== null
+              ? `The computer reports RAM usage at ${ramUsedPercent} percent. I do not have enough telemetry to label overall system performance as optimal.`
+              : "The computer responded, but no usable performance metrics were returned.",
+          details: vitals
         };
       }
 
@@ -338,8 +401,8 @@ export class TelephonyBrain {
           return {
             permitted: true,
             intent: classification.intent,
-            executed: true,
-            spokenResponse: "Understood. I will notify you when the task is complete."
+            executed: false,
+            spokenResponse: "I understand. No notification or reminder has been scheduled by this telephone command."
           };
         }
         return {
