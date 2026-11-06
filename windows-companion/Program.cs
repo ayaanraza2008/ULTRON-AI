@@ -55,6 +55,8 @@ internal sealed class CompanionContext : ApplicationContext
     private uint _savedVolume = 0xFFFFFFFF;
     private bool _isDucked = false;
     private readonly object _wakeLock = new();
+    private readonly object _voiceHistoryLock = new();
+    private readonly List<(string Role, string Content)> _voiceHistory = new();
     private readonly FloatingCoreOverlayForm _floatingCore;
     private static readonly HttpClient s_httpClient = new() { Timeout = TimeSpan.FromSeconds(10) };
     private static readonly SemaphoreSlim s_sharedStateLock = new(1, 1);
@@ -718,7 +720,12 @@ internal sealed class CompanionContext : ApplicationContext
                 Content = new StringContent(payload, Encoding.UTF8, "application/json")
             };
             using var response = await s_httpClient.SendAsync(request);
-            var responseJson = await response.Content.ReadAsStringAsync();
+            var responseJson = await ReadBoundedContentAsync(response.Content, 256 * 1024);
+            if (responseJson is null)
+            {
+                ShowStatus("Pairing response was too large to read safely.");
+                return;
+            }
             using var doc = System.Text.Json.JsonDocument.Parse(string.IsNullOrWhiteSpace(responseJson) ? "{}" : responseJson);
             if (!response.IsSuccessStatusCode)
             {
@@ -783,8 +790,8 @@ internal sealed class CompanionContext : ApplicationContext
             request.Headers.Add("x-device-token", token);
             using var response = await s_httpClient.SendAsync(request);
             if (!response.IsSuccessStatusCode) return null;
-            var raw = await response.Content.ReadAsStringAsync();
-            if (raw.Length > 256 * 1024) return null;
+            var raw = await ReadBoundedContentAsync(response.Content, 256 * 1024);
+            if (raw is null) return null;
             using var doc = System.Text.Json.JsonDocument.Parse(string.IsNullOrWhiteSpace(raw) ? "{}" : raw);
             var deviceId = doc.RootElement.TryGetProperty("deviceId", out var node) ? node.GetString() : null;
             return !string.IsNullOrWhiteSpace(deviceId) &&
@@ -937,11 +944,13 @@ internal sealed class CompanionContext : ApplicationContext
             }
 
             var requestUrl = new Uri(backendUri, "/api/jarvis/voice/process-command");
+            var messages = BuildVoiceHistoryPayload(commandText);
             var payload = System.Text.Json.JsonSerializer.Serialize(new
             {
                 command = commandText,
                 language,
-                source = "windows-companion"
+                source = "windows-companion",
+                messages
             });
 
             using var request = new HttpRequestMessage(HttpMethod.Post, requestUrl)
@@ -959,7 +968,12 @@ internal sealed class CompanionContext : ApplicationContext
                 return;
             }
 
-            var responseJson = await response.Content.ReadAsStringAsync();
+            var responseJson = await ReadBoundedContentAsync(response.Content, 256 * 1024);
+            if (responseJson is null)
+            {
+                ShowStatus("ULTRON response was too large to read safely.");
+                return;
+            }
             using var doc = System.Text.Json.JsonDocument.Parse(responseJson);
             var textResponse = doc.RootElement.TryGetProperty("textResponse", out var prop)
                 ? prop.GetString()?.Trim() : null;
@@ -970,10 +984,33 @@ internal sealed class CompanionContext : ApplicationContext
             }
             if (textResponse.Length > 2000) textResponse = textResponse[..2000];
 
+            lock (_voiceHistoryLock)
+            {
+                _voiceHistory.Add(("user", commandText));
+                _voiceHistory.Add(("assistant", textResponse));
+                if (_voiceHistory.Count > 24)
+                    _voiceHistory.RemoveRange(0, _voiceHistory.Count - 24);
+            }
+
             _floatingCore?.SetVisualState("SPEAKING");
             ShowStatus($"ULTRON: {textResponse}");
-            try { using var synth = new SpeechSynthesizer(); synth.Speak(textResponse); }
-            catch { /* Speech synthesis fallback */ }
+            try
+            {
+                using var synth = new SpeechSynthesizer();
+                var spoken = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                synth.SpeakCompleted += (_, eventArgs) =>
+                {
+                    if (eventArgs.Error is not null) spoken.TrySetException(eventArgs.Error);
+                    else if (eventArgs.Cancelled) spoken.TrySetCanceled();
+                    else spoken.TrySetResult(true);
+                };
+                synth.SpeakAsync(textResponse);
+                await spoken.Task.WaitAsync(TimeSpan.FromSeconds(30));
+            }
+            catch
+            {
+                ShowStatus($"ULTRON: {textResponse} (spoken output unavailable)");
+            }
         }
         catch (TaskCanceledException)
         {
@@ -1044,10 +1081,8 @@ internal sealed class CompanionContext : ApplicationContext
             }
             if (!response.IsSuccessStatusCode) return;
 
-            if (response.Content.Headers.ContentLength is long responseLength && responseLength > 512 * 1024)
-                return;
-            var json = await response.Content.ReadAsStringAsync();
-            if (json.Length > 512 * 1024) return;
+            var json = await ReadBoundedContentAsync(response.Content, 512 * 1024);
+            if (json is null) return;
             using var doc = System.Text.Json.JsonDocument.Parse(string.IsNullOrWhiteSpace(json) ? "{}" : json);
             if (!doc.RootElement.TryGetProperty("commands", out var commands) ||
                 commands.ValueKind != System.Text.Json.JsonValueKind.Array)
@@ -1117,9 +1152,8 @@ internal sealed class CompanionContext : ApplicationContext
             return;
         }
         if (!response.IsSuccessStatusCode) return;
-        if (response.Content.Headers.ContentLength is long length && length > 512 * 1024) return;
-        var json = await response.Content.ReadAsStringAsync();
-        if (json.Length > 512 * 1024) return;
+        var json = await ReadBoundedContentAsync(response.Content, 512 * 1024);
+        if (json is null) return;
 
         using var document = System.Text.Json.JsonDocument.Parse(string.IsNullOrWhiteSpace(json) ? "{}" : json);
         if (!document.RootElement.TryGetProperty("events", out var events) ||
@@ -1232,6 +1266,45 @@ internal sealed class CompanionContext : ApplicationContext
                 "Windows could not open the default browser. Visit " + AssistantUrl,
                 "Could not open ULTRON", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
+    }
+
+    private static async Task<string?> ReadBoundedContentAsync(HttpContent content, int maxBytes)
+    {
+        if (content.Headers.ContentLength is long declaredLength && declaredLength > maxBytes)
+            return null;
+
+        await using var stream = await content.ReadAsStreamAsync();
+        using var output = new MemoryStream();
+        var chunk = new byte[8192];
+        while (true)
+        {
+            var read = await stream.ReadAsync(chunk.AsMemory(0, chunk.Length));
+            if (read == 0) break;
+            if (output.Length + read > maxBytes) return null;
+            await output.WriteAsync(chunk.AsMemory(0, read));
+        }
+
+        return Encoding.UTF8.GetString(output.ToArray());
+    }
+
+    private List<object> BuildVoiceHistoryPayload(string currentCommand)
+    {
+        var recent = new List<(string Role, string Content)>();
+        lock (_voiceHistoryLock)
+            recent.AddRange(_voiceHistory.TakeLast(12));
+
+        var selected = new List<(string Role, string Content)>();
+        var totalChars = 0;
+        for (var index = recent.Count - 1; index >= 0; index--)
+        {
+            var item = recent[index];
+            if (totalChars + item.Content.Length > 12_000) break;
+            selected.Insert(0, item);
+            totalChars += item.Content.Length;
+        }
+
+        selected.Add(("user", currentCommand));
+        return selected.Select(item => (object)new { role = item.Role, content = item.Content }).ToList();
     }
 
     private void ShowStatus(string message)
