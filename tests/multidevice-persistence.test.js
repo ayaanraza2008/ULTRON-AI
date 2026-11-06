@@ -413,3 +413,32 @@ test("MultiDeviceManager: presence freshness and heartbeat timeout eliminate pha
   const recheckedEligible = mdm.findEligibleDevices("run_script", { onlineOnly: true });
   assert.equal(recheckedEligible.length, 1);
 });
+
+test("DatabasePersistenceAdapter: strict TLS certificate verification enforced (rejectUnauthorized: true)", () => {
+  // Remote database URL without custom CA must default to strict TLS certificate verification
+  const remoteAdapter = new DatabasePersistenceAdapter({
+    databaseUrl: "postgres://db.prod.company.com:5432/ultron_multidevice"
+  });
+  const remoteConfig = remoteAdapter.resolvePoolConfig();
+  assert.ok(remoteConfig);
+  assert.ok(remoteConfig.ssl);
+  assert.equal(remoteConfig.ssl.rejectUnauthorized, true, "Remote database pool must strictly enforce TLS certificate verification");
+
+  // Local database URL must not attach remote SSL
+  const localAdapter = new DatabasePersistenceAdapter({
+    databaseUrl: "postgres://tester@127.0.0.1:5432/ultron_test"
+  });
+  const localConfig = localAdapter.resolvePoolConfig();
+  assert.ok(localConfig);
+  assert.equal(localConfig.ssl, undefined, "Local database pool should not attach remote SSL config");
+
+  // Custom CA certificate options are applied safely without bypassing TLS
+  const customCaAdapter = new DatabasePersistenceAdapter({
+    databaseUrl: "postgres://db.prod.company.com:5432/ultron_multidevice",
+    ssl: { ca: "-----BEGIN CERTIFICATE-----\nMOCK_CA_CERT\n-----END CERTIFICATE-----" }
+  });
+  const customCaConfig = customCaAdapter.resolvePoolConfig();
+  assert.ok(customCaConfig.ssl);
+  assert.equal(customCaConfig.ssl.rejectUnauthorized, true);
+  assert.ok(customCaConfig.ssl.ca.includes("MOCK_CA_CERT"));
+});

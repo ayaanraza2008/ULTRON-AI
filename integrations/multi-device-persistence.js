@@ -271,6 +271,7 @@ export class FilePersistenceAdapter extends BaseMultiDevicePersistenceAdapter {
 export class DatabasePersistenceAdapter extends BaseMultiDevicePersistenceAdapter {
   constructor(options = {}) {
     super();
+    this.options = options;
     this.databaseUrl = options.databaseUrl || process.env.ULTRON_DATABASE_URL || process.env.DATABASE_URL || process.env.POSTGRES_URL || null;
     this.pgPool = options.pgPool || null;
     this._internalPool = null;
@@ -287,13 +288,8 @@ export class DatabasePersistenceAdapter extends BaseMultiDevicePersistenceAdapte
     this._cachedState = null;
   }
 
-  async getPool() {
-    if (this.pgPool) return this.pgPool;
-    if (this._internalPool) return this._internalPool;
+  resolvePoolConfig() {
     if (!this.databaseUrl) return null;
-    const pg = await import("pg").catch(() => null);
-    if (!pg || !pg.default?.Pool) return null;
-
     const isLocal = /localhost|127\.0\.0\.1|::1/i.test(this.databaseUrl);
     const poolConfig = {
       connectionString: this.databaseUrl,
@@ -302,8 +298,31 @@ export class DatabasePersistenceAdapter extends BaseMultiDevicePersistenceAdapte
       idleTimeoutMillis: 30000
     };
     if (!isLocal && !this.databaseUrl.includes("sslmode=disable")) {
-      poolConfig.ssl = { rejectUnauthorized: false };
+      // Enforce strict TLS certificate verification by default. Never bypass unless explicitly configured.
+      const sslConfig = { rejectUnauthorized: true };
+      const customCa = this.options.ssl?.ca || process.env.DATABASE_CA_CERT || process.env.PGSSLROOTCERT || process.env.SUPABASE_SSL_CA;
+      if (customCa) {
+        sslConfig.ca = customCa;
+      }
+      if (this.databaseUrl.includes("sslmode=no-verify") || process.env.ULTRON_DATABASE_SSL_REJECT_UNAUTHORIZED === "false") {
+        sslConfig.rejectUnauthorized = false;
+      }
+      if (typeof this.options.ssl === "object" && this.options.ssl !== null) {
+        Object.assign(sslConfig, this.options.ssl);
+      }
+      poolConfig.ssl = sslConfig;
     }
+    return poolConfig;
+  }
+
+  async getPool() {
+    if (this.pgPool) return this.pgPool;
+    if (this._internalPool) return this._internalPool;
+    if (!this.databaseUrl) return null;
+    const pg = await import("pg").catch(() => null);
+    if (!pg || !pg.default?.Pool) return null;
+
+    const poolConfig = this.resolvePoolConfig();
     this._internalPool = new pg.default.Pool(poolConfig);
     this._internalPool.on("error", (err) => {
       this.isOnline = false;

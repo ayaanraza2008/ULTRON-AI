@@ -56,6 +56,7 @@ The repository contains 388 verified JavaScript/Node.js files, companion source 
 - **Durability Features:**
   - `FilePersistenceAdapter`: Writes state atomically via PID-unique temporary files and atomic rename (`mode: 0o600`).
   - `DatabasePersistenceAdapter`: Connects to PostgreSQL via `ULTRON_DATABASE_URL`, `DATABASE_URL` or Supabase REST.
+  - Strict TLS certificate verification (`rejectUnauthorized: true`) enforced by default for remote PostgreSQL connections, with support for custom CA certificates (`DATABASE_CA_CERT`, `PGSSLROOTCERT`, `SUPABASE_SSL_CA`). Never bypasses TLS certificate verification.
   - Genuine AES-256-GCM encryption at rest when master secret is configured, with seamless legacy plaintext loading. Implements parameterized queries (100% immune to CWE-89 SQL injection) and transactional row locking (`FOR UPDATE`) with monotonic version conflict detection (`VERSION_CONFLICT`).
   - **Automatic Resilient Fallback:** If the database is unreachable, unmigrated, or times out, the system automatically writes to `FilePersistenceAdapter`, returning `{ success: true, backend: "fallback_file", warning: "DB_WRITE_FAILED_FALLBACK_USED" }` without service degradation or data loss.
 
@@ -86,9 +87,9 @@ The repository contains 388 verified JavaScript/Node.js files, companion source 
 - **Total Test Suites Executed:** 246 suites
 - **Syntax Check:** 388/388 files clean (0 syntax errors)
 - **Security Scans:** 0 Confirmed Vulnerabilities, 0 Potential Risks, 0 Secret Leaks
-- **Multi-Device & System Test Suite:** 60 tests passed, 0 failed across core multi-device suites:
+- **Multi-Device & System Test Suite:** 61 tests passed, 0 failed across core multi-device suites:
   - `tests/multidevice-operation-infinity.test.js`: 15 passed
-  - `tests/multidevice-persistence.test.js`: 10 passed
+  - `tests/multidevice-persistence.test.js`: 11 passed
   - `tests/multi-device-manager.test.js`: 6 passed
   - `tests/durable-device-hub.test.js`: 11 passed
   - `tests/remote-task-orchestrator.test.js`: 4 passed
