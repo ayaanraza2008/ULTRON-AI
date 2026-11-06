@@ -42,6 +42,15 @@ test("JARVIS routes fail closed when the owner account is not configured", async
   });
 });
 
+test("JARVIS accepts the canonical ULTRON_OWNER_USER_ID setting", async () => {
+  await withRouter({
+    env: { ULTRON_OWNER_USER_ID: "owner-user" }
+  }, async base => {
+    const response = await fetch(base + "/api/jarvis/agents");
+    assert.equal(response.status, 200);
+  });
+});
+
 test("JARVIS routes reject authenticated users other than the configured owner", async () => {
   await withRouter({
     env: { ULTRON_INTEGRATION_OWNER_USER_ID: "owner-user" },
