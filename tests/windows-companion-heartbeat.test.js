@@ -10,7 +10,8 @@ test("Windows companion refreshes durable online presence with a bounded authent
   assert.match(source, /new Uri\(backendUri, "\/api\/devices\/me\/heartbeat"\)/);
   assert.match(source, /heartbeat\.Headers\.Add\("x-device-token", identity\.Token\)/);
 
-  const heartbeatStart = source.indexOf('new Uri(backendUri, "/api/devices/me/heartbeat")');
+  const heartbeatUriPos = source.indexOf('new Uri(backendUri, "/api/devices/me/heartbeat")');
+  const heartbeatStart = source.lastIndexOf('new HttpRequestMessage', heartbeatUriPos);
   const heartbeatEnd = source.indexOf('var route = $"/api/jarvis/devices/', heartbeatStart);
   assert.ok(heartbeatStart >= 0 && heartbeatEnd > heartbeatStart, "heartbeat must run before remote command polling");
 

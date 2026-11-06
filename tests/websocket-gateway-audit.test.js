@@ -72,12 +72,13 @@ test("WebSocket Gateway Audit: Real RFC 6455 Socket Tests", async (t) => {
       .digest("base64");
 
     const handshakeReq = [
-      `GET /ws/devices?token=${reg.authToken} HTTP/1.1`,
+      `GET /ws/devices HTTP/1.1`,
       `Host: 127.0.0.1:${port}`,
       "Upgrade: websocket",
       "Connection: Upgrade",
       `Sec-WebSocket-Key: ${secKey}`,
       "Sec-WebSocket-Version: 13",
+      `x-device-token: ${reg.authToken}`,
       "",
       ""
     ].join("\r\n");
@@ -156,12 +157,13 @@ test("WebSocket Gateway Audit: Real RFC 6455 Socket Tests", async (t) => {
     const secKey = crypto.randomBytes(16).toString("base64");
 
     const handshakeReq = [
-      `GET /ws/devices?token=${reg.authToken} HTTP/1.1`,
+      `GET /ws/devices HTTP/1.1`,
       `Host: 127.0.0.1:${port}`,
       "Upgrade: websocket",
       "Connection: Upgrade",
       `Sec-WebSocket-Key: ${secKey}`,
       "Sec-WebSocket-Version: 13",
+      `x-device-token: ${reg.authToken}`,
       "",
       ""
     ].join("\r\n");
@@ -209,12 +211,13 @@ test("WebSocket Gateway Audit: Real RFC 6455 Socket Tests", async (t) => {
     const secKey = crypto.randomBytes(16).toString("base64");
 
     const handshakeReq = [
-      `GET /ws/devices?token=${reg.authToken} HTTP/1.1`,
+      `GET /ws/devices HTTP/1.1`,
       `Host: 127.0.0.1:${port}`,
       "Upgrade: websocket",
       "Connection: Upgrade",
       `Sec-WebSocket-Key: ${secKey}`,
       "Sec-WebSocket-Version: 13",
+      `x-device-token: ${reg.authToken}`,
       "",
       ""
     ].join("\r\n");
