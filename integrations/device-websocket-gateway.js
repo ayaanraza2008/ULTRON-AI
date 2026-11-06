@@ -292,7 +292,9 @@ export class DeviceWebSocketGateway {
         clientSession.pingTimer = null;
       }
       if (clientSession.deviceId) {
-        this.disconnectClient(clientSession.deviceId);
+        // A replaced socket may emit "close" after its successor is already
+        // registered. Only the currently registered session may clear presence.
+        this.disconnectClient(clientSession.deviceId, 1000, "", clientSession);
       }
     });
 
@@ -354,9 +356,9 @@ export class DeviceWebSocketGateway {
   /**
    * Disconnects a client and cleans up timers.
    */
-  disconnectClient(deviceId, code = 1000, reason = "") {
+  disconnectClient(deviceId, code = 1000, reason = "", expectedSession = null) {
     const client = this.clients.get(deviceId);
-    if (!client) return;
+    if (!client || (expectedSession && client !== expectedSession)) return false;
 
     clearInterval(client.pingTimer);
     clearTimeout(client.authTimeout);
@@ -379,6 +381,7 @@ export class DeviceWebSocketGateway {
     }
 
     this.broadcastPresence(deviceId, false);
+    return true;
   }
 
   /**
@@ -414,8 +417,11 @@ export class DeviceWebSocketGateway {
 
       // Handle Close (opcode 0x8)
       if (frame.opcode === 0x8) {
-        if (clientSession.deviceId) this.disconnectClient(clientSession.deviceId);
-        else clientSession.socket.destroy();
+        if (clientSession.deviceId) {
+          this.disconnectClient(clientSession.deviceId, 1000, "", clientSession);
+        } else {
+          clientSession.socket.destroy();
+        }
         return;
       }
 
