@@ -2,7 +2,7 @@
 
 **Modules:** `voice/edge-tts-adapter.js`, `voice/kokoro-engine.js`, `voice/wake-word.js`, `voice/snap-detector.js`  
 **Author:** Antigravity AI Systems Architect  
-**Status:** IMPLEMENTED AND EMPIRICALLY VERIFIED  
+**Status:** CODE COMPLETE; AUTOMATED TESTS REPORTED; REAL-DEVICE ACCEPTANCE PENDING  
 
 ---
 
@@ -59,7 +59,9 @@ Previous voice components had basic Edge-TTS calls and Kokoro engine bindings, b
 
 ---
 
-## 4. Tests Executed & Actual Results
+## 4. Automated Test Results Recorded in This Report
+
+The pass counts below are implementation-report evidence. The latest exact-HEAD GitHub Actions run is authoritative for current CI status; these tests do not replace real microphone, speaker, network-loss or physical Windows acceptance.
 
 ### Suite A: `tests/voice-pipeline-completion.test.js` (5/5 PASS)
 - `auto-detects Hindi script, conversational Hinglish, and English`: PASS
@@ -83,7 +85,7 @@ Previous voice components had basic Edge-TTS calls and Kokoro engine bindings, b
 
 ## 5. Acceptance Verification Verdict
 
-- **Language Detection:** 100% accurate across Hindi, Hinglish, and English test vectors.
-- **Offline Reliability:** 100% verified. Windows SAPI synthesizes valid WAV audio locally on CPU.
-- **Interruption Latency:** Sub-millisecond pipeline stop on `stopSpeaking()`.
+- **Language Detection:** Hindi, Hinglish and English test vectors are covered; no general-world accuracy percentage is claimed.
+- **Offline Synthesis:** A Windows SAPI fallback path is implemented; real offline acceptance on a physical Windows device remains pending.
+- **Interruption:** The `stopSpeaking()` cancellation path is covered by automated tests; physical audio-output latency has not been benchmarked.
 - **Honest Telemetry:** Exactly reports failure when fallbacks are disabled; zero fabricated audio.

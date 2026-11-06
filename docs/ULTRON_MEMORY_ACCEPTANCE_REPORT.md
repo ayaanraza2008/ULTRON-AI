@@ -2,7 +2,7 @@
 
 **Modules:** `cognitive-memory.js` & `agentmemory-integration.js`  
 **Author:** Antigravity AI Systems Architect  
-**Status:** IMPLEMENTED AND EMPIRICALLY VERIFIED  
+**Status:** CODE COMPLETE; AUTOMATED TESTS REPORTED; LIVE CLOUD ACCEPTANCE PENDING  
 
 ---
 
@@ -82,7 +82,7 @@ Memory items are categorized into 6 distinct cognitive layers without database s
 
 ## 5. Acceptance Verification Verdict
 
-- **Restart Persistence:** Verified. Explicit memories persist across process reboots.
-- **Cross-Session Continuity:** Verified. User preferences survive session resets.
-- **Secret Sanitization:** 100% blocked. Zero credential leakage into cognitive storage.
+- **Restart Persistence:** Automated tests cover persistence behavior; live Supabase restart recovery has not yet been accepted.
+- **Cross-Session Continuity:** Memory retrieval and persistence paths are covered by tests; production cross-session acceptance remains pending.
+- **Secret Sanitization:** Known credential formats and token patterns are covered by tests; no exhaustive zero-leakage guarantee is claimed.
 - **Memory Consolidation:** Duplicate tokens merged into higher reinforcement scores.

@@ -2,7 +2,7 @@
 
 **Modules:** `vision/ultron-eyes-manager.js`, `vision/gesture-recognizer.js`, `vision/ultron-vision.js`  
 **Author:** Antigravity AI Systems Architect  
-**Status:** IMPLEMENTED AND EMPIRICALLY VERIFIED  
+**Status:** CODE COMPLETE; AUTOMATED TESTS REPORTED; REAL-CAMERA ACCEPTANCE PENDING  
 
 ---
 
@@ -52,7 +52,9 @@ Implemented a robust hand gesture recognition engine:
 
 ---
 
-## 4. Tests Executed & Actual Results
+## 4. Automated Test Results Recorded in This Report
+
+The pass counts below are implementation-report evidence. The latest exact-HEAD GitHub Actions run is authoritative for current CI status; these tests do not establish real-world gesture accuracy or physical camera acceptance.
 
 ### Suite A: `tests/gesture-recognizer.test.js` (4/4 PASS)
 - `GestureRecognizer: Classifies pinch gesture when thumb and index tips are close`: PASS
@@ -80,7 +82,7 @@ Implemented a robust hand gesture recognition engine:
 
 ## 5. Acceptance Verification Verdict
 
-- **Gesture Classification:** 100% verified across 10 distinct gestures.
-- **Privacy Enforcement:** 100% verified. Refuses activation without user consent.
+- **Gesture Classification:** Ten gesture classes are represented in automated tests; real-world precision/recall has not been measured.
+- **Privacy Enforcement:** Explicit-consent and session-purge behavior are covered by automated tests; live camera permission acceptance remains pending.
 - **Resource Safety:** Runs within CPU memory bounds without CUDA dependencies.
 - **Truthful Attribution:** Reports `BLOCKED_NO_VISION_PROVIDER` when cloud inference keys are omitted.
