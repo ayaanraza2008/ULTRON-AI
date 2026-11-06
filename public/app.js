@@ -19,6 +19,7 @@ const state = {
   conversations: [],
   memoryItems: [],
   documents: [],
+  selectedDocumentIds: [],
   conversationId: null,
   persistenceAvailable: false,
   attachments: [],
@@ -254,6 +255,7 @@ async function signOut() {
   state.conversations = [];
   state.memoryItems = [];
   state.documents = [];
+  state.selectedDocumentIds = [];
   state.conversationId = null;
   state.session = null;
   state.models = [];
@@ -419,7 +421,8 @@ async function sendMessage(rawText, attachments = []) {
         stream: false,
         model: state.model || undefined,
         persona: state.persona,
-        attachments: attachments.slice(0, 2)
+        attachments: attachments.slice(0, 2),
+        documentIds: state.selectedDocumentIds.slice(0, 3)
       }
     });
     const answer = typeof result.content === "string" ? result.content.trim() : "";
@@ -824,6 +827,32 @@ async function deleteMemory(memoryId) {
 }
 
 
+function updateDocumentFeedback() {
+  const feedback = $("#document-feedback");
+  if (!feedback) return;
+  const count = state.selectedDocumentIds.length;
+  feedback.textContent = count
+    ? count + " private document" + (count === 1 ? "" : "s") +
+      " selected for chat. ULTRON will read only these files when you send a message."
+    : "Select up to 3 private documents with “Use in chat”. Only selected files are read for your next messages.";
+}
+
+function toggleDocumentForChat(documentId) {
+  const id = String(documentId || "");
+  if (!id || !state.documents.some(file => file.id === id)) return;
+  if (state.selectedDocumentIds.includes(id)) {
+    state.selectedDocumentIds = state.selectedDocumentIds.filter(value => value !== id);
+  } else {
+    if (state.selectedDocumentIds.length >= 3) {
+      toast("You can use up to 3 documents in one chat request.", "error");
+      return;
+    }
+    state.selectedDocumentIds = [...state.selectedDocumentIds, id];
+  }
+  renderDocuments();
+  updateDocumentFeedback();
+}
+
 function renderDocuments() {
   const list = $("#document-list");
   list.replaceChildren();
@@ -842,8 +871,10 @@ function renderDocuments() {
     return;
   }
   for (const file of state.documents.slice(0, 12)) {
+    const selected = state.selectedDocumentIds.includes(file.id);
     const entry = document.createElement("div");
     entry.className = "document-entry";
+    entry.classList.toggle("document-entry--selected", selected);
     const head = document.createElement("div");
     head.className = "document-entry__head";
     const name = document.createElement("span");
@@ -856,6 +887,11 @@ function renderDocuments() {
     meta.textContent = [file.mime_type, file.created_at ? new Date(file.created_at).toLocaleDateString() : ""].filter(Boolean).join(" · ");
     const actions = document.createElement("div");
     actions.className = "inline-actions";
+    const use = document.createElement("button");
+    use.type = "button";
+    use.textContent = selected ? "Remove from chat" : "Use in chat";
+    use.setAttribute("aria-pressed", String(selected));
+    use.addEventListener("click", () => toggleDocumentForChat(file.id));
     const download = document.createElement("button");
     download.type = "button";
     download.textContent = "Download";
@@ -864,7 +900,7 @@ function renderDocuments() {
     remove.type = "button";
     remove.textContent = "Delete";
     remove.addEventListener("click", () => void deleteDocument(file.id));
-    actions.append(download, remove);
+    actions.append(use, download, remove);
     entry.append(head, meta, actions);
     list.append(entry);
   }
@@ -873,6 +909,7 @@ function renderDocuments() {
 async function loadDocuments() {
   if (state.session?.authType !== "supabase") {
     state.documents = [];
+    state.selectedDocumentIds = [];
     renderDocuments();
     $("#document-feedback").textContent = "Private document storage requires the owner Supabase session.";
     return;
@@ -880,10 +917,13 @@ async function loadDocuments() {
   try {
     const result = await api("/api/documents");
     state.documents = Array.isArray(result.documents) ? result.documents : [];
+    const availableIds = new Set(state.documents.map(file => file.id));
+    state.selectedDocumentIds = state.selectedDocumentIds.filter(id => availableIds.has(id));
     renderDocuments();
-    $("#document-feedback").textContent = "Private account storage only. The current API stores and retrieves files; automatic document processing is not exposed by this route.";
+    updateDocumentFeedback();
   } catch (error) {
     state.documents = [];
+    state.selectedDocumentIds = [];
     renderDocuments();
     $("#document-feedback").textContent = apiErrorMessage(error, "Private document storage is unavailable.");
   }
