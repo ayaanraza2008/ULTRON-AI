@@ -187,8 +187,7 @@ export class MultiDeviceManager {
       failure = error?.message || "DURABLE_PERSISTENCE_FAILED";
     }
 
-    const durable = outcome?.success === true &&
-      (outcome.cloudPersisted === true || outcome.backend === "database");
+    const durable = outcome?.success === true && outcome.cloudPersisted === true;
     if (durable) {
       return {
         success: true,

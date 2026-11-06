@@ -110,7 +110,7 @@ test("durable state sync commits cloud state before any device notification", as
   assert.deepEqual(result.sentToDevices, ["phone-1"]);
 });
 
-test("durable state sync rolls back and sends nothing when cloud persistence falls back locally", async () => {
+test("durable state sync rejects mock database success without cloud persistence", async () => {
   let fallbackSnapshot = null;
   let dispatchCount = 0;
   const adapter = {
@@ -119,7 +119,7 @@ test("durable state sync rolls back and sends nothing when cloud persistence fal
     },
     async load() { return null; },
     async save() {
-      return { success: true, backend: "fallback_file", cloudPersisted: false, warning: "DB_OFFLINE" };
+      return { success: true, backend: "database", cloudPersisted: false, warning: "MOCK_DATABASE_ONLY" };
     }
   };
   const gateway = {
