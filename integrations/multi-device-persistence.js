@@ -671,29 +671,31 @@ export class DatabasePersistenceAdapter extends BaseMultiDevicePersistenceAdapte
           method: "GET",
           headers: { "Accept": "application/json" }
         });
-        let currentVersion = 0;
-        if (getResp.ok) {
-          const rows = await getResp.json();
-          if (Array.isArray(rows) && rows[0]) {
-            currentVersion = Number(rows[0].version) || 0;
-          }
+        if (!getResp.ok) {
+          this.isOnline = false;
+          const fallback = this.fallbackAdapter
+            ? await this.fallbackAdapter.saveSharedState(stateUpdate)
+            : { success: false, error: "SUPABASE_REST_READ_FAILED" };
+          return { ...fallback, cloudPersisted: false, warning: "SUPABASE_REST_READ_FAILED", status: getResp.status };
         }
-        if (expectedVersion !== null && expectedVersion !== undefined) {
-          if (Number(expectedVersion) !== currentVersion) {
-            return {
-              success: false,
-              error: "VERSION_CONFLICT",
-              currentVersion,
-              expectedVersion: Number(expectedVersion)
-            };
-          }
+
+        const rows = await getResp.json();
+        const currentVersion = Array.isArray(rows) && rows[0] ? (Number(rows[0].version) || 0) : 0;
+        if (expectedVersion !== null && expectedVersion !== undefined && Number(expectedVersion) !== currentVersion) {
+          return {
+            success: false,
+            error: "VERSION_CONFLICT",
+            currentVersion,
+            expectedVersion: Number(expectedVersion)
+          };
         }
+
         const nextVersion = currentVersion + 1;
         const postResp = await this.supabaseRest.fetch("/rest/v1/ultron_multidevice_state?on_conflict=key", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "Prefer": "resolution=merge-duplicates"
+            "Prefer": "resolution=merge-duplicates,return=minimal"
           },
           body: JSON.stringify({
             key: stateRowKey,
@@ -703,15 +705,23 @@ export class DatabasePersistenceAdapter extends BaseMultiDevicePersistenceAdapte
           })
         });
         if (postResp.ok) {
-          return { success: true, version: nextVersion, backend: "supabase_rest" };
+          this.isOnline = true;
+          return { success: true, version: nextVersion, backend: "supabase_rest", cloudPersisted: true };
         }
+
+        this.isOnline = false;
+        const fallback = this.fallbackAdapter
+          ? await this.fallbackAdapter.saveSharedState(stateUpdate)
+          : { success: false, error: "SUPABASE_REST_WRITE_FAILED" };
+        return { ...fallback, cloudPersisted: false, warning: "SUPABASE_REST_WRITE_FAILED", status: postResp.status };
       } catch (restErr) {
-        if (this.fallbackAdapter) {
-          return await this.fallbackAdapter.saveSharedState(stateUpdate);
-        }
+        this.isOnline = false;
+        const fallback = this.fallbackAdapter
+          ? await this.fallbackAdapter.saveSharedState(stateUpdate)
+          : { success: false, error: "SUPABASE_REST_WRITE_FAILED" };
+        return { ...fallback, cloudPersisted: false, warning: "SUPABASE_REST_WRITE_FAILED", error: restErr?.message };
       }
     }
-
     // Fallback to file adapter
     if (this.fallbackAdapter) {
       return await this.fallbackAdapter.saveSharedState(stateUpdate);
