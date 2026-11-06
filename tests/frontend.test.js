@@ -135,3 +135,8 @@ test("spoken output honors the user's installed browser voice selection", () => 
   assert.match(appSource, /localStorage\.setItem\("ultron-output-voice-uri", voiceOutputSelect\.value\)/);
   assert.match(appSource, /voices\.find\(voice => voice\.voiceURI === preferredVoiceUri\)/);
 });
+
+
+test("pending voice replies stay silent if the user switches to text before completion", () => {
+  assert.match(appSource, /responseMode === "voice" && state\.mode === "voice" && state\.preferences\.voice_enabled/);
+});
