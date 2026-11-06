@@ -448,11 +448,11 @@ export class DatabasePersistenceAdapter extends BaseMultiDevicePersistenceAdapte
     // 3. Supabase REST API
     if (this.supabaseRest && typeof this.supabaseRest.fetch === "function") {
       try {
-        const resp = await this.supabaseRest.fetch("/rest/v1/ultron_multidevice_state?key=eq.root", {
+        const resp = await this.supabaseRest.fetch("/rest/v1/ultron_multidevice_state?on_conflict=key", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "Prefer": "resolution=merge-duplicates"
+            "Prefer": "resolution=merge-duplicates,return=minimal"
           },
           body: JSON.stringify({ key: "root", value: stateToPersist, updated_at: new Date().toISOString() })
         });
@@ -672,7 +672,7 @@ export class DatabasePersistenceAdapter extends BaseMultiDevicePersistenceAdapte
           }
         }
         const nextVersion = currentVersion + 1;
-        const postResp = await this.supabaseRest.fetch("/rest/v1/ultron_multidevice_state", {
+        const postResp = await this.supabaseRest.fetch("/rest/v1/ultron_multidevice_state?on_conflict=key", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -738,14 +738,44 @@ export class DatabasePersistenceAdapter extends BaseMultiDevicePersistenceAdapte
  */
 export function createMultiDevicePersistenceAdapter(options = {}) {
   if (options.persistenceAdapter) return options.persistenceAdapter;
+
   const dbUrl = options.databaseUrl || process.env.ULTRON_DATABASE_URL || process.env.DATABASE_URL || process.env.POSTGRES_URL;
-  const hasSupabase = Boolean(options.supabaseRest || (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY));
+  const supabaseUrl = options.supabaseUrl || process.env.SUPABASE_URL;
+  const serviceRoleKey = options.supabaseServiceRoleKey || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const fetchImpl = options.fetchImpl || globalThis.fetch;
+
+  let supabaseRest = options.supabaseRest || null;
+  if (!supabaseRest && supabaseUrl && serviceRoleKey && typeof fetchImpl === "function") {
+    const baseUrl = new URL(supabaseUrl);
+    const isLoopback = baseUrl.hostname === "localhost" || baseUrl.hostname === "127.0.0.1" || baseUrl.hostname === "::1";
+    if (baseUrl.protocol !== "https:" && !(baseUrl.protocol === "http:" && isLoopback)) {
+      throw new Error("SUPABASE_URL_MUST_USE_HTTPS");
+    }
+    baseUrl.pathname = baseUrl.pathname.replace(/\\/+$/, "");
+
+    supabaseRest = {
+      fetch: (requestPath, init = {}) => {
+        if (typeof requestPath !== "string" || !requestPath.startsWith("/rest/v1/")) {
+          throw new Error("SUPABASE_REST_PATH_NOT_ALLOWED");
+        }
+        const target = new URL(requestPath, baseUrl);
+        if (target.origin !== baseUrl.origin || !target.pathname.startsWith("/rest/v1/")) {
+          throw new Error("SUPABASE_REST_TARGET_NOT_ALLOWED");
+        }
+        const headers = new Headers(init.headers || {});
+        headers.set("apikey", serviceRoleKey);
+        headers.set("Authorization", "Bearer " + serviceRoleKey);
+        return fetchImpl(target.toString(), { ...init, headers });
+      }
+    };
+  }
 
   const fallback = new FilePersistenceAdapter(options);
-  if (dbUrl || hasSupabase || options.inMemoryMockDb) {
+  if (dbUrl || supabaseRest || options.inMemoryMockDb) {
     return new DatabasePersistenceAdapter({
       ...options,
       databaseUrl: dbUrl,
+      supabaseRest,
       fallbackAdapter: fallback
     });
   }
