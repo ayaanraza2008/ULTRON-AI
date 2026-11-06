@@ -442,3 +442,32 @@ test("JARVIS voice conversational fallback rejects untrusted system messages in 
     assert.equal((await response.json()).error.code, "INVALID_CONVERSATION_MESSAGE");
   });
 });
+
+
+test("JARVIS paired conversational voice route returns normalized Hindi and Hinglish language codes", async () => {
+  await withRouter({
+    env: {
+      ULTRON_INTEGRATION_OWNER_USER_ID: "owner-user",
+      OPENROUTER_API_KEY: "synthetic-openrouter-key",
+      OPENROUTER_BASE_URL: "https://openrouter.ai/api/v1"
+    },
+    fetchImpl: async () => new Response(JSON.stringify({
+      choices: [{ message: { content: "Main aapki madad kar sakta hoon." } }]
+    }), { status: 200, headers: { "Content-Type": "application/json" } })
+  }, async base => {
+    for (const [command, expectedLanguage] of [
+      ["नमस्ते, आप कैसे हैं?", "hi"],
+      ["Bhai kya kar rahe ho?", "hinglish"]
+    ]) {
+      const response = await fetch(base + "/api/jarvis/voice/process-command", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ command })
+      });
+      assert.equal(response.status, 200);
+      const body = await response.json();
+      assert.equal(body.language, expectedLanguage);
+      assert.equal(body.intent, "BRAIN_ROUTED_CONVERSATION");
+    }
+  });
+});
