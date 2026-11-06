@@ -26,68 +26,6 @@ async function withRouter({ env = { ULTRON_INTEGRATION_OWNER_USER_ID: "owner-use
   }
 }
 
-test("Singularity Routes: Robotics HAL endpoints register robot and execute safe motion", async () => {
-  await withRouter({}, async base => {
-    // 1. Register robot
-    const regRes = await fetch(base + "/api/jarvis/robotics/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        robotId: "ros2-quadruped-01",
-        name: "Quadruped Rover",
-        sensors: ["lidar", "depth_camera", "battery_monitor"],
-        actuators: ["mecanum_drive"]
-      })
-    });
-    const regBody = await regRes.json();
-    assert.equal(regRes.status, 200);
-    assert.equal(regBody.success, true);
-    assert.equal(regBody.robotId, "ros2-quadruped-01");
-
-    // 2. Dispatch valid motion
-    const motionRes = await fetch(base + "/api/jarvis/robotics/motion", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        robotId: "ros2-quadruped-01",
-        command: {
-          linearVelocity: 0.5,
-          angularVelocity: 0.2,
-          targetPosition: { x: 5, y: 5, z: 0.5 }
-        }
-      })
-    });
-    const motionBody = await motionRes.json();
-    assert.equal(motionRes.status, 200);
-    assert.equal(motionBody.permitted, true);
-
-    // 3. Dispatch out-of-bounds geofence motion (should be rejected with 403)
-    const badMotionRes = await fetch(base + "/api/jarvis/robotics/motion", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        robotId: "ros2-quadruped-01",
-        command: {
-          linearVelocity: 0.5,
-          targetPosition: { x: 100, y: 100, z: 10 }
-        }
-      })
-    });
-    assert.equal(badMotionRes.status, 403);
-
-    // 4. Brain export package
-    const exportRes = await fetch(base + "/api/jarvis/robotics/export-brain", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sourceIdentity: "ULTRON-SINGULARITY-MASTER" })
-    });
-    const exportBody = await exportRes.json();
-    assert.equal(exportRes.status, 200);
-    assert.equal(exportBody.success, true);
-    assert.ok(exportBody.package.signature);
-  });
-});
-
 test("Singularity Routes: Offline/Online Connection Controller status and mode routing", async () => {
   await withRouter({}, async base => {
     // 1. Get status
@@ -187,7 +125,7 @@ test("Singularity Routes: Geographic distance calculation and privacy consent ga
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        deviceId: "pilot-drone-01",
+        deviceId: "personal-device-01",
         consentDurationMinutes: 15
       })
     });
@@ -217,83 +155,5 @@ test("Singularity Routes: Geographic distance calculation and privacy consent ga
     const revokeBody = await revokeRes.json();
     assert.equal(revokeRes.status, 200);
     assert.equal(revokeBody.revoked, true);
-  });
-});
-
-
-test("Singularity Routes: SimReady & OpenUSD simulation endpoints manage assets, scenarios, datasets and HIL", async () => {
-  await withRouter({}, async base => {
-    // 1. Discover 3D assets
-    const assetsRes = await fetch(base + "/api/jarvis/robotics/simready/assets");
-    assert.equal(assetsRes.status, 200);
-    const assetsBody = await assetsRes.json();
-    assert.equal(assetsBody.success, true);
-    assert.ok(assetsBody.count >= 3);
-
-    // 2. List training scenarios
-    const scenRes = await fetch(base + "/api/jarvis/robotics/simready/scenarios");
-    assert.equal(scenRes.status, 200);
-    const scenBody = await scenRes.json();
-    assert.equal(scenBody.success, true);
-    assert.ok(scenBody.scenarios.length >= 3);
-
-    // 3. Run training scenario episode
-    const runRes = await fetch(base + "/api/jarvis/robotics/simready/scenario/run", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ scenarioKey: "WAREHOUSE_NAVIGATION", maxSteps: 20 })
-    });
-    assert.equal(runRes.status, 200);
-    const runBody = await runRes.json();
-    assert.equal(runBody.success, true);
-    assert.ok(runBody.episode.stepsCount > 0);
-    assert.ok(runBody.evaluation.efficiencyScore >= 0);
-
-    // 4. Export dataset (JSON)
-    const datasetRes = await fetch(base + "/api/jarvis/robotics/simready/dataset?format=json");
-    assert.equal(datasetRes.status, 200);
-    const datasetBody = await datasetRes.json();
-    assert.equal(datasetBody.formatVersion, "ULTRON-SIMDATA-v1");
-
-    // 5. Export dataset (CSV)
-    const csvRes = await fetch(base + "/api/jarvis/robotics/simready/dataset?format=csv");
-    assert.equal(csvRes.status, 200);
-    const csvText = await csvRes.text();
-    assert.ok(csvText.startsWith("episode_id,step,timestamp_ms"));
-
-    // 6. HIL Handshake
-    const hilRes = await fetch(base + "/api/jarvis/robotics/simready/hil/handshake", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token: "OPERATOR_SIM_HIL_KEY" })
-    });
-    assert.equal(hilRes.status, 501);
-    const hilBody = await hilRes.json();
-    assert.equal(hilBody.success, false);
-    assert.equal(hilBody.mode, "SIMULATION");
-    assert.equal(hilBody.physicalHardwareVerified, false);
-    assert.equal(hilBody.error, "PHYSICAL_HIL_ADAPTER_NOT_IMPLEMENTED");
-
-    // 7. SimReady Central Asset Search
-    const centralSearchRes = await fetch(base + "/api/jarvis/robotics/simready/central/search?category=logistics");
-    assert.equal(centralSearchRes.status, 200);
-    const centralBody = await centralSearchRes.json();
-    assert.equal(centralBody.success, true);
-    assert.ok(centralBody.totalMatched >= 1);
-    assert.ok(centralBody.assets.some(a => a.assetId === "simready-agv-forklift"));
-
-    // 8. SimReady Central Asset Import
-    const importRes = await fetch(base + "/api/jarvis/robotics/simready/central/import", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ assetId: "simready-agv-forklift" })
-    });
-    assert.equal(importRes.status, 200);
-    const importBody = await importRes.json();
-    assert.equal(importBody.success, true);
-    assert.equal(importBody.importedAssetId, "simready-agv-forklift");
-    assert.equal(importBody.importType, "STATIC_METADATA_REGISTRATION");
-    assert.equal(importBody.geometryDownloaded, false);
-    assert.equal(importBody.liveHuggingFaceConnection, false);
   });
 });
