@@ -163,3 +163,88 @@ export function extractCorrectionLesson(value) {
     confidence: 0.75
   };
 }
+
+
+/**
+ * Multi-hop semantic graph recall adapted from the Cerebro graph concept.
+ *
+ * This operates only on rows already fetched by ULTRON's account-scoped memory
+ * repository. ownerId is mandatory: linked IDs from another account are never
+ * resolved. Relationships live in existing JSON metadata, so no schema
+ * migration or second memory database is introduced.
+ *
+ * Supported metadata:
+ *   relatedMemoryIds: ["memory-id"]
+ *   relationships: [{ memoryId: "memory-id", relation: "supports" }]
+ */
+export function recallCognitiveMemoryGraph(items, query, {
+  ownerId,
+  now = Date.now(),
+  limit = 8,
+  maxDepth = 2
+} = {}) {
+  if (!Array.isArray(items) || typeof ownerId !== "string" || !ownerId.trim()) return [];
+
+  const scoped = items.filter(item =>
+    item && typeof item === "object" &&
+    (item.user_id === ownerId || item.owner_id === ownerId) &&
+    typeof item.id === "string" && item.id.length > 0
+  );
+  if (!scoped.length) return [];
+
+  const byId = new Map(scoped.map(item => [item.id, item]));
+  const rankedSeeds = rankCognitiveMemories(scoped, query, { now, limit: Math.max(limit, 1) });
+  const queue = rankedSeeds.map(item => ({ id: item.id, depth: 0, relation: "query_match" }));
+  const visited = new Map();
+  const depthLimit = Math.max(0, Math.min(3, Math.trunc(maxDepth) || 0));
+
+  while (queue.length && visited.size < 64) {
+    const current = queue.shift();
+    if (!current || visited.has(current.id) || !byId.has(current.id)) continue;
+    visited.set(current.id, current);
+    if (current.depth >= depthLimit) continue;
+
+    const item = byId.get(current.id);
+    const metadata = objectOrEmpty(item.metadata);
+    const links = [];
+    if (Array.isArray(metadata.relatedMemoryIds)) {
+      for (const memoryId of metadata.relatedMemoryIds) {
+        if (typeof memoryId === "string") links.push({ memoryId, relation: "related_to" });
+      }
+    }
+    if (Array.isArray(metadata.relationships)) {
+      for (const edge of metadata.relationships) {
+        if (edge && typeof edge.memoryId === "string") {
+          links.push({
+            memoryId: edge.memoryId,
+            relation: typeof edge.relation === "string" ? edge.relation.slice(0, 48) : "related_to"
+          });
+        }
+      }
+    }
+    for (const edge of links) {
+      if (byId.has(edge.memoryId) && !visited.has(edge.memoryId)) {
+        queue.push({ id: edge.memoryId, depth: current.depth + 1, relation: edge.relation });
+      }
+    }
+  }
+
+  const discovered = [...visited.values()]
+    .map(entry => {
+      const item = byId.get(entry.id);
+      const ranked = rankedSeeds.find(seed => seed.id === entry.id);
+      return {
+        ...(ranked || item),
+        graphDepth: entry.depth,
+        graphRelation: entry.relation
+      };
+    });
+
+  return discovered
+    .sort((a, b) =>
+      (a.graphDepth - b.graphDepth) ||
+      ((b.cognitiveScore || 0) - (a.cognitiveScore || 0)) ||
+      (memoryUpdatedAt(b) - memoryUpdatedAt(a))
+    )
+    .slice(0, Math.max(0, Math.min(32, Math.trunc(limit) || 0)));
+}
