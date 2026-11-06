@@ -39,11 +39,14 @@ The Windows companion can receive ULTRON device-queue commands after it has been
 The device ID and device token returned by the pairing claim are stored together using Windows DPAPI with current-user scope. Every queued command's HMAC-SHA256 signature is checked locally before an action is executed. The companion does not accept arbitrary shell commands, PowerShell, executable paths supplied by a caller, or unsigned commands.
 
 Supported actions are deliberately limited:
-- Launch or gracefully close a small, hard-coded allowlist of desktop apps.
+- Launch or gracefully close a small, hard-coded allowlist of desktop apps. Repeated delivery of the same launch command ID is suppressed before a second process can start.
 - Set system volume, send basic media keys, or lock the workstation.
 - Read basic machine/runtime vitals and display a Windows tray notification.
-- List/read small text files under `Documents/ULTRON Shared` only. File reads are limited to 64 KB and common text formats.
+- List folders and search for names only under `Documents/ULTRON Shared`; symbolic links and Windows reparse points are rejected.
+- Read small text files under `Documents/ULTRON Shared` only. File reads are limited to 64 KB and common text formats.
+- Inspect, stop, and retrieve bounded status records for processes launched and tracked by ULTRON. GUI app launches do not expose arbitrary process output or shell streams. The recent task-result history is limited to 100 records.
+- Send an authenticated presence heartbeat every 25 seconds while remote-command polling is enabled. A successful heartbeat refreshes the server-side device-presence timestamp; failed authentication or storage responses stop that polling cycle.
 
 Screen capture is disabled for privacy. Unlocking Windows, waking a suspended/powered-off machine, arbitrary shell execution, and general filesystem browsing are not supported. A failed/unsupported action is reported back as a failed task rather than being marked complete.
 
-For remote file access, create `Documents/ULTRON Shared` and place only files you explicitly intend to expose to ULTRON there. Keep the companion running and leave the opt-in enabled to receive commands.
+For remote file access, create `Documents/ULTRON Shared` and place only files you explicitly intend to expose to ULTRON there. Keep the companion running and leave the opt-in enabled to receive commands. Disabling the opt-in also stops presence heartbeats, so the PC will age to offline in ULTRON's device list.
