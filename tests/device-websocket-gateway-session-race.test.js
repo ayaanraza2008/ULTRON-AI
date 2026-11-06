@@ -134,3 +134,21 @@ test("production WebSocket authentication accepts a device belonging to the conf
   assert.equal(hub.imported.ownerUserId, "owner-a");
   gateway.close();
 });
+
+test("configured owner policy also protects the development-only legacy token path", async () => {
+  const hub = {
+    pairedDevices: new Map(),
+    registerEventListener() { return () => {}; },
+    findDeviceByToken() {
+      return { id: "legacy-device", ownerUserId: "owner-b", status: "active" };
+    }
+  };
+  const gateway = new DeviceWebSocketGateway({
+    deviceHub: hub,
+    env: { NODE_ENV: "development", ULTRON_OWNER_USER_ID: "owner-a" },
+    logger: { warn() {}, error() {} }
+  });
+
+  assert.equal(await gateway.authenticateToken("legacy-token"), null);
+  gateway.close();
+});
