@@ -224,6 +224,7 @@ export class TelephonyBrain {
               message: "The multi-device manager is not configured."
             };
         const unlockedCount = Number.isFinite(mobileResult?.unlockedCount) ? mobileResult.unlockedCount : 0;
+        const hasExplicitTarget = Number.isFinite(mobileResult?.targetedCount) || Number.isFinite(mobileResult?.totalTargeted);
         const totalTargeted = Number.isFinite(mobileResult?.targetedCount)
           ? mobileResult.targetedCount
           : Number.isFinite(mobileResult?.totalTargeted)
@@ -234,7 +235,9 @@ export class TelephonyBrain {
           ? "No mobile devices confirmed an unlock. " + (mobileResult?.message || mobileResult?.error || "")
           : unlockedCount < totalTargeted
             ? `ULTRON unlocked ${unlockedCount} of ${totalTargeted} targeted mobile devices. The remaining devices did not confirm the action.`
-            : `ULTRON unlocked ${unlockedCount} mobile devices.`;
+            : hasExplicitTarget
+              ? `ULTRON unlocked ${unlockedCount} of ${totalTargeted} targeted mobile devices.`
+              : `ULTRON unlocked ${unlockedCount} mobile devices.`;
         return {
           permitted: true,
           intent: classification.intent,
