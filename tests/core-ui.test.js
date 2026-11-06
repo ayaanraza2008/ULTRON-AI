@@ -19,36 +19,48 @@ async function startProxy(t, options = {}) {
   return "http://127.0.0.1:" + proxy.address().port;
 }
 
-test("backend and proxy do not expose frontend static assets", () => {
+test("backend stays API-only while the interface proxy serves an explicit static allowlist", () => {
   assert.doesNotMatch(serverSource, /express\.static\s*\(/);
   assert.doesNotMatch(serverSource, /app\.use\s*\(\s*["']\/voice["']/);
   assert.ok(serverSource.includes('app.get("/service-worker.js"'));
-  assert.doesNotMatch(proxySource, /STATIC_ASSETS|serveAsset/);
-  assert.ok(serverSource.includes('app.get("/service-worker.js"'));
+  assert.match(proxySource, /STATIC_ASSETS/);
+  assert.match(proxySource, /serveAsset/);
+  assert.ok(proxySource.includes('"/particle-swarm-engine.js"'));
   assert.ok(serverSource.includes("ultron-core-shell-"));
 });
 
-test("API proxy health remains available and the root is API-only", async t => {
+test("interface root and API proxy health are both available", async t => {
   const base = await startProxy(t);
   const health = await fetch(base + "/healthz");
   assert.equal(health.status, 200);
   assert.deepEqual(await health.json(), { status: "ok", service: "ultron-api-proxy" });
   const root = await fetch(base + "/");
-  assert.equal(root.status, 404);
-  assert.equal((await root.json()).error.code, "FRONTEND_REMOVED");
+  assert.equal(root.status, 200);
+  assert.match(root.headers.get("content-type") || "", /^text\/html/);
+  assert.match(await root.text(), /ULTRON AI/);
 });
 
-test("HTML, JS, CSS, manifest and icon paths are no longer served", async t => {
+test("required core interface assets are served locally without reaching the API", async t => {
   const calls = [];
   const base = await startProxy(t, { fetchImpl: async (...args) => {
     calls.push(args);
     return new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } });
   }});
-  for (const path of ["/index.html", "/app.js", "/styles.css", "/manifest.webmanifest", "/icons/icon-512.png"]) {
+  const expected = [
+    ["/index.html", "text/html"],
+    ["/app.js", "javascript"],
+    ["/styles.css", "text/css"],
+    ["/particle-swarm-engine.js", "javascript"],
+    ["/favicon.svg", "image/svg+xml"]
+  ];
+  for (const [path, type] of expected) {
     const response = await fetch(base + path);
-    assert.equal(response.status, 404, path);
-    assert.equal((await response.json()).error.code, "FRONTEND_REMOVED", path);
+    assert.equal(response.status, 200, path);
+    assert.ok((response.headers.get("content-type") || "").includes(type), path);
+    assert.ok((await response.arrayBuffer()).byteLength > 0, path);
   }
+  const missing = await fetch(base + "/manifest.webmanifest");
+  assert.equal(missing.status, 404);
   assert.equal(calls.length, 0);
 });
 
