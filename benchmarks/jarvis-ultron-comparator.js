@@ -525,15 +525,15 @@ export class JarvisUltronCapabilityComparator {
       `2. **Cloud persistence:** Review and apply the missing Supabase schema only after explicit production approval; verify restart durability.`,
       `3. **Windows and Android clients:** Install, pair, verify permissions, ACK, reconnect and revocation on real devices.`,
       `4. **Voice and vision:** Verify real microphone, speaker, camera and screen permission flows on supported devices.`,
-      `5. **Production release:** Keep PR #478 unmerged and Render deployment locked until the owner explicitly authorizes it.`
+      `5. **Production release:** Keep PR #478 unmerged and Render deployment locked until the owner explicitly authorizes it.`,
       ``,
       `---`,
       ``,
-      `## 2. FICTIONAL / PHYSICALLY IMPOSSIBLE ITEMS (HONESTLY IDENTIFIED)`,
+      `## 2. PRODUCT BOUNDARIES`,
       ``,
-      `1. Fictional sentient AI consciousness: Scientifically non-existent; replaced by deterministic LLM heuristics.`,
-      `2. Nanotech physical assembly: Physically impossible with current manufacturing technology.`,
-      `3. Unrestricted global network hacking: Barred by ethical guidelines and legal boundaries.`
+      `1. Human-like sentience is not claimed; ULTRON is a software AI system whose outputs depend on configured models and tools.`,
+      `2. External actions remain permission-gated, auditable and subject to owner authorization.`,
+      `3. Live integrations are reported as unverified until authenticated end-to-end acceptance evidence exists.`
     ];
 
     fs.writeFileSync(path.join(docsDir, "ULTRON_REMAINING_BLOCKERS.md"), blockersMd.join("\n"), "utf8");
