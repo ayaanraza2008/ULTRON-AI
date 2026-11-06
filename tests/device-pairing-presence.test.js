@@ -270,3 +270,18 @@ test("owner-authorized token rotation clears an in-memory revocation tombstone",
   assert.notEqual(rotated.newDeviceToken, token);
   assert.equal(hub.authenticateDevice(device.id, rotated.newDeviceToken), device);
 });
+
+test("device authentication never falls back to timing-variable plaintext token comparison", () => {
+  const hub = new DeviceHub({ env: {} });
+  const token = "ultron_dev_" + "h".repeat(64);
+  hub.pairedDevices.set("legacy-plaintext-only", {
+    id: "legacy-plaintext-only",
+    ownerUserId: "owner-plaintext",
+    status: "active",
+    authToken: token
+    // No tokenHash: legacy plaintext-only records must fail closed.
+  });
+
+  assert.equal(hub.authenticateDevice("legacy-plaintext-only", token), null);
+  assert.equal(hub.findDeviceByToken(token), null);
+});
