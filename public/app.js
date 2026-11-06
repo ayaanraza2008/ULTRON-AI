@@ -4,8 +4,17 @@ const $ = selector => document.querySelector(selector);
 const app = $("#app");
 const canvas = $("#energy-core");
 const engine = createParticleEngine(canvas);
+
+function preferredInteractionMode() {
+  try {
+    return window.localStorage.getItem("ultron-interaction-mode") === "text" ? "text" : "voice";
+  } catch {
+    return "voice";
+  }
+}
+
 const state = {
-  mode: "voice",
+  mode: preferredInteractionMode(),
   status: "standby",
   authenticated: false,
   session: null,
@@ -107,6 +116,11 @@ function setConnection(online, label) {
 
 function setMode(mode) {
   state.mode = mode === "text" ? "text" : "voice";
+  try { window.localStorage.setItem("ultron-interaction-mode", state.mode); } catch {}
+  if (state.mode === "text") {
+    if (state.recognition) state.recognition.stop();
+    stopSpeech();
+  }
   app.dataset.mode = state.mode;
   $("#voice-mode").classList.toggle("is-active", state.mode === "voice");
   $("#text-mode").classList.toggle("is-active", state.mode === "text");
@@ -400,6 +414,9 @@ function setBusy(busy) {
 async function sendMessage(rawText, attachments = []) {
   const text = String(rawText || "").trim();
   if ((!text && attachments.length === 0) || state.busy) return;
+  // Spoken output belongs to the mode in which this message was submitted.
+  // Switching modes while a provider is responding must not make a text reply audible.
+  const responseMode = state.mode;
   state.requestController = new AbortController();
   setBusy(true);
   setStatus("thinking", "Processing your request.", "Connecting to the ULTRON intelligence runtime");
@@ -429,7 +446,7 @@ async function sendMessage(rawText, attachments = []) {
     await persistMessage("assistant", answer);
     const source = [result.provider, result.model || state.model].filter(Boolean).join(" · ");
     setStatus("standby", "Response received.", source || "ULTRON ready");
-    if (state.mode === "voice" && state.preferences.voice_enabled && !state.muted) speak(answer);
+    if (responseMode === "voice" && state.preferences.voice_enabled && !state.muted) speak(answer);
   } catch (error) {
     if (error?.name === "AbortError") {
       setStatus("standby", "Request stopped.", "You can send another message");
@@ -1195,6 +1212,6 @@ $("#task-form").addEventListener("submit", event => void queueEmployeeTask(event
 $("#document-upload").addEventListener("click", () => $("#document-input").click());
 $("#document-input").addEventListener("change", event => void uploadDocument(event.target.files));
 
-setMode("voice");
+setMode(state.mode);
 setStatus("standby", "ULTRON is initializing.", "Establishing secure connection");
 void bootstrap();
