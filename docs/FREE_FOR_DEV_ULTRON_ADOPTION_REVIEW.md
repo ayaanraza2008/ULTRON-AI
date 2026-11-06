@@ -78,3 +78,17 @@ Added `.github/workflows/production-uptime.yml` using the existing GitHub Action
 - Retries transient cold-start/network failures, validates the JSON status and app identity, and fails the workflow on an unhealthy response.
 - GitHub Actions run history and its configured repository notifications provide the failure signal; this does not create a separate paging/on-call service.
 - This schedule becomes active only after the workflow is merged into the repository's default branch. It has not been activated from this draft branch.
+
+
+## Security remediation — REA Gateway nested Zod advisory
+
+A production build log showed six npm advisories (four moderate, two high) for the REA Gateway dependency install. The package tree was traced to `rea-agents@6.8.0`, which pins nested `zod@4.4.3`. GitHub Advisory GHSA-mrhx-c7xc-m3w5 affects Zod versions below 4.6.6; 4.6.6 is patched and 4.6.7 is the current stable release checked during this review.
+
+Remediation staged on this branch:
+
+- Add a scoped npm override under `rea-agents` to use `zod@4.6.7`; do not globally override unrelated application dependencies.
+- CI installs the REA production dependency tree, asserts the nested Zod version, runs `npm audit --omit=dev --audit-level=high`, and syntax-checks the gateway.
+- Render Blueprint's REA build command repeats the dependency-tree and high-severity audit gates so an unsafe dependency tree cannot be promoted by a normal build.
+- The exact runtime exposure is not asserted; this is a dependency-level vulnerability remediation.
+
+This change remains unverified until the CI job and a Render build complete successfully. Do not mark the advisory resolved solely because the override is present in package.json.
