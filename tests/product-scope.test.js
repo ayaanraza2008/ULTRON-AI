@@ -9,10 +9,12 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 test("personal AI product surface contains no robot runtime or API routes", () => {
   const router = fs.readFileSync(path.join(root, "jarvis-router.js"), "utf8");
   const deviceManager = fs.readFileSync(path.join(root, "integrations", "multi-device-manager.js"), "utf8");
+  const toolRegistry = fs.readFileSync(path.join(root, "core", "tool-registry.js"), "utf8");
 
   assert.doesNotMatch(router, /\/jarvis\/robotics\//i);
   assert.doesNotMatch(router, /from\s+["']\.\/robotics\//i);
   assert.doesNotMatch(deviceManager, /ROBOT_NODE|robot_node/i);
+  assert.doesNotMatch(toolRegistry, /robotic|robotics|simready|actuation/i);
   assert.equal(fs.existsSync(path.join(root, "robotics")), false);
 });
 
