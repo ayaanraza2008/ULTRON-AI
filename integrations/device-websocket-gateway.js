@@ -53,21 +53,35 @@ function parseFrame(buffer) {
   const isFinal = (firstByte & 0x80) !== 0;
   const opcode = firstByte & 0x0f;
   const isMasked = (secondByte & 0x80) !== 0;
+
+  // This gateway negotiates no extensions and supports complete text/control
+  // frames only. Reject malformed or unsupported client frames before parsing
+  // their payload so protocol ambiguity cannot reach the command handler.
+  if ((firstByte & 0x70) !== 0) throw new Error("WebSocket reserved bits must be zero.");
+  if (![0x1, 0x8, 0x9, 0xa].includes(opcode)) throw new Error("Unsupported WebSocket opcode.");
+  if (!isMasked) throw new Error("Client WebSocket frames must be masked.");
+  if (!isFinal) throw new Error("Fragmented WebSocket frames are not supported.");
+
   let payloadLength = secondByte & 0x7f;
   let offset = 2;
 
   if (payloadLength === 126) {
     if (buffer.length < 4) return null;
     payloadLength = buffer.readUInt16BE(2);
+    if (payloadLength < 126) throw new Error("Non-canonical WebSocket payload length.");
     offset = 4;
   } else if (payloadLength === 127) {
     if (buffer.length < 10) return null;
     const bigLen = buffer.readBigUInt64BE(2);
-    if (bigLen > BigInt(MAX_FRAME_PAYLOAD)) {
-      throw new Error("Frame payload exceeds safety limit.");
+    if (bigLen < 65536n || bigLen > BigInt(MAX_FRAME_PAYLOAD)) {
+      throw new Error("Invalid or oversized WebSocket payload length.");
     }
     payloadLength = Number(bigLen);
     offset = 10;
+  }
+
+  if ([0x8, 0x9, 0xa].includes(opcode) && payloadLength > 125) {
+    throw new Error("WebSocket control frames cannot exceed 125 bytes.");
   }
 
   let maskingKey = null;
