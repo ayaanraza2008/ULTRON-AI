@@ -1,78 +1,95 @@
-# ULTRON AI — Active Blocker & Dependency Register (Software-Only Scope)
+# ULTRON AI — Active Engineering Blockers
 
-**Audit Date:** 2026-11-04 (Asia/Kolkata)
-**Document Status:** Active Canonical Blocker Register
-**Candidate:** [PR #441](https://github.com/ayaanraza2008/ULTRON-AI/pull/441) — OPEN, CONFLICT-FREE
-**Target Render Workspace:** **Ultron core** (`https://ultron-ai-core.onrender.com`)
-**Production Base:** `main` at `b00c2e81d0ab930f81f0f680e4dc8213fb1b5281`
-**Candidate Engineering Commit SHA:** `39eb955364177c3882798e2949fffcb291d90610`
-**Current PR HEAD:** `8a268dc2aba8a3a342a97f67c1a3d8eddf4caca3`
-**PR CI Merge Ref Checkout:** `refs/remotes/pull/441/merge` (`94f4373`, merging `8a268dc2` into `b00c2e81`)
-**Production Base SHA:** `b00c2e81d0ab930f81f0f680e4dc8213fb1b5281`
-**Exact CI-Tested SHA:** `39eb955364177c3882798e2949fffcb291d90610` (Engineering SHA tested across runs 41784592237 & 41784584970)
+**Evidence refresh:** 2026-11-05 (Asia/Kolkata)  
+**Repository:** `ayaanraza2008/ULTRON-AI`  
+**Production branch:** `main`  
+**Build mission branch:** `feat/ultron-capability-wiring-20261105`  
+**Render workspace:** `Ultron core`
 
----
+> This register distinguishes code work from owner-controlled credentials, cloud settings, and live acceptance. A source adapter, green mocked test, configured URL, or live deploy state is not proof of an operational capability.
 
-## 1. MANDATORY SCOPE STATEMENT
+## P0 — release-critical
 
-> **"ULTRON AI IS A SOFTWARE-ONLY PERSONAL INTELLIGENT ASSISTANT AND AUTONOMOUS OPERATING SYSTEM. PHYSICAL HARDWARE, PHYSICAL ROBOTICS, PHYSICAL HIL AND EXTERNAL DEVICE ACCEPTANCE ARE PERMANENTLY OUT OF SCOPE AND DO NOT COUNT AGAINST SOFTWARE COMPLETION."**
+| Area | Current evidence | Required closure |
+|---|---|---|
+| Live AI text/vision inference | 2026-11-05 audit reports no valid OpenRouter/Groq/Cerebras credentials and configured Gemini credential returning HTTP 401. | Configure a valid free-tier/approved provider credential in the server-side secret store, then run the explicit synthetic model and vision smoke. Never paste keys into chat or commit them. |
+| Durable worker lifecycle | Unit/PG lifecycle tests exist; live queue completion and persistence have not been proven against a disposable authenticated test user. | Run the documented guarded worker smoke with a disposable user; verify enqueue, claim, completion, persisted terminal state, timeout behavior, and cleanup. Do not use production user data. |
+| Approval proof and memory isolation | PR #454 exact head `8eae1eea` binds one-time approvals to exact parameters, distinguishes offline rules from LLM inference, and routes durable memory through owner-scoped AgentMemory; CI passed 1,618/1,621 tests with 0 failures and 3 skips. Shared process-local memory is not used as a cross-user fallback. | Complete human review of the exact diff and verify AgentMemory with a disposable owner and configured endpoint/secret. No credentials are available in this session. |
+| Mobile authorization | PR #447 is now ready for review. Its latest exact-head CI passed 1,614 tests, 0 failed, 3 skipped; World Intelligence build and repository security gate passed. It remains unmerged. | Complete owner review of the exact diff. Keep mobile sensitive actions disabled until the approved code is integrated and authenticated real-device acceptance passes. |
+| Private AppFlowy/Immich reads | Owner-scoped read-only tools are in dependent draft PR #448. Exact head `c209ac2f` passed 1,624/1,627 tests (0 failures, 3 skips) and World Intelligence build. Consent is bound to exact document/search targets; Immich uses DNS-pinned requests, rejects redirects and caps metadata bodies; AppFlowy reads have an 8-second timeout. | Keep draft until #447 is reviewed/merged; verify against real owner-configured endpoints and retain read-only scope. |
+| Production auth protection | Supabase organization is on the Free plan. Current Supabase docs state Leaked Password Protection is Pro+ only; Security Advisor reports it disabled. ULTRON signup already performs a k-anonymity HaveIBeenPwned range check and rejects signup if screening is unavailable. RLS is enabled on all eight inspected public tables. | Do not pay to clear this plan-limited warning. Keep the application-side HIBP screening fail-closed, maintain password length/rate limits, and retain the residual Supabase Auth warning until a paid plan is explicitly approved. |
 
-All physical hardware items (physical robot construction, motors, CAN bus wiring, physical HIL testing, physical Android phone pairing, and physical host peripheral installations) have been **permanently removed** from this register.
+## P1 — operational reliability and integration completion
 
----
+| Area | Current evidence | Required closure |
+|---|---|---|
+| Browser Use gateway | PR #450 diagnostics/readiness branch passed 1,608 tests, 0 failed, 3 skipped. Render logs show 71 startup-smoke outcomes (2026-10-29 to 2026-11-04): 67 failed with `BRIDGE_HTTP_502`, 4 passed; latest observed smoke failed. Individual starts included 5–6 consecutive 502s. | Review retry bounds, cancellation, startup readiness and redaction; run repeated read-only smoke against a fixed public test page. Do not claim stable until repeated runs pass without transient failures. |
+| Render service health | Four services in workspace `Ultron core` were observed live. All four service records returned empty health-check paths. UI service tracks a separate feature branch. | Validate each actual health endpoint and UI/backend compatibility before changing service settings. No UI deletion or backend branch migration. |
+| Frontend-to-backend acceptance | Existing separate command-center frontend is present and live; deploy state does not prove authenticated flows. | Test sign-in, conversation/history persistence, streaming, provider errors, voice, vision consent, and recovery against staging/current services. |
+| Adapter wiring | 2026-11-05 source audit found 46 ToolRegistry IDs and identified source adapters not yet callable end-to-end (AppFlowy, OpenSEO, Immich, OpenViking, AgentMemory and productivity connectors). | Wire each adapter separately with exact owner checks, bounded inputs/responses, timeout/redirect/DNS safety, truthful readiness, and route/ToolRegistry regression tests. Do not expose all adapters at once. |
+| Real voice/vision/device behavior | Kokoro synthesis has prior host verification; CI builds Windows/Android companions. Real wake-word/mic/camera/gesture and device-control acceptance is incomplete. | Verify on the actual target PC/phone with explicit permissions, visible capture state, opt-in camera use, and owner-approved actions. CI compilation is not hardware acceptance. |
+| External optional services | Hermes, OpenViking, Immich, AppFlowy, OpenSEO, OmniVoice/Handy, ComfyUI and others need separate endpoint/configuration/live checks. | Keep each disabled until its own license, credentials, owner isolation, resource limits and live smoke are verified. Never trigger metered actions without an explicit budget. |
 
-## 2. ACTIVE EXTERNAL OWNER DEPENDENCY REGISTER
+## P2 — release hygiene
 
-The following items are **external human owner actions** that reside across the deployment boundary. Zero software engineering blockers remain in the codebase:
+- Reconcile all status documents with merged `main` and exact CI run IDs.
+- Complete the latest CI run for the observed main commit before claiming current-main green.
+- Preserve the existing `public/` frontend and separate `ultron-core-interface` service.
+- Rebase and inspect PR #443 file-by-file; do not merge wholesale. The audit found shared default-user memory, permissive Python/device/network operations, fake biometric success, simulated IoT state and false-positive Telegram delivery.
+- Do not merge PR #442 because it proposes deleting the existing browser frontend.
+- Verify upstream repository commit IDs and licenses before copying third-party code. The 56-repository audit contains invalid commit IDs and must not be treated as verified provenance.
 
-| ID | Priority | Area | Software Status | What Closes It (Owner Action) |
-| :-: | :--- | :--- | :--- | :--- |
-| **BLK-01** | P0 | Supabase Auth Security | K-anonymity breached-password screening implemented locally in `auth-methods.js`. Multi-tenant RLS isolation 100% verified in `tests/supabase-isolation-disposable.test.js` & `tests/supabase-isolation-real-pg.test.js`. | Project owner toggles **Leaked Password Protection** to Enabled in Supabase Dashboard (Authentication -> Attack Protection). |
-| **BLK-02** | P0 | Live Cloud AI Inference | Multi-provider fallback across OpenRouter, Groq, Cerebras, and Gemini Flash fully tested in code; invalid session/OAuth tokens rejected safely across all routes. | Project owner configures valid `OPENROUTER_API_KEY`, `GROQ_API_KEY`, or `AIzaSy...` `GEMINI_API_KEY` in Render Dashboard environment variables. |
-| **BLK-03** | P0 | Live Database Migration | Migration `20261101180000_durable_paired_devices.sql` verified on disposable PostgreSQL. Rollback script `20261101180000_durable_paired_devices.rollback.sql` is explicitly DESTRUCTIVE (drops tables and functions; backup data before execution). | Project owner applies migration file in Supabase SQL Editor upon authorization. |
-| **BLK-04** | P0 | PR #441 Merge Governance | Candidate branch `feat/ultron-final-100-completion` is conflict-free with 6/6 CI checks passing. | Project owner conducts final code review and merges PR #441 to `main`. |
-| **BLK-05** | P1 | Render Blueprint Sync | Reconciled `render.yaml` maps all 4 services to `main` with active health check endpoints. | Project owner syncs Blueprint in Render Dashboard workspace "Ultron core" after merge. |
+## Release boundary
 
----
+- Work on feature branches; do not merge to `main` or deploy to Render without explicit release authorization.
+- Do not mutate production Supabase schema/data, production secrets, or account settings during routine development.
+- Do not create paid subscriptions, spend API credits, or download large local models without explicit approval.
+- Keep messages, bookings, publishing, purchases, destructive actions, security scans and device control behind action-specific owner approval.
+- A blocker closes only when its exact acceptance evidence is recorded; estimates and percentages must not substitute for that evidence.
 
-## 3. PERMANENTLY RESOLVED & CLOSED ITEMS
 
-| Former Item | Resolution & Status |
-| :--- | :--- |
-| **Physical Robotics / HIL** | **CLOSED (OUT OF SCOPE):** Kinematic solver, Cartesian geofencing, software latching E-Stop, and digital twin are 100% verified in software. Physical robotics is permanently out of scope. |
-| **Physical Android Pairing** | **CLOSED (OUT OF SCOPE):** Android Kotlin companion builds cleanly in automated CI with v2 signature verification. Physical handset pairing is permanently out of scope. |
-| **Physical Windows Install** | **CLOSED (OUT OF SCOPE):** .NET 8 WPF companion compiles and publishes as a self-contained single-file executable in CI. Physical PC installation is permanently out of scope. |
-| **Kokoro 82M TTS Inference** | **CLOSED (VERIFIED ON HOST):** Real ONNX model (`models/kokoro/kokoro-v1.0.onnx`) verified on host AMD Ryzen 7 5700U; generates 24kHz PCM WAV in <1.0s. |
-| **Browser Use Runtime** | **CLOSED (VERIFIED IN CI):** Playwright Chromium installation, real process launch, and SSRF security policies verified in CI and local tests. |
-| **Security Quality Gate** | **CLOSED (0 FINDINGS):** Master security pipeline passes with 0 confirmed vulnerabilities, 0 risks, and 0 secrets. |
-| **Multi-Tenant RLS Testing** | **CLOSED (100% PASS):** Genuine PostgreSQL engine-level RLS harness (`tests/supabase-isolation-real-pg.test.js`) and in-process disposable Supabase test server verify User A vs User B auth, RLS read/write/delete isolation, anti-IDOR, and 401 unauth with 0 production mutations. |
-| **Docker Sandbox Detection** | **CLOSED (VERIFIED IN CI):** Dynamic host probing runs real containers on Docker-enabled runners, and fails closed safely with `CODE_SANDBOX_DISABLED` when absent. |
-| **Missing Runner Directories** | **CLOSED (FIXED IN 03175918):** `SystemControlAgent.organizeFolder` and tool registry handle missing headless Linux runner directories gracefully. |
+## Fresh Render observation — 2026-11-05 06:20 UTC
 
----
+Read-only inspection of the confirmed Ultron core workspace found four existing Free-plan services. ultron-ai-core, ultron-browser-use-core, and ultron-rea-gateway track main; ultron-core-interface still tracks feature/ultron-live-core-interface-20261029. All four live service records have an empty healthCheckPath, while candidate render.yaml defines /api/health, /health, /healthz, and / respectively. The Blueprint has not been reconciled to the active service settings.
 
-## 4. LATEST AUTOMATION EVIDENCE
+The three backend services have recent successful deploy events from 81dd9b9e81bf35c5e49e152113e0991fe7362010 (2026-11-04 around 21:41 UTC). The queried 24.5-hour Render metrics returned no HTTP request or latency samples; the final-hour app/request log query returned no entries. Three services showed some memory samples. Empty metrics/logs are not proof of an outage, but do not establish live usage or end-to-end acceptance either.
 
-- **Node Test Suite:** 202 test files; Linux CI: **1,423 discovered: 1,422 passed, 0 failed, 1 skipped** (`tests/supabase-isolation.e2e.test.js:299` protecting live production DB). On Windows host without PostgreSQL service: 1,388 passed, 0 failed, 6 skipped.
-- **Python Test Suites:** 44 discovered; Linux CI: **44 passed, 0 failed, 0 skipped**. On Windows host: 42 passed, 0 failed, 2 skipped (Windows non-admin symlink restrictions in `test_harness2.py`).
-- **Combined Automation Tests:** Linux CI: **1,467 discovered: 1,466 passed, 0 failed, 1 skipped** (100.0% pass rate on executed tests). Windows host: 1,438 discovered: 1,430 passed, 0 failed, 8 skipped.
-- **Syntax Check:** **357 / 357 files clean** (`node scripts/check-syntax.mjs`)
-- **Security Audit:** **0 confirmed vulnerabilities, 0 risks, 0 secrets (PASSED)** (`npm run security:report`)
-- **PostgreSQL CI Activation:** Disposable `postgres:15` service container, health checks, isolated test DB provisioner (`scripts/provision-test-databases.mjs`), and fail-closed CI assertions (`assert.fail` when `CI=true`)
-- **Four PostgreSQL Suites:**
-  1. Multi-Tenant RLS Security (`tests/supabase-isolation-real-pg.test.js`)
-  2. Paired Device Migration & Rollback (`tests/paired-device-migration.test.js`)
-  3. Worker Task Queue Lifecycle (`tests/worker-queue-lifecycle.test.js`)
-  4. Real Worker Runtime Process (`tests/worker-runtime-process.test.js`)
-- **Real Worker Runtime Verification:** Process-level integration test (`tests/worker-runtime-process.test.js`) verifying `startWorker` runtime process loop against disposable DBs (`ultron_test_worker`, `ultron_test_runtime`), task claiming with `FOR UPDATE SKIP LOCKED`, execution dispatch, PostgreSQL persistence, audit logging, lease renewal, stale recovery, and graceful shutdown.
-- **Disposable Harness Safety:** `tests/disposable-pg-safety.test.js` 6/6 tests passing; zero fallback to production env vars, host allowlist, Supabase cloud rejection, and credentials sanitization.
-- **Root Dependency Audit:** **0 vulnerabilities** (`npm audit --omit=dev --audit-level=high`)
-- **GitHub Actions Workflows (All 6 Checks Passing on PR #441):**
-  - **4 PR-Triggered Checks:**
-    - `test`: [Run 41784592237](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41784592237) — PASS (3m 26s)
-    - `world-intelligence-build`: [Run 41784592237](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41784592237) — PASS (49s)
-    - `build-android-companion`: [Run 41784592162](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41784592162) — PASS (1m 39s)
-    - `build-windows-companion`: [Run 41784592133](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41784592133) — PASS (55s)
-  - **2 Push-Triggered Checks:**
-    - `test`: [Run 41784584970](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41784584970) — PASS (2m 57s)
-    - `world-intelligence-build`: [Run 41784584970](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41784584970) — PASS (41s)
+Required closure: review the candidate Blueprint diff and secrets, then obtain explicit owner authorization before syncing Render settings. After authorized sync, verify each health endpoint and run authenticated synthetic tests for sign-in, chat/inference, persistence, browser read-only navigation, and gateway authentication. No Render settings or deployments were changed in this audit.
+
+
+## 2026-11-05 12:50 IST live-audit additions
+
+| Priority | Area | Verified state | Closure |
+|---|---|---|---|
+| P0 | Main branch governance | GitHub reports `main` unprotected; Render backend services auto-deploy on commits. | Configure required PR review and exact-head CI checks in GitHub branch protection/rulesets before enabling normal merges. This settings surface is not available through the connected GitHub actions in this session. |
+| P0 | Supabase migration ledger | Live ledger has 15 applied versions; repository main has mismatched historical filenames and rollback SQL in the active migration directory. | PR #456 aligns the 15 filenames, moves rollback SQL to `supabase/rollback/`, archives the obsolete task-worker scaffold, and adds regression coverage. Exact-head CI passed 1,610/1,613 tests; 3 skipped. Do not run production SQL as part of this code fix. |
+| P0 | Device pairing database | `paired_devices` and `pending_device_pairings` are absent from live Supabase; two additive device migrations are pending in source. | Review migration and required server-side secrets, then apply only in an authorized release with backup/rollback review. |
+| P0 | Render Blueprint source preservation | Live UI service uses `feature/ultron-live-core-interface-20261029`; current Blueprint previously proposed `main`. | PR #457 preserves the live UI branch and dedicated `/healthz` check. Do not sync Blueprint until exact-head CI and service/secret diff review pass. |
+| P1 | Render health monitoring | Four live service records have empty health-check paths although the Blueprint declares endpoints. | Review and sync health paths only after validating each endpoint and the corrected UI branch. |
+| P1 | Browser Use upstream inference | Repeated `BRIDGE_HTTP_502` responses; a subsequent request sometimes succeeds. | Review/land PR #450 diagnostics and readiness gate, then collect provider/model/status metadata and run repeated read-only smoke tests. Diagnostics do not themselves fix provider availability. |
+| P1 | Supabase leaked-password advisor | Free plan cannot enable Supabase-native leaked-password protection; official docs list Pro+ availability. Application-side HIBP k-anonymity screening is implemented and fails closed. | Keep the free application mitigation. Do not incur Pro charges solely to clear this warning without owner approval. |
+
+Current exact-main CI: [run 41918313167](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41918313167) passed on `81dd9b9e81bf35c5e49e152113e0991fe7362010`.
+
+Recent PR verification:
+- #455: 1,620/1,623 passed, 0 failed, 3 skipped.
+- #456: 1,610/1,613 passed, 0 failed, 3 skipped.
+- #457: exact-head CI pending at the time of this update.
+
+No production migrations, merges, Blueprint synchronization, or deployments were performed.
+
+
+## 2026-11-05 12:55 IST continuation findings
+
+- PR #447 mobile authorization and sparse-array hardening passed exact-head CI: 1,616/1,619 passed, 0 failed, 3 skipped. It remains six commits behind current main and has no physical Android acceptance.
+- PR #458 fixes standard Bearer-token parsing for durable companion devices; exact-head CI passed 1,608/1,611 tests, 0 failed, 3 skipped.
+- Live Supabase data snapshot: 1 conversation, 8 messages, 0 memory items, 0 agent tasks, 0 employee schedules, 0 documents. Treat memory and autonomous task persistence as implemented/schema-present but not live-workflow verified.
+- The live two-account Supabase E2E isolation test is gated by an explicit write-confirmation flag, expected project ref, publishable key, and two dedicated test accounts. It was not run against production.
+- At least 100 open pull requests were returned by GitHub. Triage the dependency graph; do not bulk-merge or bulk-close.
+
+## 2026-11-05 13:10 IST Render operational evidence
+
+- Live Render workspace `Ultron core` confirms four web services. Backend core and REA gateway use `main`; Browser Use bridge uses `main`; UI service uses `feature/ultron-live-core-interface-20261029`. All four currently have auto-deploy-on-commit enabled and empty Render health-check paths. No service settings were changed.
+- Latest observed Browser Use bridge deployment on 2026-11-04 produced one startup smoke success against `openrouter/free`, followed shortly by repeated internal model-gateway HTTP 502 responses and a failed startup smoke with reason `BRIDGE_HTTP_502`. This is concrete evidence of intermittent upstream failure, not proof of a stable browser service.
+- Render logs show the REA gateway install on 2026-11-04 reported 6 npm dependency vulnerabilities (4 moderate, 2 high). The current `rea-gateway/package.json` pins direct `rea-agents` to 6.8.0 but no `rea-gateway/package-lock.json` exists in main. Exact transitive advisory identities are not yet available; do not run a blind `npm audit fix` or force upgrades. Add a reproducible lockfile and capture full audit JSON in an isolated CI branch before changing versions.
+- The REA gateway's own live MCP readiness smoke passed after startup. This verifies its local MCP catalog/demo-analysis/feature-trace path, not every external reverse-engineering provider.
