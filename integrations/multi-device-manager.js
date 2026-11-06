@@ -22,6 +22,28 @@ import {
   createMultiDevicePersistenceAdapter
 } from "./multi-device-persistence.js";
 
+const SENSITIVE_SYNC_KEY_NAMES = new Set([
+  "apikey", "accesstoken", "refreshtoken", "devicetoken", "sessiontoken",
+  "authtoken", "tokenhash", "password", "passwordhash", "passwd",
+  "secret", "secretkey", "clientsecret", "privatekey", "authorization",
+  "cookie", "credentials", "servicerolekey", "supabasekey", "signingsecret"
+]);
+
+function containsSensitiveSyncData(value, seen = new WeakSet()) {
+  if (typeof value === "string") {
+    return /(^|[ \\t])Bearer[ \\t]+[A-Za-z0-9._~+\\/-]{8,}/i.test(value) ||
+      /(^|[^A-Za-z0-9])(?:sk-[A-Za-z0-9]{16,}|gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|sb_secret_[A-Za-z0-9_]{16,})([^A-Za-z0-9]|$)/i.test(value);
+  }
+  if (!value || typeof value !== "object") return false;
+  if (seen.has(value)) return false;
+  seen.add(value);
+  for (const [key, child] of Object.entries(value)) {
+    const normalizedKey = key.toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (SENSITIVE_SYNC_KEY_NAMES.has(normalizedKey) || containsSensitiveSyncData(child, seen)) return true;
+  }
+  return false;
+}
+
 export const DEVICE_TYPES = {
   WINDOWS_PC: "windows_pc",
   WINDOWS_LAPTOP: "windows_laptop",
@@ -932,8 +954,20 @@ export class MultiDeviceManager {
     const cleanKey = stateKey.trim();
 
     // Sensitive data guard: credentials must not be synced as broadcast state
-    const payloadStr = JSON.stringify(payload || {});
-    if (/(?:api_key|authToken|password|tokenHash|bearer\s+[a-z0-9])/i.test(payloadStr)) {
+    // Block credential-shaped property names as well as common bearer/API
+    // token formats, including nested objects and arrays, before state mutation.
+    let containsCredentials = false;
+    try {
+      containsCredentials = containsSensitiveSyncData(payload ?? {});
+      JSON.stringify(payload ?? {}); // Reject circular/BigInt payloads before mutation.
+    } catch {
+      return {
+        success: false,
+        error: "STATE_PAYLOAD_INVALID",
+        message: "Shared state payload must be valid JSON data."
+      };
+    }
+    if (containsCredentials) {
       return {
         success: false,
         error: "SENSITIVE_DATA_BLOCKED",
