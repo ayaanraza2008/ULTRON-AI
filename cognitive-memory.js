@@ -1,5 +1,5 @@
 // Friday-inspired cognitive memory, adapted to ULTRON's existing Supabase schema.
-// This module only ranks and classifies account-owned memories; it never executes tools.
+// This module ranks, classifies, and traverses bounded account-owned memories; it never executes tools.
 const LAYERS = new Set(["working", "short_term", "episodic", "semantic", "procedural", "profile"]);
 const LAYER_WEIGHT = {
   working: 0.6,
@@ -197,8 +197,7 @@ export function recallCognitiveMemoryGraph(items, query, {
   const eligibleMemories = rankCognitiveMemories(scoped, query, { now, limit: Math.min(32, scoped.length) });
   const byId = new Map(eligibleMemories.map(item => [item.id, item]));
   const rankedSeeds = eligibleMemories;
-  // Start from the strongest semantic match; related rows are discovered via graph edges,
-  // rather than being mislabeled as depth-zero seeds just because their text overlaps.
+  // Seed from direct query matches; graph-only context is discovered through explicit edges.
   // Preserve several independent direct matches, then expand linked context.
   // Zero-overlap rows should be discovered through graph edges, not promoted to
   // unrelated query seeds. If the query has no Latin tokens, keep one safe fallback.
