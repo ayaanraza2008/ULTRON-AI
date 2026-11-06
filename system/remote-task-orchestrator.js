@@ -295,14 +295,14 @@ export class RemoteTaskOrchestrator {
         }
 
         case "EMERGENCY_STOP": {
-          reportStep("Step 2: Transmitting EMERGENCY STOP directive to Windows PC and fleet...");
+          reportStep("Step 2: Transmitting EMERGENCY STOP directive to the connected Windows companion...");
           if (this.windowsDesktopAgent) {
             executionResult = await this.windowsDesktopAgent.executeCommand("emergency_stop", payload);
             reportStep(executionResult?.success === false
-              ? "Step 3: Emergency stop command failed: " + (executionResult?.message || executionResult?.error || "unknown error")
-              : "Step 3: Emergency stop command acknowledged by the Windows agent.");
+              ? "Step 3: Windows emergency stop failed: " + (executionResult?.message || executionResult?.error || "unknown error")
+              : "Step 3: Emergency stop acknowledged by the Windows companion; other devices were not targeted.");
           } else {
-            executionResult = { success: false, error: "WINDOWS_AGENT_UNAVAILABLE", message: "Windows desktop companion is not connected or registered. Emergency stop could not be delivered to PC." };
+            executionResult = { success: false, error: "WINDOWS_AGENT_UNAVAILABLE", message: "Windows desktop companion is not connected or registered. No device received an emergency stop command." };
             reportStep("Step 3: Emergency stop failed: Windows companion unavailable.");
           }
           break;
