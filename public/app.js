@@ -12,7 +12,8 @@ const state = {
   authMode: "supabase",
   persona: "ultron",
   model: "",
-  preferences: { voice_input_locale: "en-IN", voice_enabled: true, memory_enabled: true },
+  preferences: { voice_input_locale: "en-IN", voice_enabled: true, memory_enabled: true, voice_output_name: "", voice_output_lang: "" },
+  speechVoices: [],
   preferenceAvailable: false,
   models: [],
   history: [],
@@ -449,6 +450,33 @@ async function sendMessage(rawText, attachments = []) {
   }
 }
 
+function refreshSpeechVoices() {
+  const select = $("#voice-output-select");
+  if (!select) return;
+  const supported = "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
+  const voices = supported ? window.speechSynthesis.getVoices() : [];
+  state.speechVoices = voices.slice().sort((a, b) =>
+    (a.lang + a.name).localeCompare(b.lang + b.name)
+  );
+  select.replaceChildren();
+  const defaultOption = document.createElement("option");
+  defaultOption.value = "";
+  defaultOption.textContent = voices.length ? "System default" : "No browser voices available";
+  select.append(defaultOption);
+  state.speechVoices.forEach((voice, index) => {
+    const option = document.createElement("option");
+    option.value = String(index);
+    option.textContent = voice.name + " (" + voice.lang + ")";
+    select.append(option);
+  });
+  const selectedIndex = state.speechVoices.findIndex(voice =>
+    voice.name === state.preferences.voice_output_name &&
+    (!state.preferences.voice_output_lang || voice.lang === state.preferences.voice_output_lang)
+  );
+  select.value = selectedIndex >= 0 ? String(selectedIndex) : "";
+  select.disabled = !state.preferenceAvailable || state.speechVoices.length === 0;
+}
+
 function speak(text) {
   if (!("speechSynthesis" in window) || !("SpeechSynthesisUtterance" in window)) {
     toast("Spoken output is not supported by this browser.");
@@ -460,9 +488,15 @@ function speak(text) {
   utterance.pitch = state.persona === "naya" ? 1.0 : 0.88;
   utterance.volume = 0.92;
   const voices = window.speechSynthesis.getVoices();
-  const locale = state.preferences.voice_input_locale === "hi-IN" ? "hi-IN" : "en-IN";
-  const matching = voices.find(voice => voice.lang.toLowerCase() === locale.toLowerCase())
+  const selected = voices.find(voice =>
+    voice.name === state.preferences.voice_output_name &&
+    (!state.preferences.voice_output_lang || voice.lang === state.preferences.voice_output_lang)
+  );
+  const locale = state.preferences.voice_output_lang ||
+    (state.preferences.voice_input_locale === "hi-IN" ? "hi-IN" : "en-IN");
+  const matching = selected || voices.find(voice => voice.lang.toLowerCase() === locale.toLowerCase())
     || voices.find(voice => voice.lang.toLowerCase().startsWith(locale.slice(0, 2).toLowerCase()));
+  utterance.lang = matching?.lang || locale;
   if (matching) utterance.voice = matching;
   utterance.onstart = () => {
     state.speaking = true;
@@ -686,25 +720,32 @@ async function loadPreferences() {
     $("#memory-toggle").disabled = true;
     $("#speech-toggle").disabled = true;
     $("#locale-select").disabled = true;
+    $("#voice-output-select").disabled = true;
     return;
   }
   try {
     const result = await api("/api/preferences");
     const preferences = result.preferences || {};
+    const accountPreferences = preferences.preferences && typeof preferences.preferences === "object" && !Array.isArray(preferences.preferences)
+      ? preferences.preferences : {};
     state.preferences = {
       voice_input_locale: preferences.voice_input_locale || "en-IN",
       voice_enabled: preferences.voice_enabled !== false,
-      memory_enabled: preferences.memory_enabled !== false
+      memory_enabled: preferences.memory_enabled !== false,
+      voice_output_name: typeof accountPreferences.voice_output_name === "string" ? accountPreferences.voice_output_name : "",
+      voice_output_lang: typeof accountPreferences.voice_output_lang === "string" ? accountPreferences.voice_output_lang : ""
     };
     state.preferenceAvailable = true;
     $("#locale-select").value = state.preferences.voice_input_locale;
     setSwitch($("#memory-toggle"), state.preferences.memory_enabled);
     setSwitch($("#speech-toggle"), state.preferences.voice_enabled);
+    refreshSpeechVoices();
   } catch {
     state.preferenceAvailable = false;
     $("#memory-toggle").disabled = true;
     $("#speech-toggle").disabled = true;
     $("#locale-select").disabled = true;
+    $("#voice-output-select").disabled = true;
     $("#runtime-note").textContent = "Account preferences could not be loaded. Settings are not shown as saved.";
   }
 }
@@ -1002,13 +1043,20 @@ async function savePreferences() {
       body: {
         voice_input_locale: state.preferences.voice_input_locale,
         voice_enabled: state.preferences.voice_enabled,
-        memory_enabled: state.preferences.memory_enabled
+        memory_enabled: state.preferences.memory_enabled,
+        voice_output_name: state.preferences.voice_output_name || "",
+        voice_output_lang: state.preferences.voice_output_lang || ""
       }
     });
     const saved = result.preferences || {};
     state.preferences.voice_input_locale = saved.voice_input_locale || state.preferences.voice_input_locale;
     state.preferences.voice_enabled = saved.voice_enabled !== false;
     state.preferences.memory_enabled = saved.memory_enabled !== false;
+    const accountPreferences = saved.preferences && typeof saved.preferences === "object" && !Array.isArray(saved.preferences)
+      ? saved.preferences : {};
+    state.preferences.voice_output_name = typeof accountPreferences.voice_output_name === "string" ? accountPreferences.voice_output_name : "";
+    state.preferences.voice_output_lang = typeof accountPreferences.voice_output_lang === "string" ? accountPreferences.voice_output_lang : "";
+    refreshSpeechVoices();
     toast("Preferences saved.");
   } catch (error) {
     toast(apiErrorMessage(error, "Preferences could not be saved."), "error");
@@ -1178,6 +1226,13 @@ $("#locale-select").addEventListener("change", event => {
   if (state.recognition) state.recognition.stop();
   void savePreferences();
 });
+$("#voice-output-select").addEventListener("change", event => {
+  const index = event.target.value === "" ? -1 : Number(event.target.value);
+  const selected = Number.isInteger(index) && index >= 0 ? state.speechVoices[index] : null;
+  state.preferences.voice_output_name = selected?.name || "";
+  state.preferences.voice_output_lang = selected?.lang || "";
+  void savePreferences();
+});
 $("#memory-toggle").addEventListener("click", () => {
   state.preferences.memory_enabled = !state.preferences.memory_enabled;
   setSwitch($("#memory-toggle"), state.preferences.memory_enabled);
@@ -1195,6 +1250,8 @@ $("#task-form").addEventListener("submit", event => void queueEmployeeTask(event
 $("#document-upload").addEventListener("click", () => $("#document-input").click());
 $("#document-input").addEventListener("change", event => void uploadDocument(event.target.files));
 
+if ("speechSynthesis" in window) window.speechSynthesis.addEventListener("voiceschanged", refreshSpeechVoices);
+refreshSpeechVoices();
 setMode("voice");
 setStatus("standby", "ULTRON is initializing.", "Establishing secure connection");
 void bootstrap();
