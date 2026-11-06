@@ -206,7 +206,21 @@ export class DeviceWebSocketGateway {
 
       return this.deviceHub.importPairedDevice({ ...verified, authToken: token });
     }
-    return this.deviceHub.findDeviceByToken(token);
+    // The development-only process-local token path is still subject to an
+    // explicitly configured owner boundary; it must not bypass single-owner
+    // policy merely because the durable Supabase verifier is disabled.
+    const legacyDevice = this.deviceHub.findDeviceByToken(token);
+    if (!legacyDevice) return null;
+    const configuredOwnerId = String(
+      this.env.ULTRON_OWNER_USER_ID || this.env.ULTRON_INTEGRATION_OWNER_USER_ID || ""
+    ).trim();
+    const isProduction = String(this.env.NODE_ENV || "").toLowerCase() === "production";
+    const legacyOwnerId = String(legacyDevice.ownerUserId || legacyDevice.owner_user_id || "").trim();
+    if ((isProduction && !configuredOwnerId) ||
+        (configuredOwnerId && legacyOwnerId !== configuredOwnerId)) {
+      return null;
+    }
+    return legacyDevice;
   }
 
   /**
