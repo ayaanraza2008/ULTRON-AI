@@ -348,6 +348,9 @@ test("shared-state credential guard blocks nested token variants and invalid JSO
   const mdm = new MultiDeviceManager({ persist: false });
   const blockedPayloads = [
     { access_token: "access-secret" },
+    { token: "opaque-device-credential" },
+    { id_token: "identity-secret" },
+    { jwt: "signed-credential" },
     { nested: { apiKey: "provider-secret" } },
     [{ refresh_token: "refresh-secret" }],
     { headers: { authorization: "Bearer abcdefghijklmnop" } },
