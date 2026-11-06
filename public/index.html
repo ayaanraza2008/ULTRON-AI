@@ -87,7 +87,7 @@
         <button class="icon-button icon-button--dock" id="mute-toggle" type="button" aria-label="Mute voice output" title="Mute voice output">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4h4l5 4V6l-5 4zM17 9l4 6m0-6-4 6"/></svg>
         </button>
-        <button class="icon-button icon-button--dock" id="attach-open" type="button" aria-label="Attach an image" title="Attach image">
+        <button class="icon-button icon-button--dock" id="attach-open" type="button" aria-label="Capture or attach an image" title="Camera / attach image">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m-4 4 4-4 4 4M5 14v5h14v-5"/></svg>
         </button>
       </div>
@@ -96,7 +96,7 @@
         <div class="composer__attachments" id="attachment-list" aria-live="polite"></div>
         <label class="visually-hidden" for="message-input">Message ULTRON</label>
         <textarea id="message-input" rows="1" maxlength="12000" placeholder="Message ULTRON..." autocomplete="off"></textarea>
-        <input id="image-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple hidden>
+        <input id="image-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif" capture="environment" multiple hidden>
         <button class="send-button" id="send-button" type="submit" aria-label="Send message">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 4 16 8-16 8 3-8zM7 12h13"/></svg>
         </button>
