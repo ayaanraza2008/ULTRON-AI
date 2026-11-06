@@ -39,6 +39,7 @@ test("center-only shell keeps the core as the only visible application surface",
   assert.ok(css.includes(".topbar") && css.includes("display: none !important"));
   assert.ok(css.includes(".interaction-dock"));
   assert.ok(css.includes("width: min(88vmin, 920px)"));
+  assert.ok(css.includes("font-family: Arial, \"Segoe UI\", Helvetica, sans-serif !important"));
 });
 
 test("interface root and API proxy health are both available", async t => {
