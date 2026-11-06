@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { MultiDeviceManager } from "../integrations/multi-device-manager.js";
+import { DeviceHub } from "../integrations/device-hub.js";
 
 test("fleet presence uses Android's periodic sync window and the Windows companion heartbeat window", () => {
   const manager = new MultiDeviceManager({ persist: false, seedDefaultFleet: false });
@@ -66,4 +67,52 @@ test("updating a paired Android fleet record refreshes presence and its platform
   assert.equal(manager.isDeviceOnline("presence-android-2"), true);
   assert.equal(manager.getDevice("presence-android-2").heartbeatTimeoutMs, 35 * 60 * 1000);
   assert.equal(manager.getDevice("presence-android-2").battery.percent, 67);
+});
+
+test("DeviceHub fleet import preserves owner identity and imports offline until heartbeat", () => {
+  const hub = new DeviceHub({ env: {} });
+  const pairing = hub.createPairingCode({ name: "Owner Windows", platform: "windows" });
+  const paired = hub.verifyPairingCode(pairing.code, null, "owner-6");
+  assert.equal(paired.success, true);
+
+  const listed = hub.listPairedDevices("owner-6");
+  assert.equal(listed.length, 1);
+  assert.equal(listed[0].ownerUserId, "owner-6");
+  assert.equal(listed[0].online, false);
+
+  const manager = new MultiDeviceManager({ persist: false, seedDefaultFleet: false });
+  const imported = manager.bindWithDeviceHub(hub);
+  assert.equal(imported.success, true);
+  assert.equal(imported.importedCount, 1);
+
+  const device = manager.getDevice(paired.deviceId);
+  assert.equal(device.ownerUserId, "owner-6");
+  assert.equal(device.online, false);
+  assert.equal(manager.isDeviceOnline(paired.deviceId), false);
+
+  assert.equal(hub.heartbeat(paired.deviceId, paired.authToken).success, true);
+  const refreshed = manager.bindWithDeviceHub(hub);
+  assert.equal(refreshed.success, true);
+  assert.equal(manager.getDevice(paired.deviceId).online, true);
+  assert.equal(manager.isDeviceOnline(paired.deviceId), true);
+});
+
+test("DeviceHub fleet import rejects an existing device ID bound to another owner", () => {
+  const hub = new DeviceHub({ env: {} });
+  const pairing = hub.createPairingCode({ name: "Owner Android", platform: "android" });
+  const paired = hub.verifyPairingCode(pairing.code, null, "owner-7");
+  assert.equal(paired.success, true);
+
+  const manager = new MultiDeviceManager({ persist: false, seedDefaultFleet: false });
+  manager.registerDevice({
+    id: paired.deviceId,
+    ownerUserId: "different-owner",
+    platform: "android",
+    online: false
+  });
+
+  const result = manager.bindWithDeviceHub(hub);
+  assert.equal(result.success, false);
+  assert.equal(result.error, "DEVICE_OWNER_MISMATCH");
+  assert.equal(manager.getDevice(paired.deviceId).ownerUserId, "different-owner");
 });
