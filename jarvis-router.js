@@ -1596,7 +1596,10 @@ export function createJarvisRouter({
       }
 
       const lower = raw.toLowerCase();
-      const detectedLang = brain.detectLanguage ? brain.detectLanguage(raw) : language;
+      const languageDetection = brain.detectLanguage ? brain.detectLanguage(raw) : null;
+      const detectedLang = typeof languageDetection === "string"
+        ? languageDetection
+        : languageDetection?.language || (typeof language === "string" ? language : "en");
 
       // 1. Evolution / Self-Improvement Intent
       if (lower.includes("audit") || lower.includes("upgrade") || lower.includes("evolve") || lower.includes("weakness") || lower.includes("improve yourself")) {
@@ -1675,7 +1678,7 @@ export function createJarvisRouter({
         if (!routeResult.success && routeResult.error === "TARGET_DEVICE_OFFLINE") {
           let offlineMsg = "Ayaan, your Windows PC is currently offline or unreachable. The command could not be dispatched.";
           if (detectedLang === "hinglish") offlineMsg = "Ayaan, aapka Windows PC is waqt offline hai. Remote command execute nahi ho payi.";
-          else if (detectedLang === "hindi") offlineMsg = "अयान, आपका विंडोज़ पीसी इस समय ऑफलाइन है। निर्देश नहीं भेजा जा सका।";
+          else if (detectedLang === "hi") offlineMsg = "अयान, आपका विंडोज़ पीसी इस समय ऑफलाइन है। निर्देश नहीं भेजा जा सका।";
 
           deviceHubInstance.recordSharedMessage({ source, role: "user", content: raw });
           deviceHubInstance.recordSharedMessage({ source: "ultron", role: "assistant", content: offlineMsg });
@@ -1699,7 +1702,7 @@ export function createJarvisRouter({
             successMsg = targetApp
               ? `Ji Ayaan, aapke Windows PC par ${targetApp} open kiya ja raha hai.`
               : `Ji Ayaan, aapke Windows PC par command execute ho raha hai.`;
-          } else if (detectedLang === "hindi") {
+          } else if (detectedLang === "hi") {
             successMsg = "हाँ अयान, आपके विंडोज़ पीसी पर निर्देश भेजा जा रहा है।";
           }
 
