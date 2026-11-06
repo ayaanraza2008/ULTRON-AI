@@ -51,7 +51,10 @@ export class MultiDeviceManager {
     this.persistenceAdapter = options.persistenceAdapter || (this.isPersistent ? createMultiDevicePersistenceAdapter({
       storagePath: this.storagePath,
       databaseUrl: options.databaseUrl || this.env.ULTRON_DATABASE_URL,
+      supabaseUrl: options.supabaseUrl || this.env.SUPABASE_URL,
+      supabaseServiceRoleKey: options.supabaseServiceRoleKey || this.env.SUPABASE_SERVICE_ROLE_KEY,
       supabaseRest: options.supabaseRest,
+      fetchImpl: options.fetchImpl,
       inMemoryMockDb: options.inMemoryMockDb,
       logger: options.logger
     }) : null);
