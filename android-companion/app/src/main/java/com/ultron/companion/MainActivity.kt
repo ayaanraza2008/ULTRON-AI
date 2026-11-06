@@ -46,6 +46,9 @@ class MainActivity : Activity() {
         } else {
             cancelTelemetrySync()
         }
+        if (intent.getBooleanExtra(EXTRA_START_VOICE_COMMAND, false)) {
+            window.decorView.post { beginVoiceCommand() }
+        }
     }
 
     private fun buildLayout() {
@@ -423,6 +426,7 @@ class MainActivity : Activity() {
     }
 
     companion object {
+        const val EXTRA_START_VOICE_COMMAND = "com.ultron.companion.EXTRA_START_VOICE_COMMAND"
         private const val TELEMETRY_WORK_NAME = "ultron-device-telemetry"
         private const val REQUEST_PERMISSIONS = 4701
         private const val REQUEST_SPEAK_PERMISSION = 4702
