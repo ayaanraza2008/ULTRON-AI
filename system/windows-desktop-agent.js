@@ -40,7 +40,7 @@ export class WindowsDesktopAgent {
     this.activeTasks = new Map();
     this.executionHistory = [];
     this.onStateChangeCallback = options.onStateChange || null;
-    this.computerControl = new WindowsComputerControl();
+    this.computerControl = options.computerControl || new WindowsComputerControl();
     this.workerTimer = null;
     this.heartbeatTimer = null;
     this.workerRunning = false;
@@ -355,10 +355,31 @@ export class WindowsDesktopAgent {
         }
 
         case "find_file": {
-          const query = String(payload.query || payload.fileName || payload.name || "").trim().toLowerCase();
-          const listing = await this.computerControl.listFiles(payload.subDir || "");
-          const matches = (listing?.files || []).filter(f => f.toLowerCase().includes(query));
-          result = { success: true, query, matches, totalMatches: matches.length };
+          const rawQuery = String(payload.query || payload.fileName || payload.name || "").trim();
+          if (!rawQuery || rawQuery.length > 128) {
+            result = {
+              success: false,
+              error: "FILE_QUERY_REQUIRED",
+              message: "Provide a file name or search term of at most 128 characters."
+            };
+            break;
+          }
+          const query = rawQuery.toLowerCase();
+          const listing = await this.computerControl.listFiles(payload.subDir || payload.folder || "");
+          if (!Array.isArray(listing)) {
+            result = {
+              success: false,
+              error: "FILE_LIST_UNAVAILABLE",
+              message: "The ULTRON workspace did not return a valid directory listing."
+            };
+            break;
+          }
+          const matches = listing
+            .filter(entry => entry && entry.isFile === true && typeof entry.name === "string")
+            .filter(entry => entry.name.toLowerCase().includes(query))
+            .slice(0, 100)
+            .map(entry => entry.name);
+          result = { success: true, query: rawQuery, matches, totalMatches: matches.length };
           break;
         }
 
