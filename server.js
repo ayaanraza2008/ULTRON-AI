@@ -2151,13 +2151,22 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
     res.setHeader("Service-Worker-Allowed", "/");
     return res.status(200).send(LEGACY_SERVICE_WORKER_RETIREMENT_SCRIPT);
   });
-  app.get("/", (_req, res) => {
+  // Serve the optional command-center shell after API routes so assets cannot shadow APIs.
+  const publicDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "public");
+  app.use(express.static(publicDir, {
+    dotfiles: "deny",
+    etag: true,
+    fallthrough: true,
+    index: false,
+    maxAge: env.NODE_ENV === "production" ? "5m" : 0,
+    setHeaders(response, filePath) {
+      if (path.extname(filePath).toLowerCase() === ".html") response.setHeader("Cache-Control", "no-store");
+    }
+  }));
+  app.get("/", (_req, res, next) => {
     res.setHeader("Cache-Control", "no-store");
-    return res.status(404).json({
-      error: {
-        code: "FRONTEND_REMOVED",
-        message: "ULTRON is an API-only service. The web frontend and static assets have been removed."
-      }
+    res.sendFile(path.join(publicDir, "index.html"), error => {
+      if (error) next(error);
     });
   });
   app.use((err, _req, res, _next) => {

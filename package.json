@@ -28,7 +28,8 @@
     "start:proxy": "node core-ui-proxy.mjs",
     "console": "node scripts/ultron-console.mjs",
     "start:all": "node scripts/start-all.mjs",
-    "test:api-proxy": "node --test tests/core-ui.test.js"
+    "test:api-proxy": "node --test tests/core-ui.test.js",
+    "test:frontend": "node --test tests/frontend.test.js tests/particle-swarm-engine.test.js tests/core-ui.test.js"
   },
   "dependencies": {
     "express": "^4.21.2",
