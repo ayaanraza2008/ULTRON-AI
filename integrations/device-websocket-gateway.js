@@ -116,9 +116,10 @@ export class DeviceWebSocketGateway {
   constructor(options = {}) {
     this.deviceHub = options.deviceHub || defaultDeviceHub;
     this.logger = options.logger || console;
+    this.env = options.env || process.env;
     this.authenticateDeviceToken = options.authenticateDeviceToken ||
-      (String(process.env.NODE_ENV || "").toLowerCase() === "production"
-        ? token => verifyPairedDeviceToken({ token, env: process.env, logger: this.logger })
+      (String(this.env.NODE_ENV || "").toLowerCase() === "production"
+        ? token => verifyPairedDeviceToken({ token, env: this.env, logger: this.logger })
         : null);
     this.clients = new Map(); // deviceId -> ClientSession
     this.sseClients = new Map(); // deviceId -> Set(res)
@@ -187,6 +188,22 @@ export class DeviceWebSocketGateway {
     if (typeof this.authenticateDeviceToken === "function") {
       const verified = await this.authenticateDeviceToken(token);
       if (!verified) return null;
+
+      // The production gateway is an independent WebSocket entry point; it
+      // must enforce the same single-owner boundary as the REST pairing routes.
+      const configuredOwnerId = String(
+        this.env.ULTRON_OWNER_USER_ID || this.env.ULTRON_INTEGRATION_OWNER_USER_ID || ""
+      ).trim();
+      const verifiedOwnerId = String(verified.ownerUserId || verified.owner_user_id || "").trim();
+      const isProduction = String(this.env.NODE_ENV || "").toLowerCase() === "production";
+      if ((isProduction && !configuredOwnerId) ||
+          (configuredOwnerId && verifiedOwnerId !== configuredOwnerId)) {
+        this.logger.warn?.("Device WebSocket authentication rejected by owner policy", {
+          code: "ULTRON_OWNER_ONLY"
+        });
+        return null;
+      }
+
       return this.deviceHub.importPairedDevice({ ...verified, authToken: token });
     }
     return this.deviceHub.findDeviceByToken(token);
