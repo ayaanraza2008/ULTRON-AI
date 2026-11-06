@@ -29,8 +29,7 @@ export const DEVICE_TYPES = {
   ANDROID_TABLET: "android_tablet",
   WEB_BROWSER: "web_browser",
   CLIENT_ADAPTER: "client_adapter",
-  GENERIC_COMPANION: "generic_companion",
-  ROBOT_NODE: "robot_node" // Deprecated legacy constant; robotics excluded from active personal AI scope
+  GENERIC_COMPANION: "generic_companion"
 };
 
 export class MultiDeviceManager {
