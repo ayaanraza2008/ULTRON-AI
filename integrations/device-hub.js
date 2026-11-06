@@ -197,6 +197,7 @@ export class DeviceHub {
       for (const item of data.devices) {
         if (!item.id || !item.tokenHash) continue;
         const decryptedAuthToken = decryptToken(item.encryptedAuthToken, this.masterKey);
+        if (item.status === "revoked") this.revokedDevices.add(item.id);
         this.pairedDevices.set(item.id, {
           id: item.id,
           name: item.name,
@@ -263,6 +264,16 @@ export class DeviceHub {
     }
   }
 
+  _persistOrRollback(rollback) {
+    if (this.persistenceError) {
+      rollback();
+      return { success: false, error: "DEVICE_PERSISTENCE_NOT_CONFIGURED", reason: this.persistenceError };
+    }
+    if (!this.isPersistent || this.saveToDisk()) return { success: true };
+    rollback();
+    return { success: false, error: "DEVICE_PERSISTENCE_FAILED" };
+  }
+
   /**
    * Generate a 6-digit pairing code with 5-minute expiry for a new companion device.
    */
@@ -321,7 +332,11 @@ export class DeviceHub {
 
     this.pairedDevices.set(deviceId, device);
     this.pendingPairings.delete(cleanCode);
-    this.saveToDisk();
+    const persisted = this._persistOrRollback(() => {
+      this.pairedDevices.delete(deviceId);
+      this.pendingPairings.set(cleanCode, entry);
+    });
+    if (!persisted.success) return persisted;
 
     return {
       success: true,
@@ -370,11 +385,17 @@ export class DeviceHub {
       capabilities: {}
     };
 
+    const previousEntry = { ...entry };
     this.pairedDevices.set(deviceId, device);
     entry.approved = true;
     entry.deviceId = deviceId;
     entry.deviceToken = deviceToken;
-    this.saveToDisk();
+    const persisted = this._persistOrRollback(() => {
+      this.pairedDevices.delete(deviceId);
+      for (const key of Object.keys(entry)) delete entry[key];
+      Object.assign(entry, previousEntry);
+    });
+    if (!persisted.success) return persisted;
 
     return {
       success: true,
@@ -456,10 +477,18 @@ export class DeviceHub {
       return { success: false, error: "ACCESS_DENIED_NOT_DEVICE_OWNER" };
     }
 
+    const previousDevice = { ...device };
+    const previousQueue = this.commandQueue.get(deviceId);
     device.status = "revoked";
     device.revokedAt = new Date().toISOString();
+    this.revokedDevices.add(deviceId);
     this.commandQueue.delete(deviceId);
-    this.saveToDisk();
+    const persisted = this._persistOrRollback(() => {
+      Object.assign(device, previousDevice);
+      this.revokedDevices.delete(deviceId);
+      if (previousQueue) this.commandQueue.set(deviceId, previousQueue);
+    });
+    if (!persisted.success) return persisted;
     this.emitEvent({ type: "DEVICE_REVOKED", deviceId, ownerUserId: device.ownerUserId });
 
     return { success: true, deviceId, status: "revoked" };
@@ -475,6 +504,8 @@ export class DeviceHub {
       return { success: false, error: "ACCESS_DENIED_NOT_DEVICE_OWNER" };
     }
 
+    const previousDevice = { ...device };
+    const wasRevoked = this.revokedDevices.has(deviceId);
     const newToken = "ultron_dev_" + crypto.randomBytes(32).toString("hex");
     device.authToken = newToken;
     device.tokenHash = hashToken(newToken);
@@ -484,7 +515,12 @@ export class DeviceHub {
     device.revokedAt = null;
     device.online = false;
     device.lastSeenAt = null;
-    this.saveToDisk();
+    this.revokedDevices.delete(deviceId);
+    const persisted = this._persistOrRollback(() => {
+      Object.assign(device, previousDevice);
+      if (wasRevoked) this.revokedDevices.add(deviceId);
+    });
+    if (!persisted.success) return persisted;
     this.emitEvent({ type: "DEVICE_CREDENTIALS_ROTATED", deviceId, ownerUserId: device.ownerUserId });
 
     return { success: true, deviceId, newDeviceToken: newToken };
@@ -562,10 +598,17 @@ export class DeviceHub {
   }
 
   unpairDevice(deviceId) {
-    const deleted = this.pairedDevices.delete(deviceId);
+    const device = this.pairedDevices.get(deviceId);
+    if (!device) return { success: false, deviceId };
+    const previousQueue = this.commandQueue.get(deviceId);
+    this.pairedDevices.delete(deviceId);
     this.commandQueue.delete(deviceId);
-    this.saveToDisk();
-    return { success: deleted, deviceId };
+    const persisted = this._persistOrRollback(() => {
+      this.pairedDevices.set(deviceId, device);
+      if (previousQueue) this.commandQueue.set(deviceId, previousQueue);
+    });
+    if (!persisted.success) return persisted;
+    return { success: true, deviceId };
   }
 
   /**
