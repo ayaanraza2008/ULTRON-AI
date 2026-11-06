@@ -205,6 +205,15 @@ test("device registry isolates owners and rotates/revokes per-device tokens", as
 
     const rotatedDevice = db.devices.get(deviceId);
     assert.equal(rotatedDevice.token_hash, crypto.createHash("sha256").update(rotated.deviceToken).digest("hex"));
+    // Rotating a credential does not prove that the companion is connected.
+    // Presence becomes online only after the new token sends a real heartbeat.
+    assert.equal(rotatedDevice.last_seen_at, null);
+    const statusAfterRotation = await fetch(base + "/devices/me", {
+      headers: { "x-device-token": rotated.deviceToken }
+    });
+    assert.equal(statusAfterRotation.status, 200);
+    const statusPayload = await statusAfterRotation.json();
+    assert.equal(statusPayload.devices[0].online, false);
 
     const revoke = await fetch(base + "/devices/" + deviceId, {
       method: "DELETE", headers: { "x-test-owner": OWNER_A }
