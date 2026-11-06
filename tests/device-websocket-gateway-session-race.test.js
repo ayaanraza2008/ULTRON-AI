@@ -212,3 +212,43 @@ test("a revoked WebSocket cannot execute frames after its close frame is sent", 
   assert.equal(gateway.clients.has(deviceId), false);
   gateway.close();
 });
+
+
+test("a rejected device heartbeat is not acknowledged as success and closes the stale session", async () => {
+  const { gateway, device, deviceId, deviceHub, makeSocket } = makeGateway();
+  let heartbeatCount = 0;
+  deviceHub.heartbeat = () => {
+    heartbeatCount += 1;
+    return { success: false, error: "AUTHENTICATION_FAILED" };
+  };
+  const socket = makeSocket();
+  let socketEnded = false;
+  socket.end = () => { socketEnded = true; };
+  const session = {
+    socket,
+    device: { id: deviceId, ownerUserId: device.ownerUserId, authToken: "revoked-token" },
+    deviceId,
+    authenticated: true,
+    buffer: Buffer.alloc(0),
+    pingTimer: null,
+    authTimeout: null
+  };
+  gateway.registerConnectedClient(deviceId, session);
+
+  await gateway.handleSocketData(session, maskedTextFrame(JSON.stringify({ type: "HEARTBEAT" })));
+
+  assert.equal(heartbeatCount, 1);
+  assert.equal(session.closed, true);
+  assert.equal(socketEnded, true);
+  assert.equal(gateway.clients.has(deviceId), false);
+  assert.equal(device.online, false);
+  const ackFrame = socket.writes[0];
+  assert.ok(ackFrame);
+  assert.equal(ackFrame[0] & 0x0f, 0x1);
+  const ackLength = ackFrame[1] & 0x7f;
+  const ackJson = JSON.parse(ackFrame.subarray(2, 2 + ackLength).toString("utf8"));
+  assert.equal(ackJson.type, "HEARTBEAT_ACK");
+  assert.equal(ackJson.success, false);
+  assert.equal(ackJson.error, "AUTHENTICATION_FAILED");
+  gateway.close();
+});
