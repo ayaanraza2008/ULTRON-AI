@@ -64,6 +64,7 @@ fun UltronMainDashboard(apiClient: UltronApiClient) {
     var coreState by remember { mutableStateOf(EnergyCoreState.STANDBY) }
     var voiceStatusText by remember { mutableStateOf("ULTRON ready. Tap Speak or use wake-word.") }
     val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     // Shared PC status state
     var pcStatus by remember {
@@ -163,19 +164,13 @@ fun UltronMainDashboard(apiClient: UltronApiClient) {
                     coreState = coreState,
                     statusText = voiceStatusText,
                     onSpeakClick = {
-                        coreState = EnergyCoreState.LISTENING
-                        voiceStatusText = "Listening for command..."
-                        scope.launch {
-                            kotlinx.coroutines.delay(2000)
-                            coreState = EnergyCoreState.THINKING
-                            voiceStatusText = "Analyzing intent..."
-                            kotlinx.coroutines.delay(1000)
-                            coreState = EnergyCoreState.SPEAKING
-                            voiceStatusText = "Executing cross-device command..."
-                            kotlinx.coroutines.delay(1500)
-                            coreState = EnergyCoreState.STANDBY
-                            voiceStatusText = "Command executed successfully."
-                        }
+                        // Use the real Android SpeechRecognizer flow from MainActivity.
+                        // The previous Compose-only handler simulated a successful command
+                        // without recording speech or sending anything to ULTRON.
+                        context.startActivity(
+                            android.content.Intent(context, com.ultron.companion.MainActivity::class.java)
+                                .putExtra(com.ultron.companion.MainActivity.EXTRA_START_VOICE_COMMAND, true)
+                        )
                     }
                 )
                 NavigationTab.CHAT -> UltronChatScreen(
