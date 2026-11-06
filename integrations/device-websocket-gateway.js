@@ -476,6 +476,7 @@ export class DeviceWebSocketGateway {
    * Handles incoming JSON messages from a companion client.
    */
   async handleClientMessage(clientSession, text) {
+    if (clientSession.closed || clientSession.socket?.destroyed) return;
     let msg;
     try {
       msg = JSON.parse(text);
@@ -492,6 +493,9 @@ export class DeviceWebSocketGateway {
         return;
       }
       const device = await this.authenticateToken(msg.token);
+      // The socket may close or be invalidated while durable token verification
+      // is in flight. Never register a session after that transition.
+      if (clientSession.closed || clientSession.socket?.destroyed) return;
       if (!device) {
         this.sendFrame(clientSession.socket, { type: "AUTH_FAILED", error: "INVALID_DEVICE_TOKEN" });
         clientSession.socket.destroy();
