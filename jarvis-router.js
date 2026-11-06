@@ -1012,7 +1012,7 @@ export function createJarvisRouter({
     }
     const result = await multiDeviceManagerInstance.acknowledgeDeliveryDurably(req.device.id, req.params.deliveryId);
     if (!result.success || !result.acknowledged) {
-      return res.status(["STATE_PERSISTENCE_FAILED", "PERSISTENCE_INITIALIZATION_FAILED"].includes(result.error) ? 503 : 404)
+      return res.status(["STATE_PERSISTENCE_FAILED", "PERSISTENCE_INITIALIZATION_FAILED", "DURABLE_PERSISTENCE_NOT_CONFIGURED", "CLOUD_PERSISTENCE_FAILED"].includes(result.error) ? 503 : 404)
         .json({ error: { code: result.error || "DELIVERY_NOT_FOUND", message: "The state-sync delivery was not acknowledged." }, ...result });
     }
     return res.json(result);
@@ -1043,7 +1043,7 @@ export function createJarvisRouter({
     }
     const result = await multiDeviceManagerInstance.acknowledgeDeliveryDurably(req.device.id, req.params.deliveryId);
     if (!result.success || !result.acknowledged) {
-      return res.status(["STATE_PERSISTENCE_FAILED", "PERSISTENCE_INITIALIZATION_FAILED"].includes(result.error) ? 503 : 404).json({ error: { code: result.error || "DELIVERY_NOT_FOUND", message: "The state-sync delivery was not pending for this device." }, ...result });
+      return res.status(["STATE_PERSISTENCE_FAILED", "PERSISTENCE_INITIALIZATION_FAILED", "DURABLE_PERSISTENCE_NOT_CONFIGURED", "CLOUD_PERSISTENCE_FAILED"].includes(result.error) ? 503 : 404).json({ error: { code: result.error || "DELIVERY_NOT_FOUND", message: "The state-sync delivery was not pending for this device." }, ...result });
     }
     return res.json(result);
   });
