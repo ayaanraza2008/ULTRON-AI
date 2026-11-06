@@ -253,3 +253,35 @@ test("a rejected device heartbeat is not acknowledged as success and closes the 
   assert.equal(ackJson.error, "AUTHENTICATION_FAILED");
   gateway.close();
 });
+
+test("late WebSocket token verification cannot register a session after socket closure", async () => {
+  const { gateway, deviceId, makeSocket } = makeGateway();
+  let resolveAuthentication;
+  gateway.authenticateToken = () => new Promise(resolve => { resolveAuthentication = resolve; });
+  const session = {
+    socket: makeSocket(),
+    authenticated: false,
+    deviceId: null,
+    buffer: Buffer.alloc(0),
+    pingTimer: null,
+    authTimeout: null
+  };
+
+  const pending = gateway.handleClientMessage(session, JSON.stringify({
+    type: "AUTH",
+    token: "ultron_dev_test_token"
+  }));
+  await Promise.resolve();
+  session.closed = true;
+  resolveAuthentication({
+    id: deviceId,
+    ownerUserId: "00000000-0000-4000-8000-000000000001",
+    authToken: "ultron_dev_test_token",
+    status: "active"
+  });
+  await pending;
+
+  assert.equal(gateway.clients.has(deviceId), false);
+  assert.equal(session.authenticated, false);
+  gateway.close();
+});
