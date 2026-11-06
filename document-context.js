@@ -71,7 +71,9 @@ function validateDocxArchive(bytes) {
 
   let cursor = centralOffset;
   let totalUncompressed = 0;
+  let totalCompressed = 0;
   let hasDocumentXml = false;
+  const seenNames = new Set();
   for (let index = 0; index < entryCount; index += 1) {
     if (cursor + 46 > centralOffset + centralSize || bytes.readUInt32LE(cursor) !== 0x02014b50) return false;
     const flags = bytes.readUInt16LE(cursor + 8);
@@ -81,20 +83,48 @@ function validateDocxArchive(bytes) {
     const nameLength = bytes.readUInt16LE(cursor + 28);
     const extraLength = bytes.readUInt16LE(cursor + 30);
     const commentLength = bytes.readUInt16LE(cursor + 32);
+    const diskStart = bytes.readUInt16LE(cursor + 34);
+    const localHeaderOffset = bytes.readUInt32LE(cursor + 42);
     const next = cursor + 46 + nameLength + extraLength + commentLength;
     if (next > centralOffset + centralSize ||
         (flags & 1) !== 0 ||
         ![0, 8].includes(method) ||
+        diskStart !== 0 ||
         compressedSize === 0xffffffff ||
         uncompressedSize === 0xffffffff ||
+        localHeaderOffset === 0xffffffff ||
         compressedSize > bytes.length ||
-        uncompressedSize > 12_582_912) return false;
+        uncompressedSize > 12_582_912 ||
+        localHeaderOffset + 30 > centralOffset) return false;
 
     const name = bytes.subarray(cursor + 46, cursor + 46 + nameLength).toString("utf8");
-    if (!name || name.startsWith("/") || name.includes("../") || name.includes("..\\\\") || name.includes("\\\\..")) return false;
+    const normalizedName = name.replace(/\\/g, "/");
+    if (!name ||
+        normalizedName.startsWith("/") ||
+        /^[a-z]:/i.test(normalizedName) ||
+        normalizedName.split("/").some(part => part === ".." || part === ".") ||
+        seenNames.has(normalizedName)) return false;
+    seenNames.add(normalizedName);
+
+    if (bytes.readUInt32LE(localHeaderOffset) !== 0x04034b50) return false;
+    const localFlags = bytes.readUInt16LE(localHeaderOffset + 6);
+    const localMethod = bytes.readUInt16LE(localHeaderOffset + 8);
+    const localNameLength = bytes.readUInt16LE(localHeaderOffset + 26);
+    const localExtraLength = bytes.readUInt16LE(localHeaderOffset + 28);
+    const localNameStart = localHeaderOffset + 30;
+    const dataStart = localNameStart + localNameLength + localExtraLength;
+    const dataEnd = dataStart + compressedSize;
+    if (localFlags !== flags ||
+        localMethod !== method ||
+        localNameLength !== nameLength ||
+        dataStart > centralOffset ||
+        dataEnd > centralOffset ||
+        bytes.subarray(localNameStart, localNameStart + localNameLength).toString("utf8") !== name) return false;
+
     if (name === "word/document.xml") hasDocumentXml = true;
     totalUncompressed += uncompressedSize;
-    if (totalUncompressed > 20_971_520) return false;
+    totalCompressed += compressedSize;
+    if (totalUncompressed > 20_971_520 || totalCompressed > bytes.length) return false;
     cursor = next;
   }
   return cursor === centralOffset + centralSize && hasDocumentXml;
