@@ -948,7 +948,17 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
   const authRateLimiter = createAuthRateLimiter();
 
   app.post("/api/auth/signup", authRateLimiter, async (req, res) => {
-    if (personalAiModeEnabled() || configuredOwnerUserId() || env.ULTRON_OWNER_BOOTSTRAP_TOKEN) {
+    if (configuredOwnerUserId()) {
+      // The bootstrap credential is only for creating the initial owner account.
+      // Once an owner UUID is configured, no additional accounts may be created.
+      return res.status(403).json({
+        error: {
+          code: "SIGNUP_DISABLED",
+          message: "The ULTRON owner is already configured; additional account signup is disabled."
+        }
+      });
+    }
+    if (personalAiModeEnabled() || env.ULTRON_OWNER_BOOTSTRAP_TOKEN) {
       const bootstrapToken = String(req.headers["x-ultron-bootstrap-token"] || req.body?.bootstrapToken || "").trim();
       const expectedToken = String(env.ULTRON_OWNER_BOOTSTRAP_TOKEN || "").trim();
       if (!expectedToken || !bootstrapToken || !safeTimingCompare(bootstrapToken, expectedToken)) {
