@@ -1200,24 +1200,38 @@ export class MultiDeviceManager {
     const paired = deviceHub.listPairedDevices();
     const importedDeviceIds = [];
     for (const dev of paired) {
-      if (!dev?.id || this.devices.has(dev.id)) continue;
+      if (!dev?.id || !dev.ownerUserId) continue;
       let type = DEVICE_TYPES.GENERIC_COMPANION;
       if (dev.platform === "windows") type = DEVICE_TYPES.WINDOWS_PC;
       else if (dev.platform === "android") type = DEVICE_TYPES.ANDROID_SMARTPHONE;
       else if (dev.platform === "browser") type = DEVICE_TYPES.WEB_BROWSER;
 
-      const registered = this.registerDevice({
+      const metadata = {
         id: dev.id,
+        ownerUserId: dev.ownerUserId,
         name: dev.name,
         type,
         platform: dev.platform,
-        capabilities: dev.capabilities ? Object.keys(dev.capabilities) : ["notifications", "telemetry"],
-        online: dev.online ?? true,
-        battery: dev.battery || { percent: 100, isCharging: false }
-      }, { deferPersistence });
+        capabilities: Array.isArray(dev.capabilities)
+          ? dev.capabilities
+          : dev.capabilities ? Object.keys(dev.capabilities) : ["notifications", "telemetry"],
+        online: dev.online === true,
+        battery: dev.battery || { percent: 100, isCharging: false },
+        lastSeenAt: dev.lastSeenAt || undefined,
+        heartbeatTimeoutMs: dev.platform === "android" ? 35 * 60 * 1000 : 90_000
+      };
 
-      if (registered?.success === false) {
-        return { success: false, error: registered.error || "DEVICE_IMPORT_FAILED", importedDeviceIds };
+      const existing = this.devices.get(dev.id);
+      if (existing?.ownerUserId && existing.ownerUserId !== dev.ownerUserId) {
+        return { success: false, error: "DEVICE_OWNER_MISMATCH", importedDeviceIds };
+      }
+
+      const result = existing
+        ? this.updateDevicePresence(dev.id, metadata, { deferPersistence })
+        : this.registerDevice(metadata, { deferPersistence });
+
+      if (result?.success === false) {
+        return { success: false, error: result.error || "DEVICE_IMPORT_FAILED", importedDeviceIds };
       }
       importedDeviceIds.push(dev.id);
     }
