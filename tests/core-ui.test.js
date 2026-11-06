@@ -22,12 +22,12 @@ async function startProxy(t, options = {}) {
 test("backend stays API-only while the interface proxy serves an explicit static allowlist", () => {
   assert.doesNotMatch(serverSource, /express\.static\s*\(/);
   assert.doesNotMatch(serverSource, /app\.use\s*\(\s*["']\/voice["']/);
-  assert.ok(serverSource.includes('app.get("/service-worker.js"'));
   assert.match(proxySource, /STATIC_ASSETS/);
   assert.match(proxySource, /serveAsset/);
   assert.ok(proxySource.includes('"/particle-swarm-engine.js"'));
   assert.ok(proxySource.includes('"/core-only.css"'));
-  assert.ok(serverSource.includes("ultron-core-shell-"));
+  assert.ok(proxySource.includes('requestUrl.pathname === "/service-worker.js"'));
+  assert.ok(proxySource.includes("ultron-core-shell-"));
 });
 
 test("center-only shell keeps the core as the only visible application surface", async () => {
