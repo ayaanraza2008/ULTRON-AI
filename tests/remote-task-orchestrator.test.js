@@ -45,9 +45,13 @@ test("RemoteTaskOrchestrator: Executes storage diagnostics and checks project ru
   assert.equal(orchestrator.getTaskHistory().length, 1);
 });
 
-test("RemoteTaskOrchestrator: Suppresses duplicate commands within idempotency window", async () => {
+test("RemoteTaskOrchestrator: Suppresses duplicate commands and returns the original result", async () => {
+  let executions = 0;
   const mockAgent = {
-    unlockScreen: async () => ({ success: true, message: "PC unlocked." })
+    unlockScreen: async () => {
+      executions += 1;
+      return { success: true, message: "PC unlocked." };
+    }
   };
   const orchestrator = new RemoteTaskOrchestrator({
     windowsDesktopAgent: mockAgent
@@ -62,7 +66,6 @@ test("RemoteTaskOrchestrator: Suppresses duplicate commands within idempotency w
   assert.equal(firstCall.success, true);
   assert.equal(firstCall.duplicateSuppressed, undefined);
 
-  // Duplicate task with same idempotency key
   const secondCall = await orchestrator.executeRemoteTask({
     callerId: "owner-call-01",
     isOwner: true,
@@ -71,7 +74,11 @@ test("RemoteTaskOrchestrator: Suppresses duplicate commands within idempotency w
   });
   assert.equal(secondCall.success, true);
   assert.equal(secondCall.duplicateSuppressed, true);
+  assert.equal(secondCall.status, "COMPLETED");
+  assert.equal(secondCall.taskId, firstCall.taskId);
+  assert.deepEqual(secondCall.result, firstCall.result);
   assert.match(secondCall.message, /suppressed/);
+  assert.equal(executions, 1);
 });
 
 test("RemoteTaskOrchestrator: Fails closed with WINDOWS_AGENT_UNAVAILABLE when companion is missing (no fake success)", async () => {
@@ -162,4 +169,105 @@ test("RemoteTaskOrchestrator: Does not claim a simulated non-Windows lock locked
 
   assert.equal(outcome.success, true);
   assert.match(outcome.progressSteps.at(-1).description, /simulated; no real Windows workstation was locked/i);
+});
+
+test("RemoteTaskOrchestrator: Duplicate while original is running is not reported as success", async () => {
+  let finishUnlock;
+  let executions = 0;
+  const orchestrator = new RemoteTaskOrchestrator({
+    windowsDesktopAgent: {
+      unlockScreen: () => {
+        executions += 1;
+        return new Promise(resolve => { finishUnlock = resolve; });
+      }
+    }
+  });
+
+  const firstPromise = orchestrator.executeRemoteTask({
+    callerId: "owner-call-in-progress",
+    isOwner: true,
+    action: "UNLOCK_PC_SCREEN",
+    idempotencyKey: "in-progress-key"
+  });
+
+  const duplicate = await orchestrator.executeRemoteTask({
+    callerId: "owner-call-in-progress",
+    isOwner: true,
+    action: "UNLOCK_PC_SCREEN",
+    idempotencyKey: "in-progress-key"
+  });
+  assert.equal(duplicate.success, false);
+  assert.equal(duplicate.duplicateSuppressed, true);
+  assert.equal(duplicate.status, "RUNNING");
+  assert.equal(duplicate.error, "DUPLICATE_TASK_IN_PROGRESS");
+  assert.equal(executions, 1);
+
+  finishUnlock({ success: true, message: "PC unlocked." });
+  const first = await firstPromise;
+  assert.equal(first.success, true);
+  const completedDuplicate = await orchestrator.executeRemoteTask({
+    callerId: "owner-call-in-progress",
+    isOwner: true,
+    action: "UNLOCK_PC_SCREEN",
+    idempotencyKey: "in-progress-key"
+  });
+  assert.equal(completedDuplicate.success, true);
+  assert.equal(completedDuplicate.status, "COMPLETED");
+  assert.equal(completedDuplicate.taskId, first.taskId);
+});
+
+test("RemoteTaskOrchestrator: Duplicate of a failed task retains failure instead of returning success", async () => {
+  const orchestrator = new RemoteTaskOrchestrator({
+    windowsDesktopAgent: {
+      unlockScreen: async () => ({ success: false, error: "UNLOCK_REQUIRES_LOCAL_AUTHENTICATION" })
+    }
+  });
+  const first = await orchestrator.executeRemoteTask({
+    callerId: "owner-call-failed",
+    isOwner: true,
+    action: "UNLOCK_PC_SCREEN",
+    idempotencyKey: "failed-key"
+  });
+  assert.equal(first.success, false);
+  assert.equal(first.error, "UNLOCK_REQUIRES_LOCAL_AUTHENTICATION");
+
+  const duplicate = await orchestrator.executeRemoteTask({
+    callerId: "owner-call-failed",
+    isOwner: true,
+    action: "UNLOCK_PC_SCREEN",
+    idempotencyKey: "failed-key"
+  });
+  assert.equal(duplicate.success, false);
+  assert.equal(duplicate.duplicateSuppressed, true);
+  assert.equal(duplicate.status, "FAILED");
+  assert.equal(duplicate.error, "UNLOCK_REQUIRES_LOCAL_AUTHENTICATION");
+  assert.equal(duplicate.result.error, "UNLOCK_REQUIRES_LOCAL_AUTHENTICATION");
+});
+
+test("RemoteTaskOrchestrator: Idempotency keys are scoped to the authenticated caller", async () => {
+  let executions = 0;
+  const orchestrator = new RemoteTaskOrchestrator({
+    windowsDesktopAgent: {
+      unlockScreen: async () => {
+        executions += 1;
+        return { success: true };
+      }
+    }
+  });
+  const first = await orchestrator.executeRemoteTask({
+    callerId: "owner-device-a",
+    isOwner: true,
+    action: "UNLOCK_PC_SCREEN",
+    idempotencyKey: "shared-client-key"
+  });
+  const second = await orchestrator.executeRemoteTask({
+    callerId: "owner-device-b",
+    isOwner: true,
+    action: "UNLOCK_PC_SCREEN",
+    idempotencyKey: "shared-client-key"
+  });
+  assert.equal(first.success, true);
+  assert.equal(second.success, true);
+  assert.equal(second.duplicateSuppressed, undefined);
+  assert.equal(executions, 2);
 });
