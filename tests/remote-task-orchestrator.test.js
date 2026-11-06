@@ -271,3 +271,37 @@ test("RemoteTaskOrchestrator: Idempotency keys are scoped to the authenticated c
   assert.equal(second.duplicateSuppressed, undefined);
   assert.equal(executions, 2);
 });
+
+test("RemoteTaskOrchestrator: Idempotency retention does not expire while a remote task is still running", async () => {
+  let finishUnlock;
+  const orchestrator = new RemoteTaskOrchestrator({
+    idempotencyWindowMs: 10,
+    windowsDesktopAgent: {
+      unlockScreen: () => new Promise(resolve => { finishUnlock = resolve; })
+    }
+  });
+
+  const firstPromise = orchestrator.executeRemoteTask({
+    callerId: "owner-call-slow",
+    isOwner: true,
+    action: "UNLOCK_PC_SCREEN",
+    idempotencyKey: "slow-task-key"
+  });
+
+  // The cleanup window is intentionally much shorter than this pause.
+  await new Promise(resolve => setTimeout(resolve, 40));
+  const duplicate = await orchestrator.executeRemoteTask({
+    callerId: "owner-call-slow",
+    isOwner: true,
+    action: "UNLOCK_PC_SCREEN",
+    idempotencyKey: "slow-task-key"
+  });
+  assert.equal(duplicate.success, false);
+  assert.equal(duplicate.duplicateSuppressed, true);
+  assert.equal(duplicate.status, "RUNNING");
+  assert.equal(duplicate.error, "DUPLICATE_TASK_IN_PROGRESS");
+
+  finishUnlock({ success: true, message: "PC unlocked." });
+  const first = await firstPromise;
+  assert.equal(first.success, true);
+});
