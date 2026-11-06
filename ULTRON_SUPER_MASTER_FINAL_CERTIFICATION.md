@@ -1,103 +1,42 @@
-# ULTRON AI — OPERATION INFINITY
-## Release-Candidate Verification Ledger (Evidence-Based)
+# ULTRON AI — Release-Candidate Verification Ledger
 
 **Repository:** `ayaanraza2008/ULTRON-AI`  
 **Target branch:** `main`  
 **Development PR:** [#478](https://github.com/ayaanraza2008/ULTRON-AI/pull/478)  
 **Working branch:** `feat/ultron-operation-infinity-multidevice`  
-**Last code checkpoint before this report refresh:** `35c98b38dcf0a9a922fda39b5026112a6249ada1`  
-**Production workspace:** Render — `Ultron core`  
-**Production service:** `https://ultron-ai-core.onrender.com`
+**Production workspace:** Render — `Ultron core`
 
-> **Status: RELEASE CANDIDATE — NOT A 100% PRODUCTION CERTIFICATION.**
+> **Status: RELEASE CANDIDATE — NOT A PRODUCTION CERTIFICATION.**
 
-This report replaces earlier overconfident completion claims. Passing CI proves the checks that ran on that exact commit; it does not prove live multi-device delivery, cloud durability, authenticated AI inference, or physical client acceptance.
+## Product definition
 
-## 1. Permanent scope
+ULTRON is a private, single-owner personal AI software ecosystem for Windows computers, Android devices, browsers and future personal clients. Its scope is intelligence, memory, task execution, research, voice, vision, desktop assistance, secure multi-device synchronization and the Living Core interface.
 
-ULTRON is a private, single-owner personal AI software ecosystem for the owner's Windows computers, Android phones/tablets, browsers and future personal clients.
+## Evidence rules
 
-Physical robotics, humanoid systems, robotic arms, simulation, actuators and locomotion are explicitly out of scope and carry **0% completion weight**.
+- Green CI proves only the jobs that ran on the exact commit.
+- Unit tests and mocked adapters do not prove live external services.
+- A successful companion build does not prove physical-device operation.
+- A health endpoint does not prove authenticated inference or data persistence.
+- No score or completion percentage may be copied from an earlier commit.
 
-The intended architecture is one owner identity, one central intelligence and as many registered personal devices as available infrastructure can safely support. There is no hard-coded two-device product limit; actual capacity remains bounded by service resources.
+## Current release gates
 
-## 2. GitHub and CI state
+1. Exact latest PR-head CI must complete successfully.
+2. Remote PostgreSQL TLS verification must remain mandatory; unsafe URL, environment and option overrides must not disable it.
+3. Cloud state must be proven durable across service restart/replacement; local fallback storage is not sufficient proof.
+4. Browser, Windows and Android synchronization must pass receive/apply/ACK, retry, reconnect, revoke and owner-isolation tests.
+5. At least one authenticated live AI inference request must succeed through a configured provider.
+6. Owner-only production configuration must be verified without exposing secrets.
+7. Windows and Android companions require physical pairing and operation checks.
+8. Real microphone, speaker, camera and screen-observation flows require hardware acceptance on supported clients.
 
-- PR #477 is merged into `main`; the reported release merge commit is `25b66fd783f48d5b67755636e99567d03988a8f4`.
-- Main documentation commit `9c72bb6fef0339fbe86dc091d2e4837d28317eeb` exists on GitHub.
-- PR #478 is a separate development change and must be reviewed before merge.
-- An earlier PR #478 head (`6bbb11076b2ce870b43fc297fc718b2bae9f1a97`) completed CI with **1,745 Node tests passed, 0 failed, 3 skipped**, 26 Python tests passed, syntax check passed and the repository security quality gate reported 0 confirmed findings and 0 potential risks. These counts apply only to that earlier SHA.
-- PR head `171b7abb1422fbbae2b2220576ab0cf39fd85663` was subsequently observed with `ULTRON Windows Companion`, `ULTRON Android Companion`, and `ULTRON CI` all completed successfully. Exact test totals were not independently retrieved for that head.
-- Any commit after `171b7abb1422fbbae2b2220576ab0cf39fd85663`, including this documentation correction, requires its own exact-head CI result. Never transfer earlier test counts or green checks to a newer SHA.
-- Current PR state and current check conclusions must be read from GitHub at the time of release; this document does not freeze a future CI result.
+## Deployment boundary
 
-## 3. Implemented in the candidate branch
+The Render backend tracks `main` for automatic deployment. Keep PR #478 unmerged and do not deploy, change production environment settings, sync a production Blueprint, or apply production migrations until the owner explicitly issues `DEPLOY`.
 
-### Device fleet and synchronization primitives
-- Variable-size device registry, capability filtering, presence updates and revocation.
-- Local JSON state persistence, shared-state versioning and pending delivery queues.
-- Owner-scoped target filtering through paired-device records.
-- WebSocket/SSE dispatch integration.
-- Authenticated state-sync API for owner/device clients.
-- Per-device pending event polling and acknowledgement routes.
-- WebSocket `STATE_SYNC_ACK` handling, bound to the authenticated paired device and owner.
-- Local subscriber callbacks are reported separately from network sends; a socket write is not counted as an application acknowledgement.
-- Acknowledgement queue updates now fail rather than report success if local persistence fails.
+## Canonical records
 
-### Owner access and remote action safety
-- Candidate server middleware checks the configured owner identity and fails closed when personal-AI mode is enabled without an owner ID.
-- Signup bootstrap checks use timing-safe comparison.
-- Remote task orchestration returns explicit unavailable/unsupported errors instead of fabricated success when a Windows companion is absent.
-- Android lock/unlock/media operations now require an adapter acknowledgement before local device state is changed.
-- Revoked devices are filtered out of active fleet lookups.
-
-### Windows task lifecycle
-- The native Windows companion tracks processes for allowlisted applications launched by the companion, keyed by command/task ID, and exposes inspect/stop/emergency-stop operations over that tracked set.
-- The server-side task orchestrator also has task IDs and AbortController metadata, but that metadata alone does not prove cancellation of every underlying OS process.
-- **Scope limitation:** this is not arbitrary process management. Processes not launched and tracked by the companion are outside the supported stop scope. Real process exit outcomes and emergency-stop behavior still require paired Windows-device acceptance.
-
-## 4. Remaining acceptance gates
-
-| Area | Current evidence | What is still required |
-|---|---|---|
-| Cloud-durable multi-device state | JSON file persistence and queue code exist | A durable shared store is needed on Render; the inspected backend service is on the free plan and has no persistent-disk attachment in its Blueprint. Use an approved persistent disk or Supabase-backed state/event store. |
-| Device client synchronization | WebSocket/SSE send, queue polling and ACK endpoints exist in the backend candidate | Android, Windows and browser clients must implement the matching event receive/apply/ACK protocol and pass real multi-client acceptance. |
-| Device registration/pairing | Existing pairing/auth code and owner scoping exist | Verify live pairing, reconnect, revoke and multi-device isolation with real paired clients. |
-| Owner-only production enforcement | Code has fail-closed branches; Render Blueprint lists an owner-ID environment variable as dashboard-managed | Confirm the actual production owner ID and personal-mode/signup flags are correctly configured without exposing secret values. Test owner and non-owner accounts. |
-| Live AI inference | Public provider endpoints/model catalog reachability was observed earlier | Prove one authenticated generative completion through a configured provider; model-list HTTP 200 or local embeddings alone are not inference acceptance. |
-| Windows remote control | Allowlisted command handlers; native companion tracks processes it launches and exposes scoped inspect/stop/emergency-stop operations | Connect a real Windows companion, verify command acknowledgements and actual process exit outcomes. Do not claim control over arbitrary/untracked processes. |
-| Android operation | APK build and software tests were reported earlier; no ADB device was connected in the earlier audit | Install and test on an actual personal Android device when available. An APK build is not physical acceptance. |
-| Voice and vision | Software modules and tests exist | Verify real microphone, speaker and camera workflows on the chosen clients; maintain permission indicators and report unsupported platform restrictions. |
-| Production | Previous health probe reported HTTP 200 on an earlier revision | Recheck current deployed revision and application workflows after an explicitly authorized release. Health 200 alone is not full operational readiness. |
-
-## 5. Render deployment boundary
-
-The inspected Render workspace contains four services. The backend `ultron-ai-core` is configured to auto-deploy from `main`; the browser bridge and REA gateway also track `main`; the interface tracks its separate interface branch. The inspected services are on free plans.
-
-**Do not merge PR #478 into `main` while deployment authorization is absent**, because a merge/push to the auto-deploy branch can initiate a production deployment. Do not trigger a manual deploy, Blueprint sync, environment change or production Supabase migration.
-
-The deployment lock remains active until the owner explicitly issues:
-
-`DEPLOY`
-
-## 6. Scoring policy
-
-Do not retain the earlier `100/100` certification. The candidate has meaningful implementation progress, but the revised requirements include cloud durability, real client protocol integration, owner-config verification and live operational acceptance. These have not all been proven.
-
-A final percentage must be recalculated only after:
-1. the exact PR head CI is green;
-2. the critical code is reviewed;
-3. client-side sync and ACK are integrated;
-4. durable storage is selected and verified;
-5. real provider inference and owner isolation are tested;
-6. Windows/Android acceptance is completed or explicitly marked hardware-blocked.
-
-Do not award full points for code-only, mocked or unverified capabilities.
-
-## 7. Release decision
-
-**Decision: NOT READY FOR PRODUCTION MERGE/DEPLOYMENT YET.**
-
-The candidate branch has closed the previously observed CI failures and added a more complete state-sync path. Remaining work is specific and bounded, but it must not be relabeled as complete without evidence.
-
-**No robotics work is required. No production deployment has been authorized.**
+- [Engineering Audit](ULTRON_FINAL_ENGINEERING_AUDIT.md)
+- [Production Readiness](ULTRON_PRODUCTION_READINESS.md)
+- [Device Acceptance](ULTRON_DEVICE_ACCEPTANCE.md)
