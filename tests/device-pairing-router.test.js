@@ -15,7 +15,8 @@ const SIGNING_SECRET = "device-pairing-test-secret-that-is-32-chars-minimum";
 const ENV = {
   SUPABASE_URL: "https://opdjfhwepmcprbqojpat.supabase.co",
   SUPABASE_SERVICE_ROLE_KEY: "test-service-role-key",
-  ULTRON_DEVICE_SIGNING_SECRET: SIGNING_SECRET
+  ULTRON_DEVICE_SIGNING_SECRET: SIGNING_SECRET,
+  ULTRON_INTEGRATION_OWNER_USER_ID: OWNER_A
 };
 
 function ownerMiddleware(req, res, next) {
@@ -533,4 +534,59 @@ test("device online freshness matches Android periodic sync and the Windows comp
     const futurePayload = await futureResponse.json();
     assert.equal(futurePayload.devices.find(device => device.id === android.deviceId).online, false);
   }, ENV, hub);
+});
+
+test("canonical paired-device API rejects valid tokens issued to a different owner", async () => {
+  const db = makeDatabase();
+  await withRouter(db.fetchImpl, async base => {
+    const created = await fetch(base + "/devices/pairings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-test-owner": OWNER_B },
+      body: JSON.stringify({ deviceName: "Foreign Owner Device", platform: "android" })
+    });
+    assert.equal(created.status, 201);
+    const pairing = await created.json();
+
+    const claim = await fetch(base + "/devices/pairings/claim", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: pairing.pairingCode })
+    });
+    assert.equal(claim.status, 200);
+    const claimed = await claim.json();
+
+    const response = await fetch(base + "/devices/me", {
+      headers: { "x-device-token": claimed.deviceToken }
+    });
+    assert.equal(response.status, 403);
+    assert.equal((await response.json()).error.code, "ULTRON_OWNER_ONLY");
+  });
+});
+
+test("canonical paired-device API fails closed when the configured owner ID is missing", async () => {
+  const db = makeDatabase();
+  const unconfiguredEnv = { ...ENV, ULTRON_INTEGRATION_OWNER_USER_ID: "" };
+  await withRouter(db.fetchImpl, async base => {
+    const created = await fetch(base + "/devices/pairings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-test-owner": OWNER_A },
+      body: JSON.stringify({ deviceName: "Owner Android", platform: "android" })
+    });
+    assert.equal(created.status, 201);
+    const pairing = await created.json();
+
+    const claim = await fetch(base + "/devices/pairings/claim", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: pairing.pairingCode })
+    });
+    assert.equal(claim.status, 200);
+    const claimed = await claim.json();
+
+    const response = await fetch(base + "/devices/me", {
+      headers: { "x-device-token": claimed.deviceToken }
+    });
+    assert.equal(response.status, 503);
+    assert.equal((await response.json()).error.code, "ULTRON_OWNER_NOT_CONFIGURED");
+  }, unconfiguredEnv);
 });
