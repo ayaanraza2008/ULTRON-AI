@@ -344,6 +344,42 @@ test("5. Server-authoritative monotonic version conflict resolution & sensitive 
   assert.equal(badSync.error, "SENSITIVE_DATA_BLOCKED");
 });
 
+test("shared-state credential guard blocks nested token variants and invalid JSON payloads", () => {
+  const mdm = new MultiDeviceManager({ persist: false });
+  const blockedPayloads = [
+    { access_token: "access-secret" },
+    { nested: { apiKey: "provider-secret" } },
+    [{ refresh_token: "refresh-secret" }],
+    { headers: { authorization: "Bearer abcdefghijklmnop" } },
+    { supabase: { service_role_key: "service-secret" } },
+    { credential: "private" }
+  ];
+
+  for (const payload of blockedPayloads) {
+    const result = mdm.syncStateAcrossDevices({
+      stateKey: "credential-test-" + blockedPayloads.indexOf(payload),
+      payload
+    });
+    assert.equal(result.success, false);
+    assert.equal(result.error, "SENSITIVE_DATA_BLOCKED");
+  }
+
+  const ordinaryPayload = mdm.syncStateAcrossDevices({
+    stateKey: "ordinary-tokenizer-metadata",
+    payload: { tokenizer: "sentencepiece", tokenCount: 12 }
+  });
+  assert.equal(ordinaryPayload.success, true);
+
+  const circular = {};
+  circular.self = circular;
+  const invalid = mdm.syncStateAcrossDevices({ stateKey: "invalid-payload", payload: circular });
+  assert.equal(invalid.success, false);
+  assert.equal(invalid.error, "STATE_PAYLOAD_INVALID");
+  const bigint = mdm.syncStateAcrossDevices({ stateKey: "bigint-payload", payload: { count: 1n } });
+  assert.equal(bigint.success, false);
+  assert.equal(bigint.error, "STATE_PAYLOAD_INVALID");
+});
+
 test("6. Device revocation isolates device and drops active delivery", () => {
   const mdm = new MultiDeviceManager({ persist: false });
   mdm.registerDevice({ id: "untrusted-phone", name: "Compromised Device", type: DEVICE_TYPES.ANDROID_SMARTPHONE });
