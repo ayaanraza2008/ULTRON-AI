@@ -17,7 +17,7 @@ import { checkHermesAgentService, getHermesAgentReadiness, resolveHermesAgentPro
 import { runGeoSleuthInvestigation } from "./integrations/geo-sleuth-agent.js";
 import { findOpenVikingContext, getOpenVikingReadiness, readOpenVikingContext } from "./integrations/openviking.js";
 import { checkDesktopCompanion, getDesktopCompanionReadiness } from "./integrations/desktop-companion.js";
-import { cognitiveLayerLabel, extractCorrectionLesson, rankCognitiveMemories, recallCognitiveMemoryGraph } from "./cognitive-memory.js";
+import { cognitiveLayerLabel, extractCorrectionLesson, recallCognitiveMemoryGraph } from "./cognitive-memory.js";
 import { classifyTaskRoute } from "./task-router.js";
 import { getGoogleWorkspaceReadiness, runGoogleWorkspaceReadAction } from "./integrations/google-workspace.js";
 import { getChromeDevToolsReadiness, runChromeDevToolsAction } from "./integrations/chrome-devtools.js";
