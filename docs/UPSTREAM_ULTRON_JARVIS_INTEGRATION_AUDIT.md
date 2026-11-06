@@ -4,7 +4,7 @@ Date: 2026-11-07
 
 ## Scope and source revisions
 
-This is a source-level compatibility and safety audit of two public repositories against the existing `ayaanraza2008/ULTRON-AI` codebase. It is not a claim that upstream code has been merged, built, or run.
+This is a source-level compatibility and safety audit of two public repositories against the existing `ayaanraza2008/ULTRON-AI` codebase. It records selected, independently implemented capability adaptations and reuse decisions; it is not a claim that either upstream repository was wholesale merged or that the integration has passed runtime tests.
 
 | Repository | Audited revision | Main stack | License finding |
 |---|---|---|---|
@@ -49,10 +49,12 @@ This is a source-level compatibility and safety audit of two public repositories
 - [x] Source tree and README files inspected.
 - [x] Selected source modules inspected.
 - [x] Existing ULTRON package stack and Windows companion boundaries inspected.
-- [x] Cerebro-inspired bounded multi-hop recall is wired into the live agent memory retrieval path; existing Supabase user scoping remains mandatory.\n- [x] JARVIS-style desktop orb/tray/position and durable task capabilities were confirmed to exist already in ULTRON; no duplicate runtime was added.\n- [ ] No AbuZar source code/assets copied (no published license at audited revision).
-- [ ] No runtime tests or device acceptance have been run for either upstream project.
+- [x] Cerebro-inspired bounded multi-hop recall is wired into the live agent memory retrieval path; existing Supabase user scoping remains mandatory.
+- [x] JARVIS-style desktop orb/tray/position and durable task capabilities were confirmed to exist already in ULTRON; no duplicate runtime was added.
+- [ ] No AbuZar source code/assets copied (no published license at audited revision).
+- [ ] GitHub Actions test/build jobs for this integration have not completed yet; no runtime or physical-device acceptance is claimed.
 - [ ] No deployment performed.
 
 ## Attribution
 
-JARVIS-ULTIMATE is MIT-licensed. Its desktop companion concepts are already referenced by the existing ULTRON companion implementation; `THIRD_PARTY_NOTICES.md` retains the upstream copyright and MIT permission notice. The AbuZar repository requires written permission or a published license before copying its source or assets.
+JARVIS-ULTIMATE is MIT-licensed, but no JARVIS source code or assets were copied; ULTRON's equivalent desktop-companion features pre-existed this integration. The MIT license text is retained in `THIRD_PARTY_NOTICES.md` for audit transparency. The AbuZar repository requires written permission or a published license before copying its source or assets.
