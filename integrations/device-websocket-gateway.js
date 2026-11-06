@@ -197,8 +197,17 @@ export class DeviceWebSocketGateway {
       return;
     }
 
-    // Authenticate device token from query param, header, or bearer token
-    let token = url.searchParams.get("token") || req.headers["x-device-token"];
+    // Device credentials must never be accepted in URLs: query strings can be
+    // retained by reverse proxies, access logs, browser history, and diagnostics.
+    // Companion clients must use the dedicated header or the authenticated AUTH frame.
+    if (url.searchParams.has("token")) {
+      socket.write("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n");
+      socket.destroy();
+      return;
+    }
+
+    // Authenticate device token from headers only.
+    let token = req.headers["x-device-token"];
     if (!token && req.headers.authorization) {
       const match = req.headers.authorization.match(/^Bearer\s+(.+)$/i);
       if (match) token = match[1].trim();
