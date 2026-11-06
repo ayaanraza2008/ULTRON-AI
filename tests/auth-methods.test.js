@@ -337,3 +337,36 @@ test("production signup accepts the configured bootstrap token and screens the p
     assert.equal(calls.length, 2);
   });
 });
+
+test("session status does not report an authenticated Supabase user when owner identity is missing", async () => {
+  await withServer({
+    fetchImpl: async url => url.endsWith("/auth/v1/user")
+      ? jsonResponse({ id: "supabase-user-1", email: "user@example.com" })
+      : jsonResponse({})
+  }, async base => {
+    const response = await fetch(base + "/api/session", {
+      headers: { Cookie: "ultron_sb_access=synthetic-access-token" }
+    });
+    assert.equal(response.status, 503);
+    const body = await response.json();
+    assert.equal(body.authenticated, false);
+    assert.equal(body.error, "OWNER_NOT_CONFIGURED");
+  });
+});
+
+test("session status reports non-owner Supabase accounts as unauthenticated", async () => {
+  await withServer({
+    env: { ...validEnv, ULTRON_OWNER_USER_ID: "configured-owner-uuid" },
+    fetchImpl: async url => url.endsWith("/auth/v1/user")
+      ? jsonResponse({ id: "different-user-uuid", email: "other@example.com" })
+      : jsonResponse({})
+  }, async base => {
+    const response = await fetch(base + "/api/session", {
+      headers: { Cookie: "ultron_sb_access=synthetic-access-token" }
+    });
+    assert.equal(response.status, 403);
+    const body = await response.json();
+    assert.equal(body.authenticated, false);
+    assert.equal(body.error, "ULTRON_OWNER_ONLY");
+  });
+});
