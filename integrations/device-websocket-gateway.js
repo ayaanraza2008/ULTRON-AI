@@ -444,8 +444,14 @@ export class DeviceWebSocketGateway {
       return;
     }
 
-    // 1. Auth Message
+    // 1. Auth Message. Authentication is a one-way state transition: an
+    // already authenticated socket must never be rebound to another device.
     if (msg.type === "AUTH" && msg.token) {
+      if (clientSession.authenticated || clientSession.deviceId) {
+        this.sendFrame(clientSession.socket, { type: "ERROR", error: "REAUTHENTICATION_NOT_ALLOWED" });
+        clientSession.socket.destroy();
+        return;
+      }
       const device = await this.authenticateToken(msg.token);
       if (!device) {
         this.sendFrame(clientSession.socket, { type: "AUTH_FAILED", error: "INVALID_DEVICE_TOKEN" });
