@@ -1,5 +1,17 @@
 # Blockers
 
+## New evidence — 2026-11-05
+
+- The latest `main` SHA `573f31f953997cb0e546ef599f77e66cf8f7775b` is deployed to the three backend services in Render workspace `Ultron core`; exact-main CI run [41989534064](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41989534064) passed (1,607 passed, 0 failed, 3 skipped; 386/386 syntax files; security quality gate passed; 0 confirmed dependency vulnerabilities). The separate UI service remains on feature branch `feature/ultron-live-core-interface-20261029` at `32e19e563cd791bdd55db7b668b12101d7a13c6f`.
+- Browser Use startup smoke succeeded once at 2026-11-05 07:50:26 UTC (HTTP 200, `openrouter/free`, non-empty output); this does not close the intermittent 502 or sustained-availability blocker.
+- Supabase has 15 applied migration versions through `20261027185203`; device-pairing forward migrations remain unapplied and the live `paired_devices` / `pending_device_pairings` tables are absent. `memory_items` and `agent_tasks` had zero rows at inspection time. RLS is enabled on inspected tables.
+- Security Advisor still reports leaked-password protection disabled. Enable through Supabase Auth settings and re-run the advisor; do not store credentials in source or chat.
+- GitHub reports `main` unprotected; the detailed branch-protection endpoint returned 403 to the connected integration. Owner review is required before changing protection settings.
+- Exact-head CI is green for current-main PRs #453, #454, #456 (after retry), #458, #460, #461 and #462. They are still open/unmerged; do not count PR-only changes as part of deployed `main`.
+
+| BLK-016 | Main branch has no reported branch protection | A direct push can bypass review and required CI; Render services auto-deploy from `main` | Repository API reports `protected: false`. Owner should review and configure required PR review, required CI checks, and restrictions on direct pushes in GitHub settings. Do not change protection automatically. | Yes: continue branch-based fixes and CI while owner decides |
+| BLK-017 | Render health-check paths are unset on the four observed services | Deploy status and process startup logs do not continuously verify the app-level health contract | Render service metadata showed an empty `healthCheckPath` for `ultron-ai-core`, `ultron-browser-use-core`, `ultron-rea-gateway`, and `ultron-core-interface`. Source exposes `/api/health`, `/health`, `/healthz`, and `/healthz` respectively. Owner should review and configure the matching paths; do not change Render configuration automatically. | Yes: source and CI work continue; platform-level health checks remain absent |
+
 | ID | Blocker | Impact | Required resolution | Can independent work continue? |
 |---|---|---|---|---|
 | BLK-001 | Live cloud-model inference is not yet verified end-to-end | Health reporting that a provider is configured does not prove a real prompt succeeds | Run an authorized text request and image request using the configured OpenRouter key/model; verify response and safe fallback behavior | Yes: tests and non-provider backend work continue |

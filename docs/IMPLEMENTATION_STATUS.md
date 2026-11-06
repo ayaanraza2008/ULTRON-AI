@@ -1,5 +1,23 @@
 # Implementation Status
 
+## Current evidence snapshot — 2026-11-05
+
+This snapshot supersedes the older dated operational checkpoint below. The rest of this file is retained as project history and must not be read as current deployment evidence.
+
+- Repository `main`: `573f31f953997cb0e546ef599f77e66cf8f7775b`.
+- Exact-main CI [41989534064](https://github.com/ayaanraza2008/ULTRON-AI/actions/runs/41989534064): 1,607 passed, 0 failed, 3 skipped; syntax 386/386; World Intelligence build passed; security quality gate passed with 0 confirmed dependency vulnerabilities.
+- Render workspace `Ultron core`: `ultron-ai-core`, `ultron-browser-use-core`, and `ultron-rea-gateway` are deployed from current `main` at the SHA above. The separate `ultron-core-interface` service is deployed from `feature/ultron-live-core-interface-20261029` at `32e19e563cd791bdd55db7b668b12101d7a13c6f`. All are observed on free plans with auto-deploy enabled.
+- Browser Use model gateway: one startup smoke on 2026-11-05 07:50:26 UTC returned HTTP 200 using `openrouter/free` and produced a non-empty result. Earlier 502 bursts mean intermittent failure is not considered resolved; sustained behavior and general chat/vision inference are not verified.
+- Supabase project `opdjfhwepmcprbqojpat`: 15 migration versions recorded through `20261027185203`; inspected tables have RLS enabled. The live schema does not yet contain `paired_devices` or `pending_device_pairings`, although corresponding forward migrations exist in source. No production migration was applied during this audit.
+- Read-only table inspection found zero `memory_items` and zero `agent_tasks` rows. Live memory recall, cross-account isolation, and full task lifecycle remain unverified pending dedicated test identities and controlled acceptance.
+- Security Advisor still warns that leaked-password protection is disabled.
+- GitHub reports `main` as unprotected. At least 50 open PRs were returned by the open-PR search; several are based on older main commits. Current-main PRs #453, #454, #456, #458, #460, #461 and #462 have green exact-head CI and remain unmerged.
+- No merge, deployment, restart, secret/configuration change, production data write, or migration was performed as part of this snapshot.
+
+### Intelligence-readiness
+
+ULTRON has a broad software-agent foundation with source-level planning, memory, tool registry, worker queue, browser, voice, vision and device-adapter components. Automated tests provide evidence for bounded task execution, permission enforcement and security behavior. The project is not demonstrated to be AGI: persistent learning quality, generalization, multimodal reasoning, autonomous recovery and real-world device operation still lack independently reproducible live evaluations. The next highest-leverage work is dedicated two-account Supabase acceptance plus a durable device-pairing migration/recovery test, followed by repeatable provider and task-lifecycle evaluations.
+
 ## Current phase
 Phase 3 — Integrated frontend and backend live verification. The empty-repository audit below is historical. `main` contains the Node/Express API, Supabase-backed auth/chat/preferences/memory/task routes, provider fallback, bounded document extraction, an allowlisted task worker, guarded integration adapters, the cinematic command-center frontend, and private original-file storage routes. Source CI passed on main commit `5811ba00fc78065b33c06f171801c39ad5194aad`, but Render's latest build failed before compilation due to `pipeline_minutes_exhausted`; do not claim that commit is live. The private-document-storage migration was applied to Supabase and its private bucket/RLS/grants were verified read-only. Live model inference, authenticated cross-account isolation, worker execution with a dedicated test user, and authenticated file-storage E2E remain unverified. The Windows companion still needs physical-device pairing and testing.
 
