@@ -28,10 +28,9 @@ function securityHeaders(res) {
   res.setHeader("Referrer-Policy", "no-referrer");
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("Permissions-Policy", "camera=(self), geolocation=(), microphone=(self)");
-  // The hand tracker loads a version-pinned MediaPipe module and its WASM/model
-  // assets. Camera frames remain local; only these static runtime assets are
-  // fetched from the explicitly allow-listed origins.
-  res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://cdn.jsdelivr.net https://storage.googleapis.com; frame-src 'self' https://ultron-world-intelligence.onrender.com; media-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; worker-src 'self' blob:; manifest-src 'self'");
+  // Keep all active UI execution and API traffic same-origin. External vision
+  // assets are not enabled until a real, version-pinned hand-tracking module ships.
+  res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; frame-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; worker-src 'self' blob:; manifest-src 'self'");
 }
 
 async function readRequestBody(req) {
