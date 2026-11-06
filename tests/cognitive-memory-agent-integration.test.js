@@ -62,7 +62,7 @@ test("agent injects ranked per-user cognitive memories and learns a generic corr
       source: "conversation_summary",
       created_at: "2026-10-28T12:00:00.000Z",
       updated_at: "2026-10-28T12:00:00.000Z",
-      metadata: { cognitiveLayer: "procedural", confidence: 0.8, reinforcementCount: 2, relatedMemoryIds: ["memory-language"] }
+      metadata: { cognitiveLayer: "procedural", confidence: 1, reinforcementCount: 10, relatedMemoryIds: ["memory-language"] }
     },
     {
       id: "memory-language",
