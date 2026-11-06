@@ -1,0 +1,49 @@
+name: ULTRON Production Uptime
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ultron-production-uptime
+  cancel-in-progress: true
+
+jobs:
+  health:
+    name: Verify public ULTRON health endpoint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check Render production health endpoint
+        env:
+          HEALTH_URL: https://ultron-ai-core.onrender.com/api/health
+        run: |
+          set -euo pipefail
+          response="$(curl --fail --silent --show-error \
+            --connect-timeout 15 --max-time 90 \
+            --retry 2 --retry-all-errors --retry-delay 5 \
+            "$HEALTH_URL")"
+          printf '%s' "$response" | node --input-type=module -e '
+            let raw = "";
+            for await (const chunk of process.stdin) raw += chunk;
+            const health = JSON.parse(raw);
+            if (health.status !== "ok" || health.app !== "ULTRON AI") {
+              console.error("Unexpected ULTRON health response:", {
+                status: health.status ?? null,
+                app: health.app ?? null
+              });
+              process.exit(1);
+            }
+            console.log("ULTRON production health check passed.", {
+              status: health.status,
+              app: health.app,
+              commit: health.build?.commit ?? null,
+              providerConfigured: health.providerConfigured === true,
+              supabaseConfigured: health.supabaseConfigured === true,
+              timestamp: health.timestamp ?? null
+            });
+          '

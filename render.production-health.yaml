@@ -1,0 +1,134 @@
+# Narrow Render reconciliation: preserve existing services and env vars.
+# This file intentionally declares no envVars so existing secrets/config remain untouched.
+services:
+  - type: web
+    name: ultron-ai-core
+    runtime: node
+    plan: free
+    region: singapore
+    branch: main
+    buildCommand: >-
+      npm install --ignore-scripts &&
+      npm run check &&
+      node --test --test-concurrency=2 --test-timeout=30000 --test-force-exit
+      tests/preferences-api.test.js
+      tests/rea-gateway.test.js
+      tests/auth-isolation-unit.test.js
+      tests/auth-methods.test.js
+      tests/auth-rate-limit.test.js
+      tests/auth-readiness.test.js
+      tests/chat-model-fallback.test.js
+      tests/model-provider-fallbacks.test.js
+      tests/model-provider-total-timeout.test.js
+      tests/autonomous-task-lifecycle.test.js
+      tests/worker-smoke.test.js
+      tests/voice-personality-modes.test.js
+      tests/voice-pipeline-completion.test.js
+      tests/voice-activation-system.test.js
+      tests/voice-activation-e2e.test.js
+      tests/memory-api-user-scope.test.js
+      tests/agent-runtime.test.js
+      tests/agent-runtime-approval-guard.test.js
+      tests/agent-runtime-tool-intent-guard.test.js
+      tests/agent-task-api.test.js
+      tests/task-router.test.js
+      tests/operator-authorization.test.js
+      tests/target-authorization.test.js
+      tests/task-skill-fetch-security.test.js
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    buildFilter:
+      paths:
+        - "**/*.js"
+        - "**/*.mjs"
+        - "package.json"
+        - "package-lock.json"
+        - "public/**"
+        - "supabase/migrations/**"
+      ignoredPaths:
+        - "tests/**"
+        - "test/**"
+        - "docs/**"
+        - ".github/**"
+        - "README.md"
+        - "DEVELOPMENT_STATE.md"
+        - ".env.example"
+        - ".gitignore"
+        - "rea-gateway/**"
+        - "browser-use-bridge/**"
+        - "android-companion/**"
+        - "windows-companion/**"
+
+  - type: web
+    name: ultron-browser-use-core
+    runtime: python
+    plan: free
+    region: singapore
+    branch: main
+    buildCommand: >-
+      pip install -r browser-use-bridge/requirements.txt &&
+      python -m pip check &&
+      python -m playwright install chromium &&
+      python -m py_compile browser-use-bridge/main.py
+      browser-use-bridge/navigation_policy.py browser-use-bridge/startup_smoke.py &&
+      python browser-use-bridge/test_navigation_policy.py &&
+      python browser-use-bridge/test_startup_smoke.py
+    startCommand: cd browser-use-bridge && uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    buildFilter:
+      paths:
+        - "browser-use-bridge/**"
+
+  - type: web
+    name: ultron-rea-gateway
+    runtime: node
+    plan: free
+    region: singapore
+    branch: main
+    buildCommand: >-
+      cd rea-gateway &&
+      npm install --omit=dev &&
+      npm ls zod glob minimatch --all &&
+      npm audit --omit=dev --audit-level=low &&
+      npm run check &&
+      cd .. &&
+      node --test --test-timeout=30000 --test-force-exit tests/rea-gateway.test.js
+    startCommand: cd rea-gateway && npm start
+    healthCheckPath: /healthz
+    autoDeployTrigger: commit
+    buildFilter:
+      paths:
+        - "rea-gateway/**"
+
+  - type: web
+    name: ultron-core-interface
+    runtime: node
+    plan: free
+    region: singapore
+    branch: feature/ultron-live-core-interface-20261029
+    buildCommand: >-
+      npm install --ignore-scripts &&
+      node --check public/app.js &&
+      node --test --test-concurrency=2 --test-timeout=30000 --test-force-exit
+      tests/interface-voice-output.test.js
+      tests/core-ui.test.js
+      tests/features.test.js
+      tests/wake-word.test.js
+      tests/auth-methods.test.js
+      tests/auth-rate-limit.test.js
+      tests/auth-readiness.test.js
+      tests/vision-routing.test.js
+      tests/browser-use-model-proxy.test.js
+      tests/supabase-auth-diagnostics.test.js
+    startCommand: node core-ui-proxy.mjs
+    healthCheckPath: /healthz
+    autoDeployTrigger: commit
+    buildFilter:
+      paths:
+        - "public/**"
+        - "core-ui-proxy.mjs"
+        - "particle-swarm-engine.js"
+        - "package.json"
+        - "package-lock.json"
