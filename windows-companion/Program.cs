@@ -41,6 +41,7 @@ internal sealed class CompanionContext : ApplicationContext
     private readonly Button _pairButton;
     private readonly System.Windows.Forms.Timer _commandPollTimer;
     private int _commandPollInProgress;
+    private DateTime _lastHeartbeatUtc = DateTime.MinValue;
     private bool _suppressAutoStartChange;
     private bool _suppressRemoteCommandsChange;
     private SpeechRecognitionEngine? _recognizer;
@@ -1009,6 +1010,28 @@ internal sealed class CompanionContext : ApplicationContext
                 !(backendUri.Scheme == Uri.UriSchemeHttps ||
                   (backendUri.Scheme == Uri.UriSchemeHttp && backendUri.IsLoopback)))
                 return;
+
+            // The paired-device API considers a Windows companion online only
+            // after it sends a real authenticated heartbeat. Do this at a
+            // bounded cadence rather than writing presence on every 3-second poll.
+            if (DateTime.UtcNow - _lastHeartbeatUtc >= TimeSpan.FromSeconds(25))
+            {
+                using var heartbeat = new HttpRequestMessage(
+                    HttpMethod.Post,
+                    new Uri(backendUri, "/api/devices/me/heartbeat"))
+                {
+                    Content = new StringContent("{}", Encoding.UTF8, "application/json")
+                };
+                heartbeat.Headers.Add("x-device-token", identity.Token);
+                using var heartbeatResponse = await s_httpClient.SendAsync(heartbeat);
+                if (heartbeatResponse.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                {
+                    ShowStatus("Windows companion authentication expired. Re-pair this device to resume remote commands.");
+                    return;
+                }
+                if (!heartbeatResponse.IsSuccessStatusCode) return;
+                _lastHeartbeatUtc = DateTime.UtcNow;
+            }
 
             var route = $"/api/jarvis/devices/{Uri.EscapeDataString(identity.DeviceId)}/commands/pending";
             using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(backendUri, route));
