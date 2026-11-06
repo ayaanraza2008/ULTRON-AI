@@ -447,7 +447,7 @@ async function sendMessage(rawText, attachments = []) {
     await persistMessage("assistant", answer);
     const source = [result.provider, result.model || state.model].filter(Boolean).join(" · ");
     setStatus("standby", "Response received.", source || "ULTRON ready");
-    if (responseMode === "voice" && state.preferences.voice_enabled && !state.muted) speak(answer);
+    if (responseMode === "voice" && state.mode === "voice" && state.preferences.voice_enabled && !state.muted) speak(answer);
   } catch (error) {
     if (error?.name === "AbortError") {
       setStatus("standby", "Request stopped.", "You can send another message");
