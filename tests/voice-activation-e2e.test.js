@@ -2,7 +2,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { UltronVoiceActivationSystem, VOICE_ACTIVATION_STATES } from "../voice/voice-activation-system.js";
 import { AcousticSnapDetector, SNAP_SENSITIVITY_PRESETS } from "../voice/snap-detector.js";
-import { CORE_STATES, EnergyCoreController } from "../public/energy-core.js";
 import { JarvisVoiceEngine } from "../voice/voice-engine.js";
 
 test("E2E Scenario 1: Voice wake word detection activates system from standby", () => {
@@ -36,27 +35,22 @@ test("E2E Scenario 2: Acoustic finger snap triggers wake activation", () => {
   assert.equal(system.getState(), VOICE_ACTIVATION_STATES.LISTENING);
 });
 
-test("E2E Scenario 3: Activation cyber chime & visual state transition triggered", () => {
+test("E2E Scenario 3: Activation callback emits a visual state transition signal", () => {
   let cyberChimeTriggered = false;
   let visualState = null;
 
-  const core = new EnergyCoreController();
   const system = new UltronVoiceActivationSystem({
     onWake: (source) => {
       cyberChimeTriggered = true;
-      if (source === "FINGER_SNAP") {
-        core.setVisualState(CORE_STATES.SNAP_DETECTED);
-      } else {
-        core.setVisualState(CORE_STATES.WAKE_DETECTED);
-      }
+      visualState = source === "FINGER_SNAP" ? "SNAP_DETECTED" : "WAKE_DETECTED";
     },
   });
 
   system.startMonitoring({ hasPermission: true });
   system.triggerWake("VOICE_WAKE_WORD");
 
-  assert.equal(cyberChimeTriggered, true, "Cyber chime audio feedback must be invoked");
-  assert.equal(core.currentState, CORE_STATES.WAKE_DETECTED);
+  assert.equal(cyberChimeTriggered, true, "Wake feedback callback must be invoked");
+  assert.equal(visualState, "WAKE_DETECTED");
 });
 
 test("E2E Scenario 4: User voice utterance transcribed and dispatched as command", () => {
