@@ -21,7 +21,7 @@ export function generateParticleData(count = DEFAULT_COUNT, seed = 0x51f15e) {
   const goldenAngle = Math.PI * (3 - Math.sqrt(5));
   for (let index = 0; index < safeCount; index += 1) {
     const band = index % 100;
-    const y = 1 - 2 * ((index + 0.5) / safeCount);
+    let y = 1 - 2 * ((index + 0.5) / safeCount);
     const radial = Math.sqrt(Math.max(0, 1 - y * y));
     const angle = index * goldenAngle;
     let x = Math.cos(angle) * radial;
