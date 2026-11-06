@@ -254,7 +254,7 @@ export class DeviceHub {
       }, null, 2);
 
       const tmpPath = `${this.durableStoragePath}.${Date.now()}.tmp`;
-      fs.writeFileSync(tmpPath, payload, "utf8");
+      fs.writeFileSync(tmpPath, payload, { encoding: "utf8", mode: 0o600 });
       fs.renameSync(tmpPath, this.durableStoragePath);
       return true;
     } catch {
