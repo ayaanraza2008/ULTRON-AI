@@ -43,6 +43,7 @@ export function createHealthchecksHeartbeat({
     if (lastSignal !== null && lastSignal !== kind && elapsed < minSignalIntervalMs) return false;
 
     lastAttemptAt = time;
+    lastSignal = kind;
     const target = kind === "failure" ? baseUrl + "/fail" : baseUrl;
     inFlight = (async () => {
       try {
