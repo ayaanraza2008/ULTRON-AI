@@ -252,7 +252,7 @@ export async function runReaMcpSelfTest({ upstreamPort, analysisRoot } = {}) {
     stage = "analyze_demo_target";
     const evidence = getStructuredToolOutput(await call("tools/call", {
       name: "analyze_javascript_application",
-      arguments: { input_path: targetPath, format: "directory", integrity_policy: "fail", detail: "complete" }
+      arguments: buildDemoAnalysisArguments(targetPath)
     }));
     if (typeof evidence.evidence_id !== "string" || !evidence.normalized_result) {
       return { ok: false, stage: "analyze_demo_target", reason: "evidence_missing" };
@@ -398,6 +398,12 @@ export function resolveAnalysisRoot(configuredRoot, packageRoot) {
   return typeof configuredRoot === "string" && configuredRoot.trim()
     ? configuredRoot.trim()
     : resolve(packageRoot, "targets");
+}
+
+export function buildDemoAnalysisArguments(targetPath) {
+  // Full Evidence is the default. The strict MCP schema does not accept
+  // an explicit "complete" detail value.
+  return { input_path: targetPath, format: "directory", integrity_policy: "fail" };
 }
 
 
