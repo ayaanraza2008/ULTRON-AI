@@ -44,6 +44,62 @@ function extractHtmlText(value) {
   );
 }
 
+
+function validateDocxArchive(bytes) {
+  const minimumOffset = Math.max(0, bytes.length - 65_557);
+  let endRecord = -1;
+  for (let offset = bytes.length - 22; offset >= minimumOffset; offset -= 1) {
+    if (bytes.readUInt32LE(offset) !== 0x06054b50) continue;
+    const commentLength = bytes.readUInt16LE(offset + 20);
+    if (offset + 22 + commentLength === bytes.length) {
+      endRecord = offset;
+      break;
+    }
+  }
+  if (endRecord < 0) return false;
+
+  const diskNumber = bytes.readUInt16LE(endRecord + 4);
+  const centralDisk = bytes.readUInt16LE(endRecord + 6);
+  const entriesOnDisk = bytes.readUInt16LE(endRecord + 8);
+  const entryCount = bytes.readUInt16LE(endRecord + 10);
+  const centralSize = bytes.readUInt32LE(endRecord + 12);
+  const centralOffset = bytes.readUInt32LE(endRecord + 16);
+  if (diskNumber !== 0 || centralDisk !== 0 || entriesOnDisk !== entryCount ||
+      entryCount < 1 || entryCount > 256 ||
+      centralOffset + centralSize > endRecord ||
+      centralOffset + centralSize > bytes.length) return false;
+
+  let cursor = centralOffset;
+  let totalUncompressed = 0;
+  let hasDocumentXml = false;
+  for (let index = 0; index < entryCount; index += 1) {
+    if (cursor + 46 > centralOffset + centralSize || bytes.readUInt32LE(cursor) !== 0x02014b50) return false;
+    const flags = bytes.readUInt16LE(cursor + 8);
+    const method = bytes.readUInt16LE(cursor + 10);
+    const compressedSize = bytes.readUInt32LE(cursor + 20);
+    const uncompressedSize = bytes.readUInt32LE(cursor + 24);
+    const nameLength = bytes.readUInt16LE(cursor + 28);
+    const extraLength = bytes.readUInt16LE(cursor + 30);
+    const commentLength = bytes.readUInt16LE(cursor + 32);
+    const next = cursor + 46 + nameLength + extraLength + commentLength;
+    if (next > centralOffset + centralSize ||
+        (flags & 1) !== 0 ||
+        ![0, 8].includes(method) ||
+        compressedSize === 0xffffffff ||
+        uncompressedSize === 0xffffffff ||
+        compressedSize > bytes.length ||
+        uncompressedSize > 12_582_912) return false;
+
+    const name = bytes.subarray(cursor + 46, cursor + 46 + nameLength).toString("utf8");
+    if (!name || name.startsWith("/") || name.includes("../") || name.includes("..\\\\") || name.includes("\\\\..")) return false;
+    if (name === "word/document.xml") hasDocumentXml = true;
+    totalUncompressed += uncompressedSize;
+    if (totalUncompressed > 20_971_520) return false;
+    cursor = next;
+  }
+  return cursor === centralOffset + centralSize && hasDocumentXml;
+}
+
 export async function extractDocumentText({ filename, mimeType, bytes }) {
   if (typeof filename !== "string" || !Buffer.isBuffer(bytes) || bytes.length < 1) {
     throw Object.assign(new Error("Document contents are invalid."), { code: "DOCUMENT_INVALID", status: 400 });
@@ -73,8 +129,11 @@ export async function extractDocumentText({ filename, mimeType, bytes }) {
     }
   } else if (extension === "docx" ||
              mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
-    if (bytes.subarray(0, 2).toString("hex") !== "504b") {
-      throw Object.assign(new Error("DOCX file signature is invalid."), { code: "DOCUMENT_INVALID_DOCX", status: 422 });
+    if (bytes.subarray(0, 2).toString("hex") !== "504b" || !validateDocxArchive(bytes)) {
+      throw Object.assign(new Error("DOCX archive is invalid, encrypted, or exceeds safe extraction limits."), {
+        code: "DOCUMENT_INVALID_DOCX",
+        status: 422
+      });
     }
     try {
       const parsed = await mammoth.extractRawText({ buffer: bytes });
