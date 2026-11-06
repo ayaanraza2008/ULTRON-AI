@@ -1,5 +1,6 @@
 import mammoth from "mammoth";
 import pdfParse from "pdf-parse";
+import { inflateRawSync } from "node:zlib";
 
 const MAX_EXTRACTED_CHARS = 36_000;
 const MAX_PDF_PAGES = 15;
@@ -121,10 +122,27 @@ function validateDocxArchive(bytes) {
         dataEnd > centralOffset ||
         bytes.subarray(localNameStart, localNameStart + localNameLength).toString("utf8") !== name) return false;
 
-    if (name === "word/document.xml") hasDocumentXml = true;
     totalUncompressed += uncompressedSize;
     totalCompressed += compressedSize;
     if (totalUncompressed > 20_971_520 || totalCompressed > bytes.length) return false;
+
+    // Do not trust ZIP central-directory size claims: verify actual expansion
+    // before Mammoth processes the archive, with a hard per-entry output cap.
+    try {
+      const compressedData = bytes.subarray(dataStart, dataEnd);
+      if (method === 0) {
+        if (compressedSize !== uncompressedSize) return false;
+      } else {
+        const expanded = inflateRawSync(compressedData, {
+          maxOutputLength: Math.max(1, uncompressedSize)
+        });
+        if (expanded.length !== uncompressedSize) return false;
+      }
+    } catch {
+      return false;
+    }
+
+    if (name === "word/document.xml") hasDocumentXml = true;
     cursor = next;
   }
   return cursor === centralOffset + centralSize && hasDocumentXml;
