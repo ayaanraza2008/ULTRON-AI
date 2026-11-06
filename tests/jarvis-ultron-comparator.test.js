@@ -60,7 +60,7 @@ describe("JARVIS + ULTRON Capability Comparator Suite", () => {
     assert.ok(markdown.includes("Col C: Current ULTRON Implementation"));
     assert.ok(markdown.includes("Col D: Gap Analysis"));
     assert.ok(markdown.includes("Col E: Required Upgrade"));
-    assert.ok(markdown.includes("Col F: Status"));
+    assert.ok(markdown.includes("Col F: Inventory Status"));
     assert.ok(markdown.includes("Col G: Test Evidence"));
     assert.ok(markdown.includes("Col H: Inventory Coverage"));
     assert.ok(markdown.includes("JARVIS Capability Alignment:** NOT MEASURED"));
