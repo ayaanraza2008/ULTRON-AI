@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#050308">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="ULTRON AI personal intelligence command interface">
+  <title>ULTRON AI</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="ambient ambient--violet" aria-hidden="true"></div>
+  <div class="ambient ambient--crimson" aria-hidden="true"></div>
+
+  <main id="app" class="app" data-mode="voice">
+    <header class="topbar">
+      <a class="wordmark" href="/" aria-label="ULTRON home">
+        <span class="wordmark__sigil" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span class="wordmark__name">ULTRON</span>
+        <span class="wordmark__edition">AI</span>
+      </a>
+      <div class="topbar__right">
+        <span class="connection" id="connection-indicator" data-state="checking">
+          <span class="connection__dot" aria-hidden="true"></span>
+          <span id="connection-label">CONNECTING</span>
+        </span>
+        <button class="icon-button" id="activity-open" type="button" aria-label="Open activity" title="Activity">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h3l2-6 4 12 2-6h5"/></svg>
+        </button>
+        <button class="icon-button" id="settings-open" type="button" aria-label="Open settings" title="Settings">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-1.7 2.9-.2-.1a1.7 1.7 0 0 0-1.8 0l-.2.1h-3.4l-.1-.2a1.7 1.7 0 0 0-1.5-1l-.2.1-2.9-1.7.1-.2a1.7 1.7 0 0 0 0-1.8l-.1-.2v-3.4l.2-.1a1.7 1.7 0 0 0 1-1.5l-.1-.2 1.7-2.9.2.1a1.7 1.7 0 0 0 1.8 0l.2-.1h3.4l.1.2a1.7 1.7 0 0 0 1.5 1l.2-.1 2.9 1.7-.1.2a1.7 1.7 0 0 0 0 1.8l.1.2v3.4z"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <section class="command-stage" aria-label="ULTRON voice command interface">
+      <div class="stage-caption">
+        <span class="stage-caption__overline" id="stage-overline">PERSONAL INTELLIGENCE</span>
+        <span class="stage-caption__state" id="state-label">STANDBY</span>
+      </div>
+
+      <div class="core-wrap" id="core-wrap">
+        <div class="core-aura core-aura--outer" aria-hidden="true"></div>
+        <div class="core-aura core-aura--inner" aria-hidden="true"></div>
+        <div class="core-ring core-ring--one" aria-hidden="true"></div>
+        <div class="core-ring core-ring--two" aria-hidden="true"></div>
+        <canvas id="energy-core" class="energy-core" aria-label="Animated purple and crimson energy core" role="img"></canvas>
+        <div class="core-crosshair" aria-hidden="true"><span></span><span></span></div>
+        <div class="core-center" aria-hidden="true">
+          <span class="core-center__mark">U</span>
+          <span class="core-center__pulse"></span>
+        </div>
+      </div>
+
+      <div class="assistant-line" id="assistant-line" aria-live="polite">
+        <span class="assistant-line__main" id="assistant-line-main">Ready when you are.</span>
+        <span class="assistant-line__sub" id="assistant-line-sub">Tap the core to speak</span>
+      </div>
+
+      <section class="transcript" id="transcript" aria-label="Conversation" aria-live="polite">
+        <ol class="transcript__list" id="message-list"></ol>
+      </section>
+    </section>
+
+    <footer class="interaction-dock">
+      <div class="mode-switch" role="group" aria-label="Interaction mode">
+        <button class="mode-switch__option is-active" id="voice-mode" type="button" aria-pressed="true">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3m-4 0h8"/></svg>
+          <span>VOICE</span>
+        </button>
+        <button class="mode-switch__option" id="text-mode" type="button" aria-pressed="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4zM8 9h8M8 12h5"/></svg>
+          <span>TEXT</span>
+        </button>
+      </div>
+
+      <button class="core-trigger" id="core-trigger" type="button" aria-label="Start voice input">
+        <span class="core-trigger__halo" aria-hidden="true"></span>
+        <svg class="core-trigger__mic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3m-4 0h8"/></svg>
+        <span class="core-trigger__stop" aria-hidden="true"></span>
+      </button>
+
+      <div class="dock-actions">
+        <button class="icon-button icon-button--dock" id="mute-toggle" type="button" aria-label="Mute voice output" title="Mute voice output">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4h4l5 4V6l-5 4zM17 9l4 6m0-6-4 6"/></svg>
+        </button>
+        <button class="icon-button icon-button--dock" id="attach-open" type="button" aria-label="Attach an image" title="Attach image">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m-4 4 4-4 4 4M5 14v5h14v-5"/></svg>
+        </button>
+      </div>
+
+      <form class="composer" id="composer" hidden>
+        <div class="composer__attachments" id="attachment-list" aria-live="polite"></div>
+        <label class="visually-hidden" for="message-input">Message ULTRON</label>
+        <textarea id="message-input" rows="1" maxlength="12000" placeholder="Message ULTRON..." autocomplete="off"></textarea>
+        <input id="image-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple hidden>
+        <button class="send-button" id="send-button" type="submit" aria-label="Send message">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 4 16 8-16 8 3-8zM7 12h13"/></svg>
+        </button>
+      </form>
+    </footer>
+  </main>
+
+  <div class="drawer-scrim" id="drawer-scrim" hidden></div>
+  <aside class="drawer" id="settings-drawer" aria-label="Settings" aria-hidden="true" inert>
+    <div class="drawer__header">
+      <div><span class="drawer__eyebrow">CONTROL LAYER</span><h2>Settings</h2></div>
+      <button class="icon-button" id="settings-close" type="button" aria-label="Close settings">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+
+    <button class="text-action drawer-new-chat" id="new-conversation" type="button">New conversation <span aria-hidden="true">↗</span></button>
+    <section class="drawer-section">
+      <div class="section-heading"><span>INTELLIGENCE</span><span class="section-heading__line"></span></div>
+      <label class="setting-field"><span>Personality</span>
+        <select id="persona-select"><option value="ultron">ULTRON</option><option value="naya">NAYA</option></select>
+      </label>
+      <label class="setting-field"><span>Model</span>
+        <select id="model-select"><option value="openrouter/free">ULTRON FREE ROUTER</option></select>
+      </label>
+      <label class="setting-field"><span>Voice input language</span>
+        <select id="locale-select">
+          <option value="en-IN">English (India)</option>
+          <option value="hi-IN">Hindi</option>
+          <option value="hinglish">Hinglish</option>
+        </select>
+      </label>
+      <div class="setting-row">
+        <div><span class="setting-row__title">Personal memory</span><span class="setting-row__hint">Use your saved memories in chat</span></div>
+        <button class="switch" id="memory-toggle" type="button" role="switch" aria-checked="true" aria-label="Toggle personal memory"><span></span></button>
+      </div>
+      <div class="setting-row">
+        <div><span class="setting-row__title">Spoken responses</span><span class="setting-row__hint">Browser speech output</span></div>
+        <button class="switch" id="speech-toggle" type="button" role="switch" aria-checked="true" aria-label="Toggle spoken responses"><span></span></button>
+      </div>
+    </section>
+
+    <section class="drawer-section">
+      <div class="section-heading"><span>SYSTEM STATUS</span><span class="section-heading__line"></span></div>
+      <dl class="status-grid" id="system-status">
+        <div><dt>API</dt><dd data-status="api">Checking</dd></div>
+        <div><dt>AI provider</dt><dd data-status="provider">Checking</dd></div>
+        <div><dt>Database</dt><dd data-status="database">Checking</dd></div>
+        <div><dt>Worker</dt><dd data-status="worker">Checking</dd></div>
+        <div><dt>Autonomy</dt><dd data-status="autonomy">Checking</dd></div>
+      </dl>
+      <p class="drawer-note" id="runtime-note">Live status is read from ULTRON APIs. Values are not simulated.</p>
+    </section>
+
+    <section class="drawer-section drawer-section--last">
+      <div class="section-heading"><span>SESSION</span><span class="section-heading__line"></span></div>
+      <div class="session-line"><span id="account-label">Owner session</span><span class="session-line__dot" aria-hidden="true"></span></div>
+      <button class="text-action" id="signout-button" type="button">Sign out <span aria-hidden="true">↗</span></button>
+    </section>
+    <div class="drawer__footer"><span>ULTRON AI</span><span>PRIVATE SYSTEM</span></div>
+  </aside>
+
+  <aside class="drawer drawer--activity" id="activity-drawer" aria-label="Activity" aria-hidden="true" inert>
+    <div class="drawer__header">
+      <div><span class="drawer__eyebrow">LIVE EXECUTION</span><h2>Activity</h2></div>
+      <button class="icon-button" id="activity-close" type="button" aria-label="Close activity">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+    <section class="drawer-section">
+      <div class="section-heading"><span>RECENT TASKS</span><span class="section-heading__line"></span></div>
+      <div class="activity-list" id="task-list"><p class="drawer-note">Loading real task records...</p></div>
+    </section>
+    <section class="drawer-section">
+      <div class="section-heading"><span>CAPABILITIES</span><span class="section-heading__line"></span></div>
+      <div class="activity-list" id="capability-list"><p class="drawer-note">Loading capability registry...</p></div>
+    </section>
+    <div class="drawer__footer"><span>LIVE API DATA</span><span id="activity-updated">—</span></div>
+  </aside>
+
+  <section class="auth-screen" id="auth-screen" hidden aria-labelledby="auth-title">
+    <div class="auth-screen__glow" aria-hidden="true"></div>
+    <div class="auth-card">
+      <div class="wordmark wordmark--auth"><span class="wordmark__sigil" aria-hidden="true"><span></span><span></span><span></span></span><span class="wordmark__name">ULTRON</span><span class="wordmark__edition">AI</span></div>
+      <span class="drawer__eyebrow">PRIVATE INTELLIGENCE SYSTEM</span>
+      <h1 id="auth-title">Owner access</h1>
+      <p class="auth-copy" id="auth-copy">Authenticate to connect to your ULTRON system.</p>
+      <form id="auth-form" class="auth-form">
+        <div id="email-field">
+          <label for="auth-email">Email</label>
+          <input id="auth-email" type="email" autocomplete="username" placeholder="you@example.com">
+        </div>
+        <div>
+          <label for="auth-password" id="password-label">Password</label>
+          <input id="auth-password" type="password" autocomplete="current-password" required>
+        </div>
+        <button class="auth-submit" id="auth-submit" type="submit">Sign in <span aria-hidden="true">↗</span></button>
+      </form>
+      <button class="auth-google" id="google-signin" type="button">Continue with Google</button>
+      <button class="auth-recovery" id="recovery-button" type="button">Forgot password?</button>
+      <button class="auth-mode" id="legacy-access-toggle" type="button">Use owner access code</button>
+      <p class="auth-message" id="auth-message" role="status" aria-live="polite"></p>
+      <p class="auth-footnote" id="auth-footnote">Single-owner access. Public registration is disabled.</p>
+    </div>
+  </section>
+
+  <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></div>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

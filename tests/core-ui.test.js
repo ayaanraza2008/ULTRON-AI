@@ -19,12 +19,13 @@ async function startProxy(t, options = {}) {
   return "http://127.0.0.1:" + proxy.address().port;
 }
 
-test("backend and proxy do not expose frontend static assets", () => {
-  assert.doesNotMatch(serverSource, /express\.static\s*\(/);
-  assert.doesNotMatch(serverSource, /app\.use\s*\(\s*["']\/voice["']/);
+test("backend serves its public command-center shell while the compatibility proxy stays API-only", () => {
+  assert.ok(serverSource.includes("app.use(express.static(publicDir, {"));
+  assert.ok(!serverSource.includes('app.use("/voice"'));
   assert.ok(serverSource.includes('app.get("/service-worker.js"'));
-  assert.doesNotMatch(proxySource, /STATIC_ASSETS|serveAsset/);
-  assert.ok(serverSource.includes('app.get("/service-worker.js"'));
+  assert.ok(!proxySource.includes("STATIC_ASSETS"));
+  assert.ok(!proxySource.includes("serveAsset"));
+  assert.ok(serverSource.includes('app.get("/", (_req, res, next) =>'));
   assert.ok(serverSource.includes("ultron-core-shell-"));
 });
 

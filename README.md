@@ -1,6 +1,6 @@
 # ULTRON AI
 
-ULTRON AI is an API-first assistant runtime. This repository exposes backend APIs and integrations only. The user-facing web frontend, dashboards, static bundles, and PWA assets have been removed from the repository and hosted services.
+ULTRON AI is an API-first assistant runtime with a development-only black energy-core command center being rebuilt on an isolated feature branch. The production frontend has not been redeployed.
 
 ## Current status
 
@@ -10,7 +10,7 @@ ULTRON AI is an API-first assistant runtime. This repository exposes backend API
 - **Dedicated database:** Supabase project `ULTRON-AI` in Mumbai (`ap-south-1`), project ref `opdjfhwepmcprbqojpat`. The quoted project creation cost was $0/month.
 - **Database schema:** Initial migration creates conversations, messages, user preferences, user-controlled memory, agent tasks, and audit events, with Row Level Security enabled. The backend includes authenticated conversation, preference, memory CRUD, and task-record endpoints; live RLS behavior still requires end-to-end verification.
 - **Isolation:** The existing `nox-ai` Supabase project was not modified.
-- **Frontend status:** the user-facing web frontend has been removed from `public/`, the backend static-file mounts, and the separate Render compatibility proxy. The backend root and former HTML/JS/CSS/PWA paths return JSON 404 responses. A temporary `/service-worker.js` retirement script unregisters older installed ULTRON PWAs and clears only the old `ultron-core-shell-*` cache prefix. Authenticated `/api/*` and `/jarvis/*` requests remain available. The existing `ultron-core-interface` Render resource is retained temporarily as an API-only compatibility proxy; its infrastructure resource can be deleted separately from the Render Dashboard when no clients depend on that URL.
+- **Frontend status:** the previous web UI was removed and the production API currently serves no command-center interface. A replacement black/purple-crimson energy-core interface is under development on `agent/codex/ultron-black-energy-core-ui`; its branch is not merged or deployed. The separate `ultron-core-interface` resource remains an API-only compatibility proxy. The replacement uses same-origin APIs and a dependency-free WebGL particle renderer; browser speech and image attachment availability still require browser/device acceptance.
 
 ## Backend-only capability integration phase
 
