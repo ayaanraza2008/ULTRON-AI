@@ -876,6 +876,9 @@ export class MultiDeviceManager {
     if (!dev || this.revokedDevices.has(deviceId) || dev.status === "revoked") {
       return { success: false, error: this.revokedDevices.has(deviceId) ? "DEVICE_REVOKED" : "DEVICE_NOT_FOUND" };
     }
+    if (typeof telemetry.ownerUserId === "string" && telemetry.ownerUserId.trim()) {
+      dev.ownerUserId = telemetry.ownerUserId.trim();
+    }
     if (typeof telemetry.online === "boolean") dev.online = telemetry.online;
     if (telemetry.battery && typeof telemetry.battery.percent === "number") {
       dev.battery = {
