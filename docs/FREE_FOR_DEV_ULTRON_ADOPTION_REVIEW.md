@@ -86,9 +86,16 @@ A production build log showed six npm advisories (four moderate, two high) for t
 
 Remediation staged on this branch:
 
-- Add a scoped npm override under `rea-agents` to use `zod@4.6.7`; do not globally override unrelated application dependencies.
-- CI installs the REA production dependency tree, asserts the nested Zod version, runs `npm audit --omit=dev --audit-level=high`, and syntax-checks the gateway.
-- Render Blueprint's REA build command repeats the dependency-tree and high-severity audit gates so an unsafe dependency tree cannot be promoted by a normal build.
+- Add scoped npm overrides under `rea-agents` for `zod@4.6.7`, `glob@14.0.2`, and `minimatch@11.0.1`; do not globally override unrelated application dependencies.
+- CI installs the REA production dependency tree, checks the resolved Zod/glob/minimatch versions, runs `npm audit --omit=dev --audit-level=low`, and syntax-checks the gateway.
+- Render Blueprint's REA build command repeats the dependency-tree and zero-advisory audit gates so an unsafe dependency tree cannot be promoted by a normal build.
 - The exact runtime exposure is not asserted; this is a dependency-level vulnerability remediation.
 
 This change remains unverified until the CI job and a Render build complete successfully. Do not mark the advisory resolved solely because the override is present in package.json.
+
+
+## REA readiness fix — deterministic fixture root
+
+The production readiness smoke test had a configuration gap: `runReaMcpSelfTest` required an analysis root, but the existing Render service did not set `REA_ANALYSIS_ROOT`. The repository already contains a safe, tiny fixture at `rea-gateway/targets/demo-app`, documented as the default analysis fixture.
+
+The gateway now defaults an unset/blank `REA_ANALYSIS_ROOT` to the package-local `targets` directory. An explicit configured root is still honored. A focused unit test covers both the default and explicit override. This avoids hard-coding Render's absolute checkout path and allows the startup readiness gate to complete on Render.
