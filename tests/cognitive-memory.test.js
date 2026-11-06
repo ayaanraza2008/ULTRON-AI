@@ -182,3 +182,27 @@ test("graph recall fails closed when owner scope is missing or invalid", () => {
   assert.deepEqual(recallCognitiveMemoryGraph(rows, "memory"), []);
   assert.deepEqual(recallCognitiveMemoryGraph(rows, "memory", { ownerId: "" }), []);
 });
+
+
+test("graph traversal cannot resurrect a stale inferred memory through a relationship edge", () => {
+  const rows = [
+    {
+      id: "fresh-seed", user_id: "owner-a", kind: "project_fact",
+      title: "Current project", content: "Current ULTRON architecture decision.",
+      source: "user_approved", updated_at: new Date(NOW).toISOString(),
+      metadata: { relatedMemoryIds: ["stale-linked"] }
+    },
+    {
+      id: "stale-linked", user_id: "owner-a", kind: "project_fact",
+      title: "Old inferred decision", content: "Obsolete architecture decision.",
+      source: "conversation_summary",
+      created_at: new Date(NOW - 240 * 86_400_000).toISOString(),
+      updated_at: new Date(NOW - 240 * 86_400_000).toISOString(),
+      metadata: { confidence: 0.9 }
+    }
+  ];
+  const recalled = recallCognitiveMemoryGraph(rows, "current ULTRON architecture", {
+    ownerId: "owner-a", now: NOW, limit: 8, maxDepth: 2
+  });
+  assert.deepEqual(recalled.map(item => item.id), ["fresh-seed"]);
+});
