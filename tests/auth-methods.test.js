@@ -370,3 +370,31 @@ test("session status reports non-owner Supabase accounts as unauthenticated", as
     assert.equal(body.error, "ULTRON_OWNER_ONLY");
   });
 });
+
+test("production signup remains disabled after owner configuration even when the bootstrap secret is still present", async () => {
+  let upstreamCalls = 0;
+  const bootstrapToken = "ultron-owner-bootstrap-test-token";
+  await withServer({
+    env: {
+      ...validEnv,
+      ULTRON_OWNER_USER_ID: "configured-owner-uuid",
+      ULTRON_OWNER_BOOTSTRAP_TOKEN: bootstrapToken
+    },
+    fetchImpl: async () => {
+      upstreamCalls += 1;
+      throw new Error("configured-owner signup must not contact Supabase");
+    }
+  }, async base => {
+    const response = await fetch(base + "/api/auth/signup", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-ultron-bootstrap-token": bootstrapToken
+      },
+      body: JSON.stringify({ email: "second@example.com", password: signupTestSecret })
+    });
+    assert.equal(response.status, 403);
+    assert.equal((await response.json()).error.code, "SIGNUP_DISABLED");
+    assert.equal(upstreamCalls, 0);
+  });
+});
