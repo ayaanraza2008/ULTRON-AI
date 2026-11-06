@@ -10,8 +10,31 @@ services:
     buildCommand: >-
       npm install --ignore-scripts &&
       npm run check &&
-      node --test --test-timeout=30000 --test-force-exit
-      tests/preferences-api.test.js tests/rea-gateway.test.js
+      node --test --test-concurrency=2 --test-timeout=30000 --test-force-exit
+      tests/preferences-api.test.js
+      tests/rea-gateway.test.js
+      tests/auth-isolation-unit.test.js
+      tests/auth-methods.test.js
+      tests/auth-rate-limit.test.js
+      tests/auth-readiness.test.js
+      tests/chat-model-fallback.test.js
+      tests/model-provider-fallbacks.test.js
+      tests/model-provider-total-timeout.test.js
+      tests/autonomous-task-lifecycle.test.js
+      tests/worker-smoke.test.js
+      tests/voice-personality-modes.test.js
+      tests/voice-pipeline-completion.test.js
+      tests/voice-activation-system.test.js
+      tests/voice-activation-e2e.test.js
+      tests/memory-api-user-scope.test.js
+      tests/agent-runtime.test.js
+      tests/agent-runtime-approval-guard.test.js
+      tests/agent-runtime-tool-intent-guard.test.js
+      tests/agent-task-api.test.js
+      tests/task-router.test.js
+      tests/operator-authorization.test.js
+      tests/target-authorization.test.js
+      tests/task-skill-fetch-security.test.js
     startCommand: npm start
     healthCheckPath: /api/health
     autoDeployTrigger: commit
