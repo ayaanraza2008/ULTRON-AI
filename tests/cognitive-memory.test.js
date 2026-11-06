@@ -181,6 +181,9 @@ test("graph recall fails closed when owner scope is missing or invalid", () => {
   }];
   assert.deepEqual(recallCognitiveMemoryGraph(rows, "memory"), []);
   assert.deepEqual(recallCognitiveMemoryGraph(rows, "memory", { ownerId: "" }), []);
+  assert.deepEqual(recallCognitiveMemoryGraph([
+    { id: "conflicting-owner", user_id: "owner-b", owner_id: "owner-a", kind: "project_fact", title: "Private", content: "Do not accept a conflicting user_id." }
+  ], "private", { ownerId: "owner-a" }), []);
 });
 
 
