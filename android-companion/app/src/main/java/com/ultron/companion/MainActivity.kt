@@ -47,15 +47,16 @@ class MainActivity : Activity() {
             cancelTelemetrySync()
         }
         if (intent.getBooleanExtra(EXTRA_START_VOICE_COMMAND, false)) {
+            intent.removeExtra(EXTRA_START_VOICE_COMMAND)
             window.decorView.post { beginVoiceCommand() }
         }
     }
 
-    override fun onNewIntent(intent: Intent?) {
+    override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        if (intent == null) return
         setIntent(intent)
         if (intent.getBooleanExtra(EXTRA_START_VOICE_COMMAND, false)) {
+            intent.removeExtra(EXTRA_START_VOICE_COMMAND)
             window.decorView.post { beginVoiceCommand() }
         }
     }
