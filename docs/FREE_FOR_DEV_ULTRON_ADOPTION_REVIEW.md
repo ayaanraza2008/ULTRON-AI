@@ -67,3 +67,14 @@ A first code-level adoption has been added on this branch:
 Official protocol reference: https://healthchecks.io/docs/http_api/. The vendor documents UUID ping URLs and HEAD requests; it also warns against more than five pings per minute. ULTRON's adapter sends no more than one signal per minute for a stable state and applies a minimum interval to state transitions.
 
 This is an optional external worker heartbeat, not a replacement for Render's native health check or ULTRON's authenticated runtime diagnostics. Sentry/error tracking and external uptime monitors remain separate candidates; they should be added only after data minimization, account/plan terms, and the existing logging/health architecture are reviewed.
+
+
+## Zero-account production uptime monitor
+
+Added `.github/workflows/production-uptime.yml` using the existing GitHub Actions account and existing public Render health endpoint:
+
+- Runs every 15 minutes and can also be triggered manually.
+- Uses the existing `/api/health` response; no new public endpoint and no secret/token.
+- Retries transient cold-start/network failures, validates the JSON status and app identity, and fails the workflow on an unhealthy response.
+- GitHub Actions run history and its configured repository notifications provide the failure signal; this does not create a separate paging/on-call service.
+- This schedule becomes active only after the workflow is merged into the repository's default branch. It has not been activated from this draft branch.
