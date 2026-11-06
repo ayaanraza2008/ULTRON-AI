@@ -50,8 +50,9 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .stage-caption { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-bottom: -2px; text-align: center; }
 .stage-caption__overline { color: #91859f; font-size: 9px; letter-spacing: .36em; }
 .stage-caption__state { color: #c3a4ea; font-size: 10px; font-weight: 650; letter-spacing: .28em; }
-.core-wrap { position: relative; display: grid; width: min(65vh, 54vw, 570px); min-width: 280px; aspect-ratio: 1; place-items: center; isolation: isolate; margin: -5px 0 -11px; }
+.core-wrap { cursor: pointer; position: relative; display: grid; width: min(65vh, 54vw, 570px); min-width: 280px; aspect-ratio: 1; place-items: center; isolation: isolate; margin: -5px 0 -11px; }
 .energy-core--fallback { display: none; }
+.core-wrap:focus-visible { outline: 1px solid rgba(199, 160, 255, .52); outline-offset: -7%; border-radius: 50%; }
 .energy-core { position: relative; z-index: 3; display: block; width: 91%; height: 91%; filter: drop-shadow(0 0 18px rgba(143, 77, 237, .24)); }
 .core-aura { position: absolute; inset: 14%; z-index: 0; border-radius: 50%; pointer-events: none; }
 .core-aura--outer { inset: 4%; background: radial-gradient(circle, rgba(97, 40, 159, .13) 0, rgba(125, 34, 95, .075) 34%, transparent 68%); filter: blur(30px); }

@@ -61,6 +61,8 @@ test("visual design is black, purple-crimson, responsive and reduced-motion awar
   assert.match(css, /prefers-reduced-motion:\s*reduce/);
   assert.match(html, /class="drawer"/);
   assert.match(html, /id="settings-drawer"/);
+  assert.match(html, /id="core-wrap" role="button" tabindex="0"/);
+  assert.ok(appSource.includes('coreInteraction.addEventListener("click", toggleVoiceInput)'));
 });
 
 test("frontend wires existing same-origin auth, chat, memory and activity APIs", () => {

@@ -45,6 +45,7 @@ const drawerScrim = $("#drawer-scrim");
 const settingsDrawer = $("#settings-drawer");
 const activityDrawer = $("#activity-drawer");
 const coreTrigger = $("#core-trigger");
+const coreInteraction = $("#core-wrap");
 
 function apiErrorMessage(error, fallback = "The request could not be completed.") {
   const message = error?.payload?.error?.message || error?.payload?.message || error?.message;
@@ -94,7 +95,9 @@ function setStatus(status, mainText, subText) {
   if (mainText !== undefined) $("#assistant-line-main").textContent = mainText;
   if (subText !== undefined) $("#assistant-line-sub").textContent = subText;
   engine.setState(state.status);
-  coreTrigger.setAttribute("aria-label", state.busy ? "Stop current request" : state.status === "listening" ? "Stop voice input" : state.speaking ? "Stop voice output" : "Start voice input");
+  const interactionLabel = state.busy ? "Stop current request" : state.status === "listening" ? "Stop voice input" : state.speaking ? "Stop voice output" : "Start voice input";
+  coreTrigger.setAttribute("aria-label", interactionLabel);
+  coreInteraction.setAttribute("aria-label", interactionLabel);
 }
 
 function setConnection(online, label) {
@@ -388,7 +391,9 @@ function setBusy(busy) {
   $("#send-button").disabled = busy;
   messageInput.disabled = busy;
   coreTrigger.disabled = false;
-  coreTrigger.setAttribute("aria-label", busy ? "Stop current request" : state.status === "listening" ? "Stop voice input" : state.speaking ? "Stop voice output" : "Start voice input");
+  const interactionLabel = busy ? "Stop current request" : state.status === "listening" ? "Stop voice input" : state.speaking ? "Stop voice output" : "Start voice input";
+  coreTrigger.setAttribute("aria-label", interactionLabel);
+  coreInteraction.setAttribute("aria-label", interactionLabel);
   $("#send-button").setAttribute("aria-busy", String(busy));
 }
 
@@ -1114,6 +1119,13 @@ async function startNewConversation() {
 $("#voice-mode").addEventListener("click", () => setMode("voice"));
 $("#text-mode").addEventListener("click", () => setMode("text"));
 coreTrigger.addEventListener("click", toggleVoiceInput);
+coreInteraction.addEventListener("click", toggleVoiceInput);
+coreInteraction.addEventListener("keydown", event => {
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    toggleVoiceInput();
+  }
+});
 $("#mute-toggle").addEventListener("click", () => {
   state.muted = !state.muted;
   $("#mute-toggle").classList.toggle("is-muted", state.muted);
