@@ -156,7 +156,9 @@ export class RemoteTaskOrchestrator {
                 ? `You have ${vitals?.storageAvailableGb} GB of free storage. Your project has ample space and is ready to run.`
                 : `Storage is critically low (${vitals?.storageAvailableGb} GB). Free up disk space before execution.`
             };
-            reportStep("Step 3: Vitals received. Storage verified.");
+            reportStep(executionResult.canRun
+              ? "Step 3: Storage exceeds the configured minimum."
+              : "Step 3: Storage is below the configured minimum; the PC is not reported as runnable.");
           } else {
             executionResult = { success: false, error: "WINDOWS_AGENT_UNAVAILABLE", message: "Windows desktop companion is not connected or registered." };
             reportStep("Step 3: Storage check failed: Windows companion unavailable.");
@@ -168,7 +170,9 @@ export class RemoteTaskOrchestrator {
           reportStep("Step 2: Inspecting ULTRON AI repository and running test diagnostics...");
           if (this.windowsDesktopAgent) {
             executionResult = await this.windowsDesktopAgent.checkProjectStatus();
-            reportStep("Step 3: Test diagnostics complete. All systems healthy.");
+            reportStep(executionResult?.success === false
+              ? "Step 3: Project inspection failed: " + (executionResult?.error || executionResult?.message || "metadata unavailable")
+              : "Step 3: Repository metadata inspected. Automated tests were NOT_RUN; no test-health verdict is asserted.");
           } else {
             executionResult = { success: false, error: "WINDOWS_AGENT_UNAVAILABLE", message: "Windows desktop companion is not connected or registered." };
             reportStep("Step 3: Project test inspection failed: Windows companion unavailable.");
@@ -180,7 +184,9 @@ export class RemoteTaskOrchestrator {
           reportStep("Step 2: Launching application on Windows PC...");
           if (this.windowsDesktopAgent) {
             executionResult = await this.windowsDesktopAgent.executeCommand("launch_app", payload);
-            reportStep("Step 3: Application launched on PC.");
+            reportStep(executionResult?.success === false
+              ? "Step 3: Application launch failed: " + (executionResult?.message || executionResult?.error || "unknown error")
+              : "Step 3: Application launch confirmed by the Windows agent.");
           } else {
             executionResult = { success: false, error: "WINDOWS_AGENT_UNAVAILABLE", message: "Windows desktop companion is not connected or registered." };
             reportStep("Step 3: App launch failed: Windows companion unavailable.");
@@ -192,7 +198,9 @@ export class RemoteTaskOrchestrator {
           reportStep("Step 2: Accessing PC directory...");
           if (this.windowsDesktopAgent) {
             executionResult = await this.windowsDesktopAgent.executeCommand("open_folder", payload);
-            reportStep("Step 3: PC directory queried.");
+            reportStep(executionResult?.success === false
+              ? "Step 3: Directory query failed: " + (executionResult?.message || executionResult?.error || "unknown error")
+              : "Step 3: Directory query completed on the Windows agent.");
           } else {
             executionResult = { success: false, error: "WINDOWS_AGENT_UNAVAILABLE", message: "Windows desktop companion is not connected or registered." };
             reportStep("Step 3: Directory query failed: Windows companion unavailable.");
@@ -204,7 +212,9 @@ export class RemoteTaskOrchestrator {
           reportStep("Step 2: Searching PC filesystem for file...");
           if (this.windowsDesktopAgent) {
             executionResult = await this.windowsDesktopAgent.executeCommand("find_file", payload);
-            reportStep("Step 3: PC filesystem search complete.");
+            reportStep(executionResult?.success === false
+              ? "Step 3: File search failed: " + (executionResult?.message || executionResult?.error || "unknown error")
+              : "Step 3: File search completed on the Windows agent.");
           } else {
             executionResult = { success: false, error: "WINDOWS_AGENT_UNAVAILABLE", message: "Windows desktop companion is not connected or registered." };
             reportStep("Step 3: File search failed: Windows companion unavailable.");
@@ -228,7 +238,9 @@ export class RemoteTaskOrchestrator {
           reportStep("Step 2: Inspecting active task on Windows PC...");
           if (this.windowsDesktopAgent) {
             executionResult = await this.windowsDesktopAgent.executeCommand("inspect_task", payload);
-            reportStep("Step 3: PC task inspected.");
+            reportStep(executionResult?.success === false
+              ? "Step 3: Task inspection failed: " + (executionResult?.message || executionResult?.error || "unknown error")
+              : "Step 3: Task inspection completed on the Windows agent.");
           } else {
             executionResult = { success: false, error: "WINDOWS_AGENT_UNAVAILABLE", message: "Windows desktop companion is not connected or registered." };
             reportStep("Step 3: Task inspection failed: Windows companion unavailable.");
@@ -240,7 +252,9 @@ export class RemoteTaskOrchestrator {
           reportStep("Step 2: Transmitting EMERGENCY STOP directive to Windows PC and fleet...");
           if (this.windowsDesktopAgent) {
             executionResult = await this.windowsDesktopAgent.executeCommand("emergency_stop", payload);
-            reportStep("Step 3: Emergency stop engaged. All active worker operations halted.");
+            reportStep(executionResult?.success === false
+              ? "Step 3: Emergency stop command failed: " + (executionResult?.message || executionResult?.error || "unknown error")
+              : "Step 3: Emergency stop command acknowledged by the Windows agent.");
           } else {
             executionResult = { success: false, error: "WINDOWS_AGENT_UNAVAILABLE", message: "Windows desktop companion is not connected or registered. Emergency stop could not be delivered to PC." };
             reportStep("Step 3: Emergency stop failed: Windows companion unavailable.");

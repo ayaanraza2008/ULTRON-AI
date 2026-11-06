@@ -102,3 +102,26 @@ test("RemoteTaskOrchestrator: Fails closed with WINDOWS_AGENT_UNAVAILABLE when c
   assert.equal(resStop.success, false);
   assert.equal(resStop.error, "WINDOWS_AGENT_UNAVAILABLE");
 });
+
+
+test("RemoteTaskOrchestrator: Does not report a failed Windows application launch as successful", async () => {
+  const orchestrator = new RemoteTaskOrchestrator({
+    windowsDesktopAgent: {
+      executeCommand: async () => ({
+        success: false,
+        error: "APP_NOT_ALLOWED",
+        message: "The requested application is not on the allowlist."
+      })
+    }
+  });
+  const outcome = await orchestrator.executeRemoteTask({
+    callerId: "owner-call-02",
+    isOwner: true,
+    action: "LAUNCH_PC_APP",
+    payload: { app: "unapproved-app" }
+  });
+
+  assert.equal(outcome.success, false);
+  assert.equal(outcome.error, "APP_NOT_ALLOWED");
+  assert.match(outcome.progressSteps.at(-1).description, /launch failed/i);
+});
