@@ -433,7 +433,7 @@ export function createDevicePairingRouter({
         "&owner_user_id=eq." + encodeURIComponent(ownerId) + "&select=id",
         {
           method: "PATCH",
-          body: { token_hash: tokenHash(token), token_prefix: token.slice(0, 20), status: "active", revoked_at: null, last_seen_at: new Date().toISOString() },
+          body: { token_hash: tokenHash(token), token_prefix: token.slice(0, 20), status: "active", revoked_at: null, last_seen_at: null },
           prefer: "return=representation"
         }
       );
