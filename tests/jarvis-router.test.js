@@ -310,7 +310,10 @@ test("JARVIS exposes live JARVIS + ULTRON capability comparator to configured ow
     assert.equal(body.status, "ok");
     assert.equal(body.evaluation.maxPossibleScore, 100);
     assert.ok(body.evaluation.totalInventoryCoveragePercent >= 0 && body.evaluation.totalInventoryCoveragePercent <= 100);
-    assert.ok(["SOURCE_TEST_INVENTORY_COMPLETE", "SOURCE_TEST_INVENTORY_INCOMPLETE"].includes(body.evaluation.overallStatus));
+    assert.ok(["SOURCE_TEST_INVENTORY_COMPLETE", "SOURCE_TEST_INVENTORY_INCOMPLETE"].includes(body.evaluation.status));
+    assert.equal(body.evaluation.jarvisAlignmentScore, null);
+    assert.equal(body.evaluation.ultronAlignmentScore, null);
+    assert.equal(body.evaluation.alignmentAssessment, "NOT_MEASURED");
     assert.equal(body.evaluation.runtimeVerificationStatus, "NOT_EVALUATED");
     assert.equal(body.evaluation.liveIntegrationStatus, "NOT_EVALUATED");
     assert.equal(body.evaluation.categoriesCount, 14);
