@@ -84,5 +84,10 @@ describe("JARVIS + ULTRON Capability Comparator Suite", () => {
       const exists = fs.existsSync(path.join(process.cwd(), doc));
       assert.ok(exists, `Document ${doc} must be generated`);
     }
+
+    const benchmark = fs.readFileSync(path.join(process.cwd(), "docs/JARVIS_ULTRON_BENCHMARK.md"), "utf8");
+    assert.ok(benchmark.includes("JARVIS Alignment:** NOT MEASURED"));
+    assert.ok(benchmark.includes("| NOT MEASURED | NOT MEASURED |"));
+    assert.equal(benchmark.includes("${NOT_MEASURED"), false, "Generated benchmark must not contain broken template placeholders");
   });
 });
