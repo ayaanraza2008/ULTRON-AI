@@ -187,7 +187,7 @@ export function recallCognitiveMemoryGraph(items, query, {
 
   const scoped = items.filter(item =>
     item && typeof item === "object" &&
-    (item.user_id === ownerId || item.owner_id === ownerId) &&
+    (item.user_id === ownerId || (!item.user_id && item.owner_id === ownerId)) &&
     typeof item.id === "string" && item.id.length > 0
   );
   if (!scoped.length) return [];
