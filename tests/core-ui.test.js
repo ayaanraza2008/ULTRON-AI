@@ -49,6 +49,20 @@ test("center-only shell keeps the core as the only visible application surface",
   assert.ok(css.includes("font-family: Arial, \"Segoe UI\", Helvetica, sans-serif !important"));
 });
 
+
+test("interface security policy keeps scripts, APIs, and frames same-origin until optional vision assets ship", async t => {
+  const base = await startProxy(t);
+  const response = await fetch(base + "/healthz");
+  const csp = response.headers.get("content-security-policy") || "";
+  const permissions = response.headers.get("permissions-policy") || "";
+  assert.match(csp, /script-src 'self'/);
+  assert.match(csp, /connect-src 'self'/);
+  assert.match(csp, /frame-src 'self'/);
+  assert.doesNotMatch(csp, /cdn\\.jsdelivr\\.net|storage\\.googleapis\\.com|ultron-world-intelligence/);
+  assert.match(permissions, /camera=\\(self\\)/);
+  assert.match(permissions, /microphone=\\(self\\)/);
+});
+
 test("interface root and API proxy health are both available", async t => {
   const base = await startProxy(t);
   const health = await fetch(base + "/healthz");
