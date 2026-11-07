@@ -31,6 +31,13 @@ test("backend stays API-only while the interface proxy serves an explicit static
 });
 
 
+test("Agora RTC SDK is allowed by the interface proxy security policy", async () => {
+  const html = await readFile(new URL("../public/index.html", import.meta.url), "utf8");
+  assert.match(html, /download\.agora\.io\/sdk\/release\/AgoraRTC_N-4\.24\.8\.js/);
+  assert.match(proxySource, /script-src 'self' https:\/\/download\.agora\.io/);
+  assert.match(proxySource, /connect-src 'self' https: wss:/);
+});
+
 test("mobile image attachment requests the rear camera when available", async () => {
   const html = await readFile(new URL("../public/index.html", import.meta.url), "utf8");
   assert.match(html, /id="image-input"[^>]*capture="environment"/);
