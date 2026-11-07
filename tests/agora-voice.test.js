@@ -10,7 +10,8 @@ const env = {
   AGORA_CUSTOMER_ID: "customer",
   AGORA_CUSTOMER_SECRET: "secret",
   AGORA_PIPELINE_ID: "pipeline-1",
-  AGORA_DEFAULT_CHANNEL: "ultron-test"
+  AGORA_DEFAULT_CHANNEL: "ultron-test",
+  AGORA_RTC_TOKEN: "valid-test-token"
 };
 
 async function withServer(handler, run) {
@@ -32,6 +33,14 @@ test("Agora routes reject non-owner accounts", async () => {
   await withServer(async () => { throw new Error("fetch must not be called"); }, async base => {
     const response = await fetch(base + "/api/integrations/agora/start", { method: "POST", headers: { "Content-Type": "application/json", "x-user": "other" }, body: JSON.stringify({ remoteRtcUid: "123" }) });
     assert.equal(response.status, 403);
+  });
+});
+
+test("Agora refuses to start when the required RTC token is missing", async () => {
+  await withServer(async () => { throw new Error("fetch must not be called"); }, async base => {
+    const response = await fetch(base + "/api/integrations/agora/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ remoteRtcUid: "123" }) });
+    assert.equal(response.status, 503);
+    assert.equal((await response.json()).error.code, "AGORA_RTC_TOKEN_REQUIRED");
   });
 });
 
