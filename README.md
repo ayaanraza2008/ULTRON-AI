@@ -5,12 +5,12 @@ ULTRON AI is an API-first assistant runtime. This repository exposes backend API
 ## Current status
 
 - **Repository:** `ayaanraza2008/ULTRON-AI`, default branch `main`.
-- **Hosted API service:** https://ultron-ai-zvd7.onrender.com. The API health endpoint is available; model-dependent chat and integrations depend on their server-side configuration.
+- **Hosted API service:** https://ultron-ai-core.onrender.com in the **Ultron core** Render workspace. Provider configuration is not proof of live model inference; real text and vision requests remain separate acceptance gates.
 - **AI provider:** OpenRouter's OpenAI-compatible API, using `openrouter/free` to automatically select from currently available free models.
 - **Dedicated database:** Supabase project `ULTRON-AI` in Mumbai (`ap-south-1`), project ref `opdjfhwepmcprbqojpat`. The quoted project creation cost was $0/month.
 - **Database schema:** Initial migration creates conversations, messages, user preferences, user-controlled memory, agent tasks, and audit events, with Row Level Security enabled. The backend includes authenticated conversation, preference, memory CRUD, and task-record endpoints; live RLS behavior still requires end-to-end verification.
 - **Isolation:** The existing `nox-ai` Supabase project was not modified.
-- **Frontend status:** no ULTRON user-facing web frontend is included or served by this backend service. Frontend work is deferred and should be developed separately when explicitly authorized.
+- **Frontend status:** the separate `ultron-core-interface` service is live at https://ultron-core-interface.onrender.com on branch `feature/ultron-live-core-interface-20261029`. It serves the Living Core PWA and proxies same-origin `/api/*` and `/world-intelligence/*` requests to the backend, preserving HttpOnly session cookies. Static-shell offline caching explicitly excludes all authenticated API and intelligence traffic. Real account/chat/voice/device E2E remains unverified.
 
 ## Backend-only capability integration phase
 
