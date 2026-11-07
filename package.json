@@ -34,7 +34,8 @@
   "dependencies": {
     "express": "^4.21.2",
     "mammoth": "^1.9.1",
-    "pdf-parse": "^1.1.1"
+    "pdf-parse": "^1.1.1",
+    "agora-token": "2.0.7"
   },
   "devDependencies": {
     "pg": "^8.23.1"
