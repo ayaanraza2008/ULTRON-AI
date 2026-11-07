@@ -17,7 +17,7 @@ The GitHub Actions workflow builds this project on Windows and uploads a downloa
 
 1. Start ULTRON.Companion.exe.
 2. Click **Start wake word** and accept the microphone-consent prompt.
-3. Keep the companion running in the Windows tray. Saying “Ultron” opens the hosted ULTRON assistant in the default browser.
+3. Keep the companion running in the Windows tray. Saying “Ultron” or making a detected snap pauses wake recognition and starts one-shot local command capture. The recognized text (not microphone audio) is sent to ULTRON through the paired-device route; the text reply is shown and spoken with the installed Windows TTS voice. The **Open ULTRON** button opens the hosted interface in the default browser.
 4. Optionally enable **Start with Windows and listen**. The app asks for microphone consent first, then registers a visible, per-user Windows startup entry. On future sign-ins, the app starts into the tray and begins listening using that previously granted opt-in.
 5. Use the tray menu to pause listening or exit the companion. Uncheck **Start with Windows and listen** to remove automatic startup.
 
@@ -25,7 +25,7 @@ Windows must have an installed compatible English speech-recognition engine and 
 
 ## Boundaries
 
-- This is a wake-word launcher, not a completed Windows PC-control agent or a full live voice conversation client.
+- This is a one-shot local voice companion with a limited, explicitly enabled allowlisted PC-control bridge; it is not a full desktop-control agent. Voice conversation context is kept in memory only while the companion process runs (up to 24 stored messages; at most 12 recent messages and 12,000 prior-history characters are sent with a request).
 - It cannot unlock Windows, bypass PIN/biometrics, or run while the PC is powered off. Sleep/resume and locked-session behavior depend on Windows and device policy.
 - Wake-word recognition is available only while the companion is running, the Windows session/audio device is available, and the installed speech recognizer works.
 - Automatic startup is off by default and only enabled by an explicit checkbox after microphone consent. It uses the current user's normal Windows Run registry entry and stays visible in the system tray; it does not create a hidden task or service.
@@ -45,7 +45,7 @@ Supported actions are deliberately limited:
 - List folders and search for names only under `Documents/ULTRON Shared`; symbolic links and Windows reparse points are rejected.
 - Read small text files under `Documents/ULTRON Shared` only. File reads are limited to 64 KB and common text formats.
 - Inspect, stop, and retrieve bounded status records for processes launched and tracked by ULTRON. GUI app launches do not expose arbitrary process output or shell streams. The recent task-result history is limited to 100 records.
-- Send an authenticated presence heartbeat every 25 seconds while remote-command polling is enabled. A successful heartbeat refreshes the server-side device-presence timestamp; failed authentication or storage responses stop that polling cycle.
+- Send an authenticated presence heartbeat every 25 seconds while remote-command polling is enabled. A successful heartbeat refreshes the server-side device-presence timestamp. An authentication failure stops the polling timer until the device is re-paired; transient non-authentication failures retry on the next timer tick.
 
 Screen capture is disabled for privacy. Unlocking Windows, waking a suspended/powered-off machine, arbitrary shell execution, and general filesystem browsing are not supported. A failed/unsupported action is reported back as a failed task rather than being marked complete.
 

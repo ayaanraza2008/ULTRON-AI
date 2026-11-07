@@ -10,6 +10,8 @@ import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.text.InputType
 import android.view.Gravity
 import android.widget.ArrayAdapter
@@ -28,6 +30,7 @@ import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 class MainActivity : Activity() {
@@ -36,10 +39,37 @@ class MainActivity : Activity() {
     private lateinit var pairingStatus: TextView
     private lateinit var languagePicker: Spinner
     private var commandRecognizer: SpeechRecognizer? = null
+    private var textToSpeech: TextToSpeech? = null
+    private var textToSpeechReady = false
+    private var pendingVoiceReply: Pair<String, String>? = null
+    private var pendingVoiceReplyResumeWake = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         buildLayout()
+        textToSpeech = TextToSpeech(this) { result ->
+            textToSpeechReady = result == TextToSpeech.SUCCESS
+            if (textToSpeechReady) {
+                textToSpeech?.setSpeechRate(0.96f)
+                textToSpeech?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                    override fun onStart(utteranceId: String?) = Unit
+                    override fun onDone(utteranceId: String?) {
+                        runOnUiThread { resumeWakeWordAfterCommand() }
+                    }
+                    override fun onError(utteranceId: String?) {
+                        runOnUiThread { resumeWakeWordAfterCommand() }
+                    }
+                })
+                pendingVoiceReply?.let { (text, language) ->
+                    val resumeWake = pendingVoiceReplyResumeWake
+                    pendingVoiceReply = null
+                    pendingVoiceReplyResumeWake = false
+                    speakVoiceReply(text, language, resumeWake)
+                }
+            } else {
+                resumeWakeWordAfterCommand()
+            }
+        }
         updatePairingStatus()
         if (DeviceTokenStore.isPaired(this)) {
             scheduleTelemetrySync()
@@ -47,6 +77,16 @@ class MainActivity : Activity() {
             cancelTelemetrySync()
         }
         if (intent.getBooleanExtra(EXTRA_START_VOICE_COMMAND, false)) {
+            intent.removeExtra(EXTRA_START_VOICE_COMMAND)
+            window.decorView.post { beginVoiceCommand() }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.getBooleanExtra(EXTRA_START_VOICE_COMMAND, false)) {
+            intent.removeExtra(EXTRA_START_VOICE_COMMAND)
             window.decorView.post { beginVoiceCommand() }
         }
     }
@@ -104,8 +144,10 @@ class MainActivity : Activity() {
         val stop = Button(this).apply {
             text = "Stop listening"
             setOnClickListener {
+                getSharedPreferences(WAKE_PREFERENCES, MODE_PRIVATE)
+                    .edit().putBoolean(WAKE_ENABLED_KEY, false).apply()
                 stopService(Intent(this@MainActivity, WakeWordService::class.java))
-                status.text = "Stop requested. Check that the listening notification disappears."
+                status.text = "Wake-word listening is disabled. It will not restart after this command."
             }
         }
         val open = Button(this).apply {
@@ -206,12 +248,19 @@ class MainActivity : Activity() {
     }
 
     private fun beginVoiceCommand() {
+        // Release the wake recognizer before capturing the actual command.
+        // The user's explicit wake-word opt-in is retained for a later restart.
+        stopService(Intent(this, WakeWordService::class.java))
         if (!DeviceTokenStore.isPaired(this)) {
-            status.text = "Pair this Android device first. Wake-word detection stays local until then."
+            getSharedPreferences(WAKE_PREFERENCES, MODE_PRIVATE)
+                .edit().putBoolean(WAKE_ENABLED_KEY, false).apply()
+            status.text = "Pair this Android device first, then enable local wake word again."
             return
         }
         if (!SpeechRecognizer.isOnDeviceRecognitionAvailable(this)) {
-            status.text = "On-device speech recognition is unavailable. The command was not recorded or uploaded."
+            getSharedPreferences(WAKE_PREFERENCES, MODE_PRIVATE)
+                .edit().putBoolean(WAKE_ENABLED_KEY, false).apply()
+            status.text = "On-device speech recognition is unavailable. The command was not recorded or uploaded; wake word was disabled."
             return
         }
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
@@ -243,7 +292,10 @@ class MainActivity : Activity() {
                         ?.firstOrNull()?.trim().orEmpty()
                     stopCommandRecognition()
                     if (command.isBlank()) {
-                        runOnUiThread { status.text = "No command was recognised. Tap Speak and try again." }
+                        runOnUiThread {
+                            status.text = "No command was recognised. Tap Speak and try again."
+                            resumeWakeWordAfterCommand()
+                        }
                         return
                     }
                     dispatchVoiceCommand(command)
@@ -252,6 +304,7 @@ class MainActivity : Activity() {
                     stopCommandRecognition()
                     runOnUiThread {
                         status.text = "On-device speech recognition failed (code $error). No audio was uploaded."
+                        resumeWakeWordAfterCommand()
                     }
                 }
             })
@@ -276,11 +329,47 @@ class MainActivity : Activity() {
         else -> "en-IN"
     }
 
+    private fun speakVoiceReply(text: String, languageTag: String, resumeWake: Boolean = true) {
+        val cleanText = text.trim().take(3000)
+        if (cleanText.isBlank()) {
+            if (resumeWake) resumeWakeWordAfterCommand()
+            return
+        }
+        val engine = textToSpeech
+        if (engine == null || !textToSpeechReady) {
+            pendingVoiceReply = cleanText to languageTag
+            pendingVoiceReplyResumeWake = resumeWake
+            return
+        }
+
+        try {
+            val requestedLocale = Locale.forLanguageTag(languageTag)
+            val languageStatus = engine.setLanguage(requestedLocale)
+            if (languageStatus == TextToSpeech.LANG_MISSING_DATA ||
+                languageStatus == TextToSpeech.LANG_NOT_SUPPORTED
+            ) {
+                engine.setLanguage(Locale.getDefault())
+            }
+            engine.setSpeechRate(0.96f)
+            val result = engine.speak(
+                cleanText,
+                TextToSpeech.QUEUE_FLUSH,
+                null,
+                "ultron-voice-reply-${System.currentTimeMillis()}"
+            )
+            if (result == TextToSpeech.ERROR && resumeWake) resumeWakeWordAfterCommand()
+        } catch (_: RuntimeException) {
+            // Keep the recognised response visible even when the device TTS engine fails.
+            if (resumeWake) resumeWakeWordAfterCommand()
+        }
+    }
+
     private fun dispatchVoiceCommand(command: String) {
         val token = DeviceTokenStore.load(this)
         if (token.isNullOrBlank()) {
             status.text = "The device token is missing or could not be decrypted. Pair this device again."
             updatePairingStatus()
+            resumeWakeWordAfterCommand()
             return
         }
         val language = selectedLanguage()
@@ -297,11 +386,21 @@ class MainActivity : Activity() {
                 )
                 val reply = result.optString("textResponse").take(1200)
                 runOnUiThread {
-                    status.text = if (reply.isBlank()) "ULTRON received the command." else "ULTRON: $reply"
+                    status.text = if (reply.isBlank()) {
+                        "ULTRON returned an empty response."
+                    } else {
+                        "ULTRON: $reply"
+                    }
+                    if (reply.isNotBlank()) {
+                        speakVoiceReply(reply, language, resumeWake = true)
+                    } else {
+                        resumeWakeWordAfterCommand()
+                    }
                 }
             } catch (error: Exception) {
                 runOnUiThread {
                     status.text = error.message ?: "ULTRON could not process this command. Check device pairing and connectivity."
+                    resumeWakeWordAfterCommand()
                 }
             }
         }.start()
@@ -386,7 +485,9 @@ class MainActivity : Activity() {
             ) {
                 startOnDeviceCommandRecognition()
             } else {
-                status.text = "Microphone permission is required. No command was captured."
+                getSharedPreferences(WAKE_PREFERENCES, MODE_PRIVATE)
+                    .edit().putBoolean(WAKE_ENABLED_KEY, false).apply()
+                status.text = "Microphone permission is required. No command was captured and wake-word listening was disabled."
             }
             return
         }
@@ -395,20 +496,41 @@ class MainActivity : Activity() {
             it == PackageManager.PERMISSION_GRANTED
         }
         if (!allGranted) {
+            getSharedPreferences(WAKE_PREFERENCES, MODE_PRIVATE)
+                .edit().putBoolean(WAKE_ENABLED_KEY, false).apply()
             status.text = "Microphone and visible-notification permissions are required. Wake word remains off."
             return
         }
         if (SpeechRecognizer.isOnDeviceRecognitionAvailable(this)) {
             startWakeWordService()
         } else {
+            getSharedPreferences(WAKE_PREFERENCES, MODE_PRIVATE)
+                .edit().putBoolean(WAKE_ENABLED_KEY, false).apply()
             status.text = "On-device speech recognition is unavailable. Wake word remains off."
         }
+    }
+
+    private fun resumeWakeWordAfterCommand() {
+        val preferences = getSharedPreferences(WAKE_PREFERENCES, MODE_PRIVATE)
+        if (!preferences.getBoolean(WAKE_ENABLED_KEY, false)) return
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED ||
+            !SpeechRecognizer.isOnDeviceRecognitionAvailable(this)
+        ) {
+            preferences.edit().putBoolean(WAKE_ENABLED_KEY, false).apply()
+            status.text = "Wake-word listening was disabled because microphone permission or the offline speech model is unavailable."
+            return
+        }
+        status.postDelayed({
+            if (preferences.getBoolean(WAKE_ENABLED_KEY, false)) startWakeWordService()
+        }, WAKE_RESUME_DELAY_MS)
     }
 
     private fun startWakeWordService() {
         try {
             startForegroundService(Intent(this, WakeWordService::class.java))
-            status.text = "Wake-word service requested. Keep its ongoing notification visible; tap the ULTRON alert when the word is detected."
+            getSharedPreferences(WAKE_PREFERENCES, MODE_PRIVATE)
+                .edit().putBoolean(WAKE_ENABLED_KEY, true).apply()
+            status.text = "Wake-word listening enabled. After each command, it will resume while this opt-in remains on. Use Stop listening to disable it."
         } catch (_: SecurityException) {
             status.text = "Android blocked microphone service startup. Re-check microphone/notification permissions."
         } catch (_: IllegalStateException) {
@@ -422,6 +544,11 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         stopCommandRecognition()
+        textToSpeech?.stop()
+        textToSpeech?.shutdown()
+        textToSpeech = null
+        textToSpeechReady = false
+        pendingVoiceReply = null
         super.onDestroy()
     }
 
@@ -430,6 +557,9 @@ class MainActivity : Activity() {
         private const val TELEMETRY_WORK_NAME = "ultron-device-telemetry"
         private const val REQUEST_PERMISSIONS = 4701
         private const val REQUEST_SPEAK_PERMISSION = 4702
+        private const val WAKE_PREFERENCES = "ultron_wake_word_preferences"
+        private const val WAKE_ENABLED_KEY = "wake_word_enabled"
+        private const val WAKE_RESUME_DELAY_MS = 900L
         private const val NETWORK_TIMEOUT_MS = 12000
         private const val MAX_RESPONSE_BYTES = 256 * 1024
         private const val BACKEND_URL = "https://ultron-ai-core.onrender.com"

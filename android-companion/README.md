@@ -1,6 +1,6 @@
 # ULTRON Android Wake Companion
 
-This Android companion opens the current ULTRON Core interface at `https://ultron-core-interface.onrender.com/` and listens for “Ultron” only after the user explicitly starts it. It requests microphone and notification permission, uses Android's on-device speech recognizer only, and shows a persistent notification with a Stop control. A detected wake word creates a notification; the user taps it to open the hosted ULTRON assistant.
+This Android companion connects to the ULTRON Core interface and listens for “Ultron” only after the user explicitly starts it. It requests microphone and notification permission, uses Android's on-device speech recognizer only, and shows a persistent notification with a Stop control. When “Ultron” is detected, the wake recognizer releases the microphone and posts an alert. The user taps that alert to open the companion command screen; command capture then starts once, after the tap, using on-device recognition. After the voice reply completes, wake listening resumes only while the original opt-in remains enabled; the Stop listening button disables future automatic restarts.
 
 ## Build
 
@@ -12,6 +12,7 @@ Requirements: Java 17, Android SDK 35, and Gradle 8.9. From this directory run `
 
 - Android 12 or newer is required.
 - An on-device English speech model must already be installed; the app does not download models or fall back to cloud recognition.
+- Replies to commands captured in the Voice screen use the Android device's installed Text-to-Speech engine and selected input language where supported. Typed Compose Chat remains text-only. This Android TTS path is separate from the web browser voice selector and does not guarantee the ULTRON Kokoro `am_onyx` voice.
 - Keep the ongoing listening notification visible and use its Stop action to disable the microphone.
 - The foreground service requests a best-effort restart if Android reclaims its process. Android controls background microphone access and battery optimization; listening is not guaranteed after force-stop, reboot, deep sleep, or OEM restrictions. After reboot, open the companion and enable listening again.
 - Wake notifications do not bypass the lock screen or device authentication.

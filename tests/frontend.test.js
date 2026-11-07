@@ -115,3 +115,28 @@ test("20,000-particle swarm buffers contain deterministic finite coordinates", (
   assert.deepEqual(first, second);
   for (const value of first) assert.ok(Number.isFinite(value));
 });
+
+
+test("text mode stays selected across reloads and text messages never become spoken replies", () => {
+  assert.match(appSource, /function preferredInteractionMode\(\)/);
+  assert.match(appSource, /localStorage\.getItem\("ultron-interaction-mode"\)/);
+  assert.match(appSource, /localStorage\.setItem\("ultron-interaction-mode", state\.mode\)/);
+  assert.match(appSource, /const responseMode = state\.mode/);
+  assert.match(appSource, /responseMode === "voice" && state\.preferences\.voice_enabled && !state\.muted/);
+  assert.match(appSource, /if \(state\.mode === "text"\) \{\s*if \(state\.recognition\) state\.recognition\.stop\(\);\s*stopSpeech\(\);/);
+});
+
+
+test("spoken output honors the user's installed browser voice selection", () => {
+  assert.match(html, /id="voice-output-select"/);
+  assert.match(html, /Voice output \(installed on this browser\)/);
+  assert.match(appSource, /function populateVoiceOutputOptions\(\)/);
+  assert.match(appSource, /localStorage\.getItem\("ultron-output-voice-uri"\)/);
+  assert.match(appSource, /localStorage\.setItem\("ultron-output-voice-uri", voiceOutputSelect\.value\)/);
+  assert.match(appSource, /voices\.find\(voice => voice\.voiceURI === preferredVoiceUri\)/);
+});
+
+
+test("pending voice replies stay silent if the user switches to text before completion", () => {
+  assert.match(appSource, /responseMode === "voice" && state\.mode === "voice" && state\.preferences\.voice_enabled/);
+});

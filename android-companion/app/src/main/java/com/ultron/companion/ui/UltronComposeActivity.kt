@@ -55,7 +55,14 @@ enum class NavigationTab(val title: String, val icon: String) {
 }
 
 data class ChatMessage(val role: String, val content: String, val timestamp: String)
-data class PcStatus(val online: Boolean, val name: String, val cpu: String, val ramPct: Int, val battery: Int, val activeWin: String)
+data class PcStatus(
+    val online: Boolean,
+    val name: String,
+    val cpu: String?,
+    val ramPct: Int?,
+    val battery: Int?,
+    val activeWin: String?
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -68,7 +75,7 @@ fun UltronMainDashboard(apiClient: UltronApiClient) {
 
     // Shared PC status state
     var pcStatus by remember {
-        mutableStateOf(PcStatus(false, "Windows PC", "AMD Ryzen 7 5700U", 45, 100, "Desktop"))
+        mutableStateOf(PcStatus(false, "Windows PC", null, null, null, null))
     }
 
     // Shared Chat messages
@@ -82,18 +89,37 @@ fun UltronMainDashboard(apiClient: UltronApiClient) {
     LaunchedEffect(Unit) {
         while (true) {
             try {
-                withContext(Dispatchers.IO) {
+                val updatedStatus = withContext(Dispatchers.IO) {
                     val raw = apiClient.fetchWindowsPcStatus()
-                    pcStatus = PcStatus(
+                    val batteryObject = raw.optJSONObject("battery")
+                    val batteryPercent = batteryObject
+                        ?.optInt("percent", -1)
+                        ?.takeIf { it in 0..100 }
+                    val cpuName = raw.optString("cpu", "")
+                        .ifBlank { raw.optString("cpuModel", "") }
+                        .takeIf { it.isNotBlank() }
+                    val memoryPercent = when {
+                        raw.has("ramPercent") -> raw.optInt("ramPercent", -1)
+                        raw.has("ramPct") -> raw.optInt("ramPct", -1)
+                        raw.has("memoryPercent") -> raw.optInt("memoryPercent", -1)
+                        else -> -1
+                    }.takeIf { it in 0..100 }
+                    val activeWindow = raw.optString("activeWindow", "")
+                        .takeIf { it.isNotBlank() }
+
+                    PcStatus(
                         online = raw.optBoolean("online", false),
-                        name = raw.optString("name", "Windows PC"),
-                        cpu = "AMD Ryzen 7 5700U with Radeon Graphics",
-                        ramPct = 42,
-                        battery = raw.optJSONObject("battery")?.optInt("percent", 98) ?: 98,
-                        activeWin = raw.optString("activeWindow", "Desktop")
+                        name = raw.optString("name", "Windows PC").ifBlank { "Windows PC" },
+                        cpu = cpuName,
+                        ramPct = memoryPercent,
+                        battery = batteryPercent,
+                        activeWin = activeWindow
                     )
                 }
-            } catch (_: Exception) {}
+                pcStatus = updatedStatus
+            } catch (_: Exception) {
+                pcStatus = PcStatus(false, "Windows PC", null, null, null, null)
+            }
             kotlinx.coroutines.delay(8000)
         }
     }
@@ -179,10 +205,21 @@ fun UltronMainDashboard(apiClient: UltronApiClient) {
                         chatMessages.add(ChatMessage("user", prompt, "Just now"))
                         scope.launch {
                             try {
-                                val res = withContext(Dispatchers.IO) {
-                                    apiClient.processVoiceCommand(prompt, "hinglish")
+                                val history = org.json.JSONArray().apply {
+                                    chatMessages.takeLast(20).forEach { message ->
+                                        put(
+                                            JSONObject()
+                                                .put("role", message.role)
+                                                .put("content", message.content)
+                                        )
+                                    }
                                 }
-                                val reply = res.optString("textResponse", "Command acknowledged.")
+                                val res = withContext(Dispatchers.IO) {
+                                    apiClient.processVoiceCommand(prompt, "hinglish", history)
+                                }
+                                val reply = res.optString("textResponse")
+                                    .takeIf { it.isNotBlank() }
+                                    ?: "ULTRON returned an empty response."
                                 chatMessages.add(ChatMessage("assistant", reply, "Just now"))
                             } catch (e: Exception) {
                                 chatMessages.add(ChatMessage("assistant", "Error: ${e.message}", "Just now"))
@@ -417,9 +454,14 @@ fun UltronPcControlScreen(
                     }
                 }
                 Spacer(modifier = Modifier.height(12.dp))
-                Text("CPU: ${pcStatus.cpu}", fontSize = 12.sp, color = UltronTextSecondary)
-                Text("RAM Usage: ${pcStatus.ramPct}% · 8 GB RAM Safe", fontSize = 12.sp, color = UltronTextSecondary)
-                Text("Active Window: ${pcStatus.activeWin}", fontSize = 12.sp, color = UltronTextSecondary)
+                Text("CPU: ${pcStatus.cpu ?: "Not reported"}", fontSize = 12.sp, color = UltronTextSecondary)
+                Text(
+                    "RAM Usage: ${pcStatus.ramPct?.let { "$it%" } ?: "Not reported"}",
+                    fontSize = 12.sp,
+                    color = UltronTextSecondary
+                )
+                Text("Battery: ${pcStatus.battery?.let { "$it%" } ?: "Not reported"}", fontSize = 12.sp, color = UltronTextSecondary)
+                Text("Active Window: ${pcStatus.activeWin ?: "Not reported"}", fontSize = 12.sp, color = UltronTextSecondary)
             }
         }
 

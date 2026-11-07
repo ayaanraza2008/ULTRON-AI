@@ -1586,9 +1586,20 @@ export function createJarvisRouter({
       if (!raw) {
         return res.status(400).json({ error: { message: "Command text is required." } });
       }
+      if (raw.length > 4000) {
+        return res.status(413).json({
+          error: {
+            code: "COMMAND_TOO_LARGE",
+            message: "Command text must be 4,000 characters or fewer."
+          }
+        });
+      }
 
       const lower = raw.toLowerCase();
-      const detectedLang = brain.detectLanguage ? brain.detectLanguage(raw) : language;
+      const languageDetection = brain.detectLanguage ? brain.detectLanguage(raw) : null;
+      const detectedLang = typeof languageDetection === "string"
+        ? languageDetection
+        : languageDetection?.language || (typeof language === "string" ? language : "en");
 
       // 1. Evolution / Self-Improvement Intent
       if (lower.includes("audit") || lower.includes("upgrade") || lower.includes("evolve") || lower.includes("weakness") || lower.includes("improve yourself")) {
@@ -1667,7 +1678,7 @@ export function createJarvisRouter({
         if (!routeResult.success && routeResult.error === "TARGET_DEVICE_OFFLINE") {
           let offlineMsg = "Ayaan, your Windows PC is currently offline or unreachable. The command could not be dispatched.";
           if (detectedLang === "hinglish") offlineMsg = "Ayaan, aapka Windows PC is waqt offline hai. Remote command execute nahi ho payi.";
-          else if (detectedLang === "hindi") offlineMsg = "अयान, आपका विंडोज़ पीसी इस समय ऑफलाइन है। निर्देश नहीं भेजा जा सका।";
+          else if (detectedLang === "hi") offlineMsg = "अयान, आपका विंडोज़ पीसी इस समय ऑफलाइन है। निर्देश नहीं भेजा जा सका।";
 
           deviceHubInstance.recordSharedMessage({ source, role: "user", content: raw });
           deviceHubInstance.recordSharedMessage({ source: "ultron", role: "assistant", content: offlineMsg });
@@ -1691,7 +1702,7 @@ export function createJarvisRouter({
             successMsg = targetApp
               ? `Ji Ayaan, aapke Windows PC par ${targetApp} open kiya ja raha hai.`
               : `Ji Ayaan, aapke Windows PC par command execute ho raha hai.`;
-          } else if (detectedLang === "hindi") {
+          } else if (detectedLang === "hi") {
             successMsg = "हाँ अयान, आपके विंडोज़ पीसी पर निर्देश भेजा जा रहा है।";
           }
 
@@ -1729,25 +1740,89 @@ export function createJarvisRouter({
       }
 
       // 3. Conversational / Cognitive Brain Routing
-      const heiResult = brain.hei?.processUtterance ? brain.hei.processUtterance(raw, { language: detectedLang, source }) : null;
-      let textResponse = heiResult?.response;
-      if (!textResponse) {
-        if (detectedLang === "hinglish") {
-          textResponse = "Ji Ayaan, command execute ho raha hai.";
-        } else if (detectedLang === "hindi") {
-          textResponse = "हाँ अयान, निर्देश का पालन किया जा रहा है।";
-        } else {
-          textResponse = "Affirmative, Ayaan. Executing command.";
+      // Unlike a device-control intent, a normal message must receive a real model
+      // completion. Never tell the operator that a command was executed when no
+      // action was dispatched.
+      const incomingMessages = req.body?.messages;
+      if (incomingMessages !== undefined && (!Array.isArray(incomingMessages) || incomingMessages.length > 40)) {
+        return res.status(400).json({
+          error: {
+            code: "INVALID_CONVERSATION",
+            message: "Conversation history must be an array of at most 40 messages."
+          }
+        });
+      }
+
+      const conversationMessages = [];
+      let historyChars = 0;
+      for (const item of incomingMessages || []) {
+        if (!item || !["user", "assistant"].includes(item.role) || typeof item.content !== "string" ||
+            !item.content.trim() || item.content.length > 4000) {
+          return res.status(400).json({
+            error: {
+              code: "INVALID_CONVERSATION_MESSAGE",
+              message: "Conversation messages must contain non-empty user or assistant text."
+            }
+          });
         }
+        historyChars += item.content.length;
+        if (historyChars > 16000) {
+          return res.status(413).json({
+            error: {
+              code: "CONVERSATION_TOO_LARGE",
+              message: "Conversation history is too large. Send a shorter recent history."
+            }
+          });
+        }
+        conversationMessages.push({ role: item.role, content: item.content });
+      }
+
+      const lastUserMessage = [...conversationMessages].reverse().find(item => item.role === "user");
+      if (!lastUserMessage || lastUserMessage.content.trim() !== raw) {
+        conversationMessages.push({ role: "user", content: raw.slice(0, 4000) });
+      }
+
+      const personaInstructions =
+        "You are ULTRON, the owner's personal AI assistant. Be useful, direct, truthful, and context-aware. " +
+        "Do not claim to have performed an action unless an action-specific route actually performed or dispatched it. " +
+        "Automatically mirror the latest user's language and style: English, Hindi, or natural Hinglish in Roman script. " +
+        "Keep answers clear and concise unless more detail is requested.";
+      const inference = await brain.executeInference({
+        prompt: raw,
+        messages: [{ role: "system", content: personaInstructions }, ...conversationMessages],
+        context: {
+          source: req.device ? "paired-device" : String(source || "companion").slice(0, 64),
+          language: detectedLang
+        },
+        fetchImpl
+      });
+
+      if (!inference?.success || typeof inference.content !== "string" || !inference.content.trim()) {
+        logger.warn?.("ULTRON conversational inference failed", {
+          source: req.device ? "paired-device" : "owner-session",
+          attemptedProviders: Array.isArray(inference?.chainAttempted) ? inference.chainAttempted.length : 0
+        });
+        return res.status(502).json({
+          success: false,
+          error: {
+            code: "BRAIN_INFERENCE_FAILED",
+            message: "ULTRON could not reach a configured AI provider. Check provider configuration and try again."
+          }
+        });
       }
 
       res.json({
         success: true,
-        intent: "BRAIN_ROUTED_COMMAND",
-        textResponse,
-        actionTaken: "PROCESSED",
+        intent: "BRAIN_ROUTED_CONVERSATION",
+        textResponse: inference.content,
+        actionTaken: "AI_RESPONSE_GENERATED",
         language: detectedLang,
-        heiResult
+        inference: {
+          provider: inference.provider,
+          model: inference.model,
+          latencyMs: inference.latencyMs,
+          complexityTier: inference.complexityTier
+        }
       });
     } catch (err) {
       res.status(500).json({ error: { message: err.message } });
