@@ -11,19 +11,7 @@ Add these values to the existing `ultron-ai-core` service only after the code is
 - `AGORA_CUSTOMER_SECRET`: matching RESTful API Secret. Keep private.
 - `AGORA_PIPELINE_ID`: ID of a published agent in Conversational AI Studio.
 - `AGORA_DEFAULT_CHANNEL`: a channel name reserved for the ULTRON voice session.
-- `AGORA_RTC_TOKEN`: short-lived token for the agent RTC UID, if the Agora App Certificate is enabled. Do not use an expiring temporary token for production.
-- `AGORA_APP_CERTIFICATE`: optional marker only; if set, adapter refuses to start without `AGORA_RTC_TOKEN`.
-- `AGORA_AGENT_RTC_UID`: optional numeric agent UID; defaults to `0`.
-- `AGORA_API_BASE_URL`: optional; defaults to `https://api.agora.io`.
-- `ULTRON_INTEGRATION_OWNER_USER_ID`: existing Supabase owner UUID; required by all private integrations.
-
-Never put Agora secrets in frontend variables, source files, chat, or logs.
-
-## API
-
-- `GET /api/integrations/agora/status`
-- `POST /api/integrations/agora/start` with JSON `{"remoteRtcUid":"123"}`
-- `POST /api/integrations/agora/:agentId/stop`
+- `AGORA_RTC_TOKEN is mandatory: Agora's join API requires an agent RTC token even when a pipeline is configured. Tokens expire, so a static Console token is only a temporary setup path; production should generate short-lived tokens server-side using the App ID and App Certificate. Never place the App Certificate or token in browser code.T /api/integrations/agora/:agentId/stop`
 
 All routes require the authenticated ULTRON owner. The server uses Basic REST authentication and keeps credentials server-side. The current implementation tracks sessions in process memory, so session stop must be routed to the same backend instance; use a shared session store before horizontally scaling.
 
