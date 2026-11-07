@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import path from "node:path";
-import { buildDemoAnalysisArguments, createGatewayServer, resolveAnalysisRoot } from "../rea-gateway/server.js";
+import { buildDemoAnalysisArguments, createGatewayServer, resolveAnalysisRoot, runReaMcpSelfTest } from "../rea-gateway/server.js";
 
 const token = "unit-test-token_" + "x".repeat(48);
 
@@ -184,6 +184,80 @@ test("REA startup smoke test sends only supported analysis tool arguments", () =
     input_path: "/tmp/rea-targets/demo-app",
     format: "directory",
     integrity_policy: "fail",
-    detail: "complete"
+    detail: "summary"
   });
+});
+
+
+test("REA readiness uses retained complete Evidence after a bounded summary analysis", async () => {
+  const calls = [];
+  const upstream = http.createServer(async (req, res) => {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    const body = Buffer.concat(chunks).toString("utf8");
+    const payload = body ? JSON.parse(body) : null;
+    let result = {};
+    if (req.method === "POST" && payload?.method === "initialize") {
+      result = { protocolVersion: "2025-03-26", capabilities: {}, serverInfo: { name: "rea-test", version: "6.8.0" } };
+    } else if (req.method === "POST" && payload?.method === "tools/list") {
+      result = { tools: [{ name: "analyze_javascript_application" }, { name: "trace_application_feature" }] };
+    } else if (req.method === "POST" && payload?.method === "tools/call") {
+      calls.push(payload.params);
+      if (payload.params?.name === "analyze_javascript_application") {
+        result = {
+          content: [{ type: "text", text: JSON.stringify({ evidence_id: "ev_summary", normalized_result: { parent_evidence_id: "ev_" + "a".repeat(64) } }) }],
+          structuredContent: { evidence_id: "ev_summary", normalized_result: { parent_evidence_id: "ev_" + "a".repeat(64) } },
+          isError: false
+        };
+      } else {
+        result = { content: [{ type: "text", text: "{\\"traced\\":true}" }], structuredContent: { traced: true }, isError: false };
+      }
+    }
+    res.writeHead(200, { "content-type": "application/json", "mcp-session-id": "rea-test-session" });
+    res.end(payload?.id === undefined ? "" : JSON.stringify({ jsonrpc: "2.0", id: payload.id, result }));
+  });
+  const port = await listen(upstream);
+  try {
+    const outcome = await runReaMcpSelfTest({ upstreamPort: port, analysisRoot: "/tmp/rea-targets" });
+    assert.deepEqual(outcome, { ok: true, stage: "complete" });
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0].name, "analyze_javascript_application");
+    assert.equal(calls[0].arguments.detail, "summary");
+    assert.deepEqual(calls[1].arguments.application, {
+      kind: "retained-evidence",
+      evidence_id: "ev_" + "a".repeat(64)
+    });
+  } finally {
+    await close(upstream);
+  }
+});
+
+test("REA readiness reports a safe typed tool failure instead of hiding it as a generic probe error", async () => {
+  const upstream = http.createServer(async (req, res) => {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    const body = Buffer.concat(chunks).toString("utf8");
+    const payload = body ? JSON.parse(body) : null;
+    let result = {};
+    if (payload?.method === "initialize") {
+      result = { protocolVersion: "2025-03-26", capabilities: {}, serverInfo: { name: "rea-test", version: "6.8.0" } };
+    } else if (payload?.method === "tools/list") {
+      result = { tools: [{ name: "analyze_javascript_application" }, { name: "trace_application_feature" }] };
+    } else if (payload?.method === "tools/call") {
+      result = {
+        isError: true,
+        content: [{ type: "text", text: JSON.stringify({ code: "provider_timeout", message: "private diagnostic details" }) }]
+      };
+    }
+    res.writeHead(200, { "content-type": "application/json", "mcp-session-id": "rea-test-session" });
+    res.end(payload?.id === undefined ? "" : JSON.stringify({ jsonrpc: "2.0", id: payload.id, result }));
+  });
+  const port = await listen(upstream);
+  try {
+    const outcome = await runReaMcpSelfTest({ upstreamPort: port, analysisRoot: "/tmp/rea-targets" });
+    assert.deepEqual(outcome, { ok: false, stage: "analyze_demo_target", reason: "tool_provider_timeout" });
+    assert.equal(JSON.stringify(outcome).includes("private diagnostic details"), false);
+  } finally {
+    await close(upstream);
+  }
 });
