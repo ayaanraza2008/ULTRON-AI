@@ -8,6 +8,7 @@ import { createFeatureRouter } from "./features.js";
 import { createIntegrationRouter } from "./integrations/router.js";
 import { createVoiceStudioRouter } from "./integrations/voicestudio.js";
 import { createFreyaVoiceRouter } from "./integrations/freya-voice.js";
+import { createAgoraVoiceRouter } from "./integrations/agora-voice.js";
 import { createGeoSleuthRouter } from "./integrations/geo-sleuth.js";
 import { createHexStrikeRouter } from "./integrations/hexstrike-ai.js";
 import { startWorker } from "./worker.js";
@@ -2141,6 +2142,7 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
   app.use("/api", createHexStrikeRouter({ env, fetchImpl, requireSupabaseUser }));
   app.use("/api", createVoiceStudioRouter({ env, fetchImpl, requireSupabaseUser }));
   app.use("/api", createFreyaVoiceRouter({ env, fetchImpl, requireSupabaseUser }));
+  app.use("/api", createAgoraVoiceRouter({ env, fetchImpl, requireSupabaseUser }));
   app.use("/api", createGeoSleuthRouter({ env, requireSupabaseUser }));
   app.use("/api", createAgentRouter({ env, fetchImpl, requireSupabaseUser, supabaseRest, privilegedSupabaseRest: supabasePrivilegedRest, logger }));
   app.use("/api", createDevicePairingRouter({ env, fetchImpl, requireSupabaseUser, logger }));
