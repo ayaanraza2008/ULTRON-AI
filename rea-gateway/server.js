@@ -162,21 +162,39 @@ function mcpExchange({ port, method = "POST", payload, sessionId, protocolVersio
 }
 
 function getStructuredToolOutput(result) {
-  if (!result || typeof result !== "object" || result.isError === true) {
-    throw new Error("REA MCP probe tool call failed.");
+  if (!result || typeof result !== "object") {
+    throw Object.assign(new Error("REA MCP probe returned an invalid tool result."), { probeCode: "invalid_tool_result" });
   }
-  if (result.structuredContent && typeof result.structuredContent === "object") return result.structuredContent;
+  if (result.structuredContent && typeof result.structuredContent === "object" && result.isError !== true) {
+    return result.structuredContent;
+  }
   const textItems = Array.isArray(result.content)
     ? result.content.filter(item => item?.type === "text" && typeof item.text === "string").map(item => item.text)
     : [];
   for (const item of textItems) {
     try {
       const parsed = JSON.parse(item);
-      if (parsed && typeof parsed === "object") return parsed;
-    } catch {}
+      if (parsed && typeof parsed === "object") {
+        if (result.isError === true || parsed.error || parsed.code) {
+          const candidate = parsed.code ?? parsed.error?.code ?? parsed.details?.code;
+          const code = safeDiagnosticCode(typeof candidate === "number" ? String(candidate) : candidate);
+          throw Object.assign(new Error("REA MCP probe tool call failed."), {
+            probeCode: code ? "tool_" + code.toLowerCase() : "tool_call_failed"
+          });
+        }
+        return parsed.structuredContent && typeof parsed.structuredContent === "object"
+          ? parsed.structuredContent
+          : parsed;
+      }
+    } catch (error) {
+      if (error?.probeCode) throw error;
+    }
+  }
+  if (result.isError === true) {
+    throw Object.assign(new Error("REA MCP probe tool call failed."), { probeCode: "tool_call_failed" });
   }
   if (textItems.length) return { text: textItems.join("\n\n") };
-  throw new Error("REA MCP probe tool output was empty.");
+  throw Object.assign(new Error("REA MCP probe tool output was empty."), { probeCode: "empty_tool_output" });
 }
 
 /**
@@ -254,14 +272,21 @@ export async function runReaMcpSelfTest({ upstreamPort, analysisRoot } = {}) {
       name: "analyze_javascript_application",
       arguments: buildDemoAnalysisArguments(targetPath)
     }));
-    if (typeof evidence.evidence_id !== "string" || !evidence.normalized_result) {
-      return { ok: false, stage: "analyze_demo_target", reason: "evidence_missing" };
+    const retainedEvidenceId = evidence?.normalized_result?.parent_evidence_id;
+    if (typeof evidence.evidence_id !== "string" ||
+        typeof retainedEvidenceId !== "string" ||
+        !/^ev_[a-f0-9]{64}$/.test(retainedEvidenceId)) {
+      return { ok: false, stage: "analyze_demo_target", reason: "retained_evidence_missing" };
     }
 
     stage = "trace_demo_feature";
     const trace = getStructuredToolOutput(await call("tools/call", {
       name: "trace_application_feature",
-      arguments: { application: evidence, seed: { kind: "string", value: "search results" }, direction: "both" }
+      arguments: {
+        application: { kind: "retained-evidence", evidence_id: retainedEvidenceId },
+        seed: { kind: "string", value: "search results" },
+        direction: "both"
+      }
     }));
     if (!trace || typeof trace !== "object") return { ok: false, stage: "trace_demo_feature", reason: "trace_empty" };
 
@@ -274,7 +299,11 @@ export async function runReaMcpSelfTest({ upstreamPort, analysisRoot } = {}) {
       "missing_rpc_envelope", "rpc_id_mismatch", "rpc_error", "response_failed",
       "response_too_large"
     ]);
-    return { ok: false, stage, reason: knownReasons.has(error?.probeCode) ? error.probeCode : "tool_check_failed" };
+    const diagnostic = safeDiagnosticCode(error?.probeCode);
+    const safeToolCode = diagnostic && /^tool_[a-z0-9_-]{1,64}$/.test(diagnostic);
+    return { ok: false, stage, reason: (diagnostic && (knownReasons.has(diagnostic) || safeToolCode))
+      ? diagnostic
+      : "tool_check_failed" };
   } finally {
     if (sessionId && initialized) {
       try {
@@ -401,9 +430,10 @@ export function resolveAnalysisRoot(configuredRoot, packageRoot) {
 }
 
 export function buildDemoAnalysisArguments(targetPath) {
-  // The deployed REA 6.8.0 MCP wrapper requires an explicit complete detail
-  // mode for this readiness probe, despite the upstream domain schema omitting it.
-  return { input_path: targetPath, format: "directory", integrity_policy: "fail", detail: "complete" };
+  // Summary detail keeps the readiness handshake bounded. REA retains the
+  // complete application dossier in this MCP session; trace consumes that
+  // exact retained parent instead of transferring a potentially large graph.
+  return { input_path: targetPath, format: "directory", integrity_policy: "fail", detail: "summary" };
 }
 
 
