@@ -4,7 +4,8 @@ import {
   cognitiveLayerForMemory,
   cognitiveLayerLabel,
   extractCorrectionLesson,
-  rankCognitiveMemories
+  rankCognitiveMemories,
+  recallCognitiveMemoryGraph
 } from "../cognitive-memory.js";
 
 const NOW = Date.parse("2026-10-29T12:00:00.000Z");
@@ -127,4 +128,84 @@ test("a recently reinforced inferred memory uses reinforcement time even without
   const ranked = rankCognitiveMemories([row], "production deployment tests", { now: NOW, limit: 8 });
   assert.equal(ranked.length, 1, "reinforcement should prevent a false stale-memory exclusion");
   assert.ok(ranked[0].cognitiveDecay > 0.95, "decay should be measured from last reinforcement");
+});
+
+
+test("Cerebro-style graph recall follows related memories only inside the owner's scope", () => {
+  const rows = [
+    {
+      id: "seed", user_id: "owner-a", kind: "project_fact",
+      title: "ULTRON voice pipeline", content: "Voice routing and selected TTS provider.",
+      source: "user_approved", updated_at: new Date(NOW).toISOString(),
+      metadata: { relationships: [{ memoryId: "linked", relation: "depends_on" }] }
+    },
+    {
+      id: "linked", user_id: "owner-a", kind: "project_fact",
+      title: "Speech vendor", content: "Use the chosen synthesis vendor consistently.",
+      source: "user_approved", updated_at: new Date(NOW).toISOString(),
+      metadata: { relatedMemoryIds: ["third-hop"] }
+    },
+    {
+      id: "third-hop", user_id: "owner-a", kind: "project_fact",
+      title: "Response timing", content: "Measure response timing on the companion.",
+      source: "user_approved", updated_at: new Date(NOW).toISOString(),
+      metadata: {}
+    },
+    {
+      id: "foreign", user_id: "owner-b", kind: "project_fact",
+      title: "Private foreign memory", content: "Must never cross account boundaries.",
+      source: "user_approved", updated_at: new Date(NOW).toISOString(),
+      metadata: {}
+    }
+  ];
+
+  // A malicious/corrupt cross-account edge cannot resolve because foreign rows
+  // are removed before graph traversal.
+  rows[1].metadata.relatedMemoryIds.push("foreign");
+  const recalled = recallCognitiveMemoryGraph(rows, "ULTRON voice pipeline", {
+    ownerId: "owner-a", now: NOW, limit: 8, maxDepth: 2
+  });
+
+  assert.deepEqual(recalled.map(item => item.id), ["seed", "linked", "third-hop"]);
+  assert.equal(recalled[0].graphDepth, 0);
+  assert.equal(recalled[1].graphDepth, 1);
+  assert.equal(recalled[1].graphRelation, "depends_on");
+  assert.equal(recalled[2].graphDepth, 2);
+  assert.equal(recalled.some(item => item.user_id !== "owner-a"), false);
+});
+
+test("graph recall fails closed when owner scope is missing or invalid", () => {
+  const rows = [{
+    id: "seed", user_id: "owner-a", kind: "project_fact",
+    title: "A", content: "A memory", source: "user_approved", metadata: {}
+  }];
+  assert.deepEqual(recallCognitiveMemoryGraph(rows, "memory"), []);
+  assert.deepEqual(recallCognitiveMemoryGraph(rows, "memory", { ownerId: "" }), []);
+  assert.deepEqual(recallCognitiveMemoryGraph([
+    { id: "conflicting-owner", user_id: "owner-b", owner_id: "owner-a", kind: "project_fact", title: "Private", content: "Do not accept a conflicting user_id." }
+  ], "private", { ownerId: "owner-a" }), []);
+});
+
+
+test("graph traversal cannot resurrect a stale inferred memory through a relationship edge", () => {
+  const rows = [
+    {
+      id: "fresh-seed", user_id: "owner-a", kind: "project_fact",
+      title: "Current project", content: "Current ULTRON architecture decision.",
+      source: "user_approved", updated_at: new Date(NOW).toISOString(),
+      metadata: { relatedMemoryIds: ["stale-linked"] }
+    },
+    {
+      id: "stale-linked", user_id: "owner-a", kind: "project_fact",
+      title: "Old inferred decision", content: "Obsolete architecture decision.",
+      source: "conversation_summary",
+      created_at: new Date(NOW - 240 * 86_400_000).toISOString(),
+      updated_at: new Date(NOW - 240 * 86_400_000).toISOString(),
+      metadata: { confidence: 0.9 }
+    }
+  ];
+  const recalled = recallCognitiveMemoryGraph(rows, "current ULTRON architecture", {
+    ownerId: "owner-a", now: NOW, limit: 8, maxDepth: 2
+  });
+  assert.deepEqual(recalled.map(item => item.id), ["fresh-seed"]);
 });

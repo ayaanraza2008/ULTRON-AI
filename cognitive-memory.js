@@ -1,5 +1,5 @@
 // Friday-inspired cognitive memory, adapted to ULTRON's existing Supabase schema.
-// This module only ranks and classifies account-owned memories; it never executes tools.
+// This module ranks, classifies, and traverses bounded account-owned memories; it never executes tools.
 const LAYERS = new Set(["working", "short_term", "episodic", "semantic", "procedural", "profile"]);
 const LAYER_WEIGHT = {
   working: 0.6,
@@ -162,4 +162,107 @@ export function extractCorrectionLesson(value) {
     cognitiveLayer: "procedural",
     confidence: 0.75
   };
+}
+
+
+/**
+ * Multi-hop semantic graph recall adapted from the Cerebro graph concept.
+ *
+ * This operates only on rows already fetched by ULTRON's account-scoped memory
+ * repository. ownerId is mandatory: linked IDs from another account are never
+ * resolved. Relationships live in existing JSON metadata, so no schema
+ * migration or second memory database is introduced.
+ *
+ * Supported metadata:
+ *   relatedMemoryIds: ["memory-id"]
+ *   relationships: [{ memoryId: "memory-id", relation: "supports" }]
+ */
+export function recallCognitiveMemoryGraph(items, query, {
+  ownerId,
+  now = Date.now(),
+  limit = 8,
+  maxDepth = 2
+} = {}) {
+  if (!Array.isArray(items) || typeof ownerId !== "string" || !ownerId.trim()) return [];
+
+  const scoped = items.filter(item =>
+    item && typeof item === "object" &&
+    (item.user_id === ownerId || (!item.user_id && item.owner_id === ownerId)) &&
+    typeof item.id === "string" && item.id.length > 0
+  );
+  if (!scoped.length) return [];
+
+  // Apply the same expiry/decay eligibility rules to every graph node, not only
+  // the initial query match. A relationship must never resurrect stale inferred memory.
+  const eligibleMemories = rankCognitiveMemories(scoped, query, { now, limit: Math.min(32, scoped.length) });
+  const byId = new Map(eligibleMemories.map(item => [item.id, item]));
+  const rankedSeeds = eligibleMemories;
+  // Seed from direct query matches; graph-only context is discovered through explicit edges.
+  // Preserve several independent direct matches, then expand linked context.
+  // Zero-overlap rows should be discovered through graph edges, not promoted to
+  // unrelated query seeds. If the query has no Latin tokens, keep one safe fallback.
+  const queryTokens = tokens(query);
+  const directMatches = queryTokens.size
+    ? rankedSeeds.filter(item => {
+      const memoryTokens = tokens((item.title || "") + " " + item.content);
+      for (const token of queryTokens) if (memoryTokens.has(token)) return true;
+      return false;
+    })
+    : rankedSeeds.slice(0, 1);
+  const seedCandidates = directMatches.length ? directMatches : rankedSeeds.slice(0, 1);
+  const queue = seedCandidates
+    .slice(0, Math.min(4, Math.max(1, Math.trunc(limit) || 1)))
+    .map(item => ({ id: item.id, depth: 0, relation: "query_match" }));
+  const visited = new Map();
+  const depthLimit = Math.max(0, Math.min(3, Math.trunc(maxDepth) || 0));
+
+  while (queue.length && visited.size < 64) {
+    const current = queue.shift();
+    if (!current || visited.has(current.id) || !byId.has(current.id)) continue;
+    visited.set(current.id, current);
+    if (current.depth >= depthLimit) continue;
+
+    const item = byId.get(current.id);
+    const metadata = objectOrEmpty(item.metadata);
+    const links = [];
+    if (Array.isArray(metadata.relatedMemoryIds)) {
+      for (const memoryId of metadata.relatedMemoryIds) {
+        if (typeof memoryId === "string") links.push({ memoryId, relation: "related_to" });
+      }
+    }
+    if (Array.isArray(metadata.relationships)) {
+      for (const edge of metadata.relationships) {
+        if (edge && typeof edge.memoryId === "string") {
+          links.push({
+            memoryId: edge.memoryId,
+            relation: typeof edge.relation === "string" ? edge.relation.slice(0, 48) : "related_to"
+          });
+        }
+      }
+    }
+    for (const edge of links) {
+      if (byId.has(edge.memoryId) && !visited.has(edge.memoryId)) {
+        queue.push({ id: edge.memoryId, depth: current.depth + 1, relation: edge.relation });
+      }
+    }
+  }
+
+  const discovered = [...visited.values()]
+    .map(entry => {
+      const item = byId.get(entry.id);
+      const ranked = rankedSeeds.find(seed => seed.id === entry.id);
+      return {
+        ...(ranked || item),
+        graphDepth: entry.depth,
+        graphRelation: entry.relation
+      };
+    });
+
+  return discovered
+    .sort((a, b) =>
+      (a.graphDepth - b.graphDepth) ||
+      ((b.cognitiveScore || 0) - (a.cognitiveScore || 0)) ||
+      (memoryUpdatedAt(b) - memoryUpdatedAt(a))
+    )
+    .slice(0, Math.max(0, Math.min(32, Math.trunc(limit) || 0)));
 }
