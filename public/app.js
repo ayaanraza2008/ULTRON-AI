@@ -24,6 +24,9 @@ const state = {
   persistenceAvailable: false,
   attachments: [],
   recognition: null,
+  mediaRecorder: null,
+  mediaStream: null,
+  audioPlayback: null,
   muted: false,
   speaking: false,
   busy: false,
@@ -477,9 +480,52 @@ function refreshSpeechVoices() {
   select.disabled = !state.preferenceAvailable || state.speechVoices.length === 0;
 }
 
-function speak(text) {
+async function speak(text) {
+  const spokenText = String(text || "").slice(0, 5000);
+  if (!spokenText) return;
+  stopSpeech();
+  try {
+    const result = await api("/api/integrations/freya/synthesize", {
+      method: "POST",
+      body: { text: spokenText }
+    });
+    if (result?.audioBase64) {
+      const binary = atob(result.audioBase64);
+      const bytes = new Uint8Array(binary.length);
+      for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+      const mime = String(result.format || "audio/mpeg").split(";")[0];
+      const blob = new Blob([bytes], { type: mime });
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      state.audioPlayback = audio;
+      audio.onplay = () => {
+        state.speaking = true;
+        setStatus("speaking", "ULTRON is speaking.", "Freya voice · Tap the core to stop");
+      };
+      audio.onended = () => {
+        state.speaking = false;
+        state.audioPlayback = null;
+        URL.revokeObjectURL(url);
+        setStatus("standby", "Response complete.", "Ready when you are");
+      };
+      audio.onerror = () => {
+        state.speaking = false;
+        state.audioPlayback = null;
+        URL.revokeObjectURL(url);
+        speakWithBrowserFallback(spokenText);
+      };
+      await audio.play();
+      return;
+    }
+  } catch {
+    // Freya is optional until its server-side API key is configured.
+  }
+  speakWithBrowserFallback(spokenText);
+}
+
+function speakWithBrowserFallback(text) {
   if (!("speechSynthesis" in window) || !("SpeechSynthesisUtterance" in window)) {
-    toast("Spoken output is not supported by this browser.");
+    toast("No voice output provider is available. Configure Freya or enable browser speech.");
     return;
   }
   window.speechSynthesis.cancel();
@@ -500,7 +546,7 @@ function speak(text) {
   if (matching) utterance.voice = matching;
   utterance.onstart = () => {
     state.speaking = true;
-    setStatus("speaking", "ULTRON is speaking.", "Tap the core to stop playback");
+    setStatus("speaking", "ULTRON is speaking.", "Browser voice fallback · Tap the core to stop");
   };
   utterance.onend = () => {
     state.speaking = false;
@@ -515,6 +561,10 @@ function speak(text) {
 
 function stopSpeech() {
   if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+  if (state.audioPlayback) {
+    try { state.audioPlayback.pause(); state.audioPlayback.currentTime = 0; } catch {}
+    state.audioPlayback = null;
+  }
   state.speaking = false;
 }
 
@@ -553,10 +603,72 @@ function createRecognition() {
   return recognition;
 }
 
-function toggleVoiceInput() {
+async function startFreyaCapture() {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+  const mimeType = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find(type => MediaRecorder.isTypeSupported(type)) || "";
+  const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+  const chunks = [];
+  state.mediaStream = stream;
+  state.mediaRecorder = recorder;
+  recorder.ondataavailable = event => { if (event.data?.size) chunks.push(event.data); };
+  recorder.onerror = () => {
+    state.mediaRecorder = null;
+    stream.getTracks().forEach(track => track.stop());
+    state.mediaStream = null;
+    setStatus("error", "Voice capture failed.", "Check microphone permissions and try again");
+  };
+  recorder.onstop = async () => {
+    state.mediaRecorder = null;
+    stream.getTracks().forEach(track => track.stop());
+    state.mediaStream = null;
+    const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
+    if (!blob.size) {
+      setStatus("standby", "No speech detected.", "Tap the core to try again");
+      return;
+    }
+    if (blob.size > 8 * 1024 * 1024) {
+      toast("Recording is too long. Please speak in shorter segments.", "error");
+      setStatus("standby", "Recording too large.", "Try a shorter voice command");
+      return;
+    }
+    setStatus("thinking", "Transcribing voice.", "Freya speech recognition");
+    try {
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error("Audio could not be read."));
+        reader.readAsDataURL(blob);
+      });
+      const result = await api("/api/integrations/freya/transcribe", {
+        method: "POST",
+        body: { audioBase64: dataUrl.split(",")[1] || "", mimeType: blob.type || "audio/webm" }
+      });
+      const transcriptText = String(result.text || "").trim();
+      if (transcriptText) await sendMessage(transcriptText, state.attachments);
+      else setStatus("standby", "No speech detected.", "Tap the core to try again");
+    } catch (error) {
+      toast(apiErrorMessage(error, "Freya transcription failed. Try browser voice input."), "error");
+      const fallback = createRecognition();
+      if (fallback) {
+        state.recognition = fallback;
+        try { fallback.start(); } catch { state.recognition = null; }
+      } else {
+        setStatus("error", "Voice transcription unavailable.", "Check Freya setup or switch to Text mode");
+      }
+    }
+  };
+  recorder.start(250);
+  setStatus("listening", "Listening.", "Freya voice input · Tap the core when finished");
+}
+
+async function toggleVoiceInput() {
   if (state.busy) {
     state.requestController?.abort();
     setStatus("thinking", "Stopping request.", "Cancelling the in-flight chat request");
+    return;
+  }
+  if (state.mediaRecorder?.state === "recording") {
+    state.mediaRecorder.stop();
     return;
   }
   if (state.recognition) {
@@ -568,13 +680,22 @@ function toggleVoiceInput() {
     setStatus("standby", "Playback stopped.", "Ready when you are");
     return;
   }
+  stopSpeech();
+  try {
+    const readiness = await api("/api/integrations/freya/status");
+    if (readiness?.configured && navigator.mediaDevices?.getUserMedia && window.MediaRecorder) {
+      await startFreyaCapture();
+      return;
+    }
+  } catch {
+    // Keep the existing browser speech recognition as the no-key fallback.
+  }
   const recognition = createRecognition();
   if (!recognition) {
-    toast("Speech recognition is unavailable in this browser. Switch to Text mode.");
+    toast("Voice input is unavailable. Configure Freya or switch to Text mode.");
     setMode("text");
     return;
   }
-  stopSpeech();
   state.recognition = recognition;
   try {
     recognition.start();
