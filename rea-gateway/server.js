@@ -252,7 +252,7 @@ export async function runReaMcpSelfTest({ upstreamPort, analysisRoot } = {}) {
     stage = "analyze_demo_target";
     const evidence = getStructuredToolOutput(await call("tools/call", {
       name: "analyze_javascript_application",
-      arguments: { input_path: targetPath, format: "directory", integrity_policy: "fail", detail: "complete" }
+      arguments: buildDemoAnalysisArguments(targetPath)
     }));
     if (typeof evidence.evidence_id !== "string" || !evidence.normalized_result) {
       return { ok: false, stage: "analyze_demo_target", reason: "evidence_missing" };
@@ -394,6 +394,18 @@ function positivePort(value, fallback) {
   return Number.isInteger(port) && port >= 1 && port <= 65535 ? port : fallback;
 }
 
+export function resolveAnalysisRoot(configuredRoot, packageRoot) {
+  return typeof configuredRoot === "string" && configuredRoot.trim()
+    ? configuredRoot.trim()
+    : resolve(packageRoot, "targets");
+}
+
+export function buildDemoAnalysisArguments(targetPath) {
+  // The deployed REA 6.8.0 MCP wrapper requires an explicit complete detail
+  // mode for this readiness probe, despite the upstream domain schema omitting it.
+  return { input_path: targetPath, format: "directory", integrity_policy: "fail", detail: "complete" };
+}
+
 
 function safeDiagnosticCode(value) {
   return typeof value === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(value) ? value : null;
@@ -443,6 +455,7 @@ export async function startGateway(env = process.env) {
   if (publicPort === childPort) throw new Error("PORT and REA_CHILD_PORT must be different.");
 
   const packageRoot = dirname(fileURLToPath(import.meta.url));
+  const analysisRoot = resolveAnalysisRoot(env.REA_ANALYSIS_ROOT, packageRoot);
   const cli = resolve(packageRoot, "node_modules", "rea-agents", "scripts", "rea.mjs");
   let mcpReady = false;
   const child = spawn(process.execPath, [
@@ -481,7 +494,7 @@ export async function startGateway(env = process.env) {
       if (!(await tcpReady(childPort, 1000))) {
         result = { ok: false, stage: "upstream_not_listening", reason: "tcp_not_ready" };
       } else {
-        result = await runReaMcpSelfTest({ upstreamPort: childPort, analysisRoot: env.REA_ANALYSIS_ROOT });
+        result = await runReaMcpSelfTest({ upstreamPort: childPort, analysisRoot });
       }
       if (result.ok) {
         mcpReady = true;

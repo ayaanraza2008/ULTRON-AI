@@ -1,42 +1,11 @@
 import { createServer } from "node:http";
-import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Readable } from "node:stream";
 
-const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "public");
-const VOICE_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "voice");
 const CORE_API_ORIGIN = process.env.CORE_API_ORIGIN || "https://ultron-ai-core.onrender.com";
 const MAX_REQUEST_BYTES = 12 * 1024 * 1024;
-const STATIC_ASSETS = new Map([
-  ["/", ["index.html", "text/html; charset=utf-8", "public"]],
-  ["/index.html", ["index.html", "text/html; charset=utf-8", "public"]],
-  ["/styles.css", ["styles.css", "text/css; charset=utf-8", "public"]],
-  ["/style.css", ["style.css", "text/css; charset=utf-8", "public"]],
-  ["/app.js", ["app.js", "text/javascript; charset=utf-8", "public"]],
-  ["/energy-core.js", ["energy-core.js", "text/javascript; charset=utf-8", "public"]],
-  ["/ultron-eyes.js", ["ultron-eyes.js", "text/javascript; charset=utf-8", "public"]],
-  ["/particle-swarm-engine.js", ["particle-swarm-engine.js", "text/javascript; charset=utf-8", "public"]],
-  ["/voice-activation.js", ["voice-activation.js", "text/javascript; charset=utf-8", "public"]],
-  ["/hand-gesture-core.js", ["hand-gesture-core.js", "text/javascript; charset=utf-8", "public"]],
-  ["/floating-core.html", ["floating-core.html", "text/html; charset=utf-8", "public"]],
-  ["/floating-core.css", ["floating-core.css", "text/css; charset=utf-8", "public"]],
-  ["/floating-core.js", ["floating-core.js", "text/javascript; charset=utf-8", "public"]],
-  ["/favicon.svg", ["favicon.svg", "image/svg+xml; charset=utf-8", "public"]],
-  ["/manifest.webmanifest", ["manifest.webmanifest", "application/manifest+json; charset=utf-8", "public"]],
-  ["/service-worker.js", ["service-worker.js", "text/javascript; charset=utf-8", "public"]],
-  ["/icons/icon-180.png", ["icons/icon-180.png", "image/png", "public"]],
-  ["/icons/icon-192.png", ["icons/icon-192.png", "image/png", "public"]],
-  ["/icons/icon-512.png", ["icons/icon-512.png", "image/png", "public"]],
-  ["/voice/snap-detector.js", ["snap-detector.js", "text/javascript; charset=utf-8", "voice"]],
-  ["/voice/voice-activation-system.js", ["voice-activation-system.js", "text/javascript; charset=utf-8", "voice"]],
-  ["/voice/wake-word.js", ["wake-word.js", "text/javascript; charset=utf-8", "voice"]],
-  ["/voice/test_1_introduction.wav", ["voice/test_1_introduction.wav", "audio/wav", "public"]],
-  ["/voice/test_2_authoritative.wav", ["voice/test_2_authoritative.wav", "audio/wav", "public"]],
-  ["/voice/test_3_dark_futuristic.wav", ["voice/test_3_dark_futuristic.wav", "audio/wav", "public"]],
-  ["/voice/test_4_hinglish.wav", ["voice/test_4_hinglish.wav", "audio/wav", "public"]],
-  ["/voice/test_5_long_response.wav", ["voice/test_5_long_response.wav", "audio/wav", "public"]]
-]);
+const LEGACY_SERVICE_WORKER_RETIREMENT_SCRIPT = "self.addEventListener(\"install\", event => event.waitUntil(self.skipWaiting()));\nself.addEventListener(\"activate\", event => {\n  event.waitUntil((async () => {\n    const openClients = await self.clients.matchAll({ type: \"window\", includeUncontrolled: true });\n    await self.registration.unregister();\n    const cacheKeys = await caches.keys();\n    await Promise.all(cacheKeys.filter(key => key.startsWith(\"ultron-core-shell-\")).map(key => caches.delete(key)));\n    await Promise.all(openClients.map(client => client.navigate(client.url).catch(() => null)));\n  })());\n});\n";
 const ALLOWED_PROXY_METHODS = new Set(["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"]);
 const RESPONSE_HEADERS = [
   "cache-control", "content-type", "content-disposition", "location",
@@ -80,25 +49,6 @@ function sendJson(res, statusCode, payload) {
   res.end(body);
 }
 
-async function serveAsset(req, res, asset) {
-  const [filename, contentType, sourceDir = "public"] = asset;
-  const baseDir = sourceDir === "voice" ? VOICE_ROOT : ROOT;
-  let bytes;
-  try {
-    bytes = await readFile(path.join(baseDir, filename));
-  } catch {
-    sendJson(res, 404, { error: { code: "ASSET_NOT_FOUND", message: "This interface asset is missing." } });
-    return;
-  }
-  securityHeaders(res);
-  res.statusCode = 200;
-  res.setHeader("Content-Type", contentType);
-  res.setHeader("Cache-Control", filename === "index.html" ? "no-store" : filename === "service-worker.js" || filename === "manifest.webmanifest" ? "no-cache" : "public, max-age=300");
-  res.setHeader("Content-Length", String(bytes.length));
-  if (req.method === "HEAD") res.end();
-  else res.end(bytes);
-}
-
 function forwardedRequestHeaders(req) {
   const headers = new Headers();
   const input = req.headers;
@@ -137,28 +87,41 @@ export function createUltronCoreProxy({ fetchImpl = fetch, logger = console, gat
   return createServer(async (req, res) => {
     let requestUrl;
     try {
-      requestUrl = new URL(req.url || "/", "http://ultron-core-interface.local");
+      requestUrl = new URL(req.url || "/", "http://ultron-api-proxy.local");
     } catch {
       sendJson(res, 400, { error: { code: "INVALID_URL", message: "Request URL is invalid." } });
       return;
     }
 
-    if (requestUrl.pathname === "/healthz" && (req.method === "GET" || req.method === "HEAD")) {
-      sendJson(res, 200, { status: "ok", service: "ultron-core-interface" });
+    if (requestUrl.pathname === "/service-worker.js" && (req.method === "GET" || req.method === "HEAD")) {
+      securityHeaders(res);
+      const body = Buffer.from(LEGACY_SERVICE_WORKER_RETIREMENT_SCRIPT);
+      res.statusCode = 200;
+      res.setHeader("Content-Type", "application/javascript; charset=utf-8");
+      res.setHeader("Cache-Control", "no-store, max-age=0");
+      res.setHeader("Service-Worker-Allowed", "/");
+      res.setHeader("Content-Length", String(body.length));
+      if (req.method === "HEAD") res.end();
+      else res.end(body);
       return;
     }
 
-    const asset = STATIC_ASSETS.get(requestUrl.pathname);
-    if (asset && (req.method === "GET" || req.method === "HEAD")) {
-      await serveAsset(req, res, asset);
+    if (requestUrl.pathname === "/healthz" && (req.method === "GET" || req.method === "HEAD")) {
+      sendJson(res, 200, { status: "ok", service: "ultron-api-proxy" });
       return;
     }
 
     const isApiPath = requestUrl.pathname === "/api" || requestUrl.pathname.startsWith("/api/");
     const isJarvisPath = requestUrl.pathname === "/jarvis" || requestUrl.pathname.startsWith("/jarvis/");
-    const isWorldIntelligencePath = requestUrl.pathname === "/world-intelligence" || requestUrl.pathname.startsWith("/world-intelligence/");
-    if (!isApiPath && !isJarvisPath && !isWorldIntelligencePath) {
-      sendJson(res, 404, { error: { code: "NOT_FOUND", message: "No interface route matches this path." } });
+    if (!isApiPath && !isJarvisPath) {
+      sendJson(res, 404, {
+        error: {
+          code: requestUrl.pathname === "/" || requestUrl.pathname === "/index.html" ||
+            /\.(?:html?|js|css|svg|png|webmanifest|ico)$/i.test(requestUrl.pathname)
+            ? "FRONTEND_REMOVED" : "NOT_FOUND",
+          message: "This host is API-only. The ULTRON web frontend and static assets have been removed."
+        }
+      });
       return;
     }
     if (!ALLOWED_PROXY_METHODS.has(req.method || "")) {

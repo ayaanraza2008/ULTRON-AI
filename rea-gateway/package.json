@@ -12,5 +12,12 @@
   },
   "dependencies": {
     "rea-agents": "6.8.0"
+  },
+  "overrides": {
+    "rea-agents": {
+      "zod": "4.6.7",
+      "glob": "14.0.2",
+      "minimatch": "11.0.1"
+    }
   }
 }

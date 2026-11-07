@@ -41,7 +41,8 @@ test("new active migrations are unique, ordered after the remote baseline, and n
     "20261104110000_paired_device_telemetry.sql",
     "20261106120000_ultron_multidevice_state.sql",
     "20261106130000_atomic_multidevice_state_writes.sql",
-    "20261106130200_paired_device_online_requires_heartbeat.sql"
+    "20261106130200_paired_device_online_requires_heartbeat.sql",
+    "20261106213711_pending_device_pairings_approved_by_index.sql"
   ]);
   const versions = active.map(name => name.slice(0, 14));
   assert.ok(versions.every(version => /^[0-9]{14}$/.test(version)), "Every active migration must use a 14-digit version");

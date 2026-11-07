@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { createGatewayServer } from "../rea-gateway/server.js";
+import path from "node:path";
+import { buildDemoAnalysisArguments, createGatewayServer, resolveAnalysisRoot } from "../rea-gateway/server.js";
 
 const token = "unit-test-token_" + "x".repeat(48);
 
@@ -167,4 +168,22 @@ test("REA gateway accepts Render-generated standard Base64 secrets as bearer tok
     await close(gateway);
     await close(upstream);
   }
+});
+
+
+test("REA analysis root defaults to the checked-in targets directory", () => {
+  const packageRoot = "/opt/render/project/src/rea-gateway";
+  assert.equal(resolveAnalysisRoot(undefined, packageRoot), path.resolve(packageRoot, "targets"));
+  assert.equal(resolveAnalysisRoot("", packageRoot), path.resolve(packageRoot, "targets"));
+  assert.equal(resolveAnalysisRoot(" /tmp/rea-targets ", packageRoot), "/tmp/rea-targets");
+});
+
+
+test("REA startup smoke test sends only supported analysis tool arguments", () => {
+  assert.deepEqual(buildDemoAnalysisArguments("/tmp/rea-targets/demo-app"), {
+    input_path: "/tmp/rea-targets/demo-app",
+    format: "directory",
+    integrity_policy: "fail",
+    detail: "complete"
+  });
 });

@@ -1,5 +1,5 @@
 # ULTRON AI — Render workspace "Ultron core"
-# This Blueprint maps the four existing live services in that workspace.
+# This Blueprint maps the backend, integrations, and optional ULTRON command-center static assets.
 # It is a candidate configuration only. Do not sync it until the service/secret
 # diff has been reviewed in Render Dashboard.
 

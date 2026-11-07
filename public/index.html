@@ -2,166 +2,270 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#020205">
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="description" content="ULTRON AI — a living core, voice-first command experience, and task-triggered holographic interface.">
-  <title>ULTRON AI — Living Core</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#050308">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="ULTRON AI personal intelligence command interface">
+  <title>ULTRON AI</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="/icons/icon-180.png">
-  <link rel="manifest" href="/manifest.webmanifest">
   <link rel="stylesheet" href="/styles.css">
-  <script type="module" src="/hand-gesture-core.js"></script>
-  <script type="module" src="/app.js"></script>
 </head>
 <body>
-  <div class="universe" aria-hidden="true">
-    <div class="ambient ambient-one"></div>
-    <div class="ambient ambient-two"></div>
-    <div class="scanline"></div>
-    <div class="star-noise"></div>
-  </div>
+  <div class="ambient ambient--violet" aria-hidden="true"></div>
+  <div class="ambient ambient--crimson" aria-hidden="true"></div>
 
-  <header class="topline">
-    <a class="brand" href="/" aria-label="ULTRON AI home">
-      <span class="brand-mark" aria-hidden="true">◉</span>
-      <span class="brand-copy"><span class="brand-name">ULTRON <b>AI</b></span><span class="brand-caption">THINK · ANALYZE · CREATE · EXECUTE</span></span>
-    </a>
-    <div class="header-actions">
-      <div class="connection" role="status" aria-live="polite">
-        <span class="connection-dot"></span>
-        <span id="api-status">CONNECTING TO CORE</span>
+  <main id="app" class="app" data-mode="voice">
+    <header class="topbar">
+      <a class="wordmark" href="/" aria-label="ULTRON home">
+        <span class="wordmark__sigil" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span class="wordmark__name">ULTRON</span>
+        <span class="wordmark__edition">AI</span>
+      </a>
+      <div class="topbar__right">
+        <span class="connection" id="connection-indicator" data-state="checking">
+          <span class="connection__dot" aria-hidden="true"></span>
+          <span id="connection-label">CONNECTING</span>
+        </span>
+        <button class="icon-button" id="activity-open" type="button" aria-label="Open activity" title="Activity">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h3l2-6 4 12 2-6h5"/></svg>
+        </button>
+        <button class="icon-button" id="settings-open" type="button" aria-label="Open settings" title="Settings">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-1.7 2.9-.2-.1a1.7 1.7 0 0 0-1.8 0l-.2.1h-3.4l-.1-.2a1.7 1.7 0 0 0-1.5-1l-.2.1-2.9-1.7.1-.2a1.7 1.7 0 0 0 0-1.8l-.1-.2v-3.4l.2-.1a1.7 1.7 0 0 0 1-1.5l-.1-.2 1.7-2.9.2.1a1.7 1.7 0 0 0 1.8 0l.2-.1h3.4l.1.2a1.7 1.7 0 0 0 1.5 1l.2-.1 2.9 1.7-.1.2a1.7 1.7 0 0 0 0 1.8l.1.2v3.4z"/></svg>
+        </button>
       </div>
-      <button id="drawer-toggle" class="drawer-toggle" type="button" aria-expanded="false" aria-controls="feature-drawer" aria-label="Open ULTRON features" title="ULTRON features">
-        <span></span><span></span><span></span>
-      </button>
-    </div>
-  </header>
+    </header>
 
-  <main id="main-interface">
-    <section id="core-stage" class="core-stage" data-state="idle" aria-label="ULTRON living energy core">
-      <canvas id="core-canvas" aria-label="Animated 3D particle core containing 20,000 GPU-driven particles"></canvas>
-      <div class="core-halo halo-a" aria-hidden="true"></div>
-      <div class="core-halo halo-b" aria-hidden="true"></div>
-      <div class="core-orbit orbit-a" aria-hidden="true"></div>
-      <div class="core-orbit orbit-b" aria-hidden="true"></div>
-      <div class="core-orbit orbit-c" aria-hidden="true"></div>
-      <div class="core-orbit orbit-d" aria-hidden="true"></div>
-      <div class="core-beam beam-top" aria-hidden="true"></div>
-      <div class="core-beam beam-bottom" aria-hidden="true"></div>
-      <div class="core-coordinate coordinate-one" aria-hidden="true">FIELD 20K <i>●</i></div>
-      <div class="core-coordinate coordinate-two" aria-hidden="true">ENERGY <i id="energy-indicator">ACTIVE</i></div>
+    <section class="command-stage" aria-label="ULTRON voice command interface">
+      <div class="stage-caption">
+        <span class="stage-caption__overline" id="stage-overline">PERSONAL INTELLIGENCE</span>
+        <span class="stage-caption__state" id="state-label">STANDBY</span>
+      </div>
+
+      <div class="core-wrap" id="core-wrap" role="button" tabindex="0" aria-label="Start voice input">
+        <div class="core-aura core-aura--outer" aria-hidden="true"></div>
+        <div class="core-aura core-aura--inner" aria-hidden="true"></div>
+        <div class="core-ring core-ring--one" aria-hidden="true"></div>
+        <div class="core-ring core-ring--two" aria-hidden="true"></div>
+        <canvas id="energy-core" class="energy-core" aria-label="Animated purple and crimson energy core" role="img"></canvas>
+        <div class="core-crosshair" aria-hidden="true"><span></span><span></span></div>
+        <div class="core-center" aria-hidden="true">
+          <span class="core-center__mark">U</span>
+          <span class="core-center__pulse"></span>
+        </div>
+      </div>
+
+      <div class="assistant-line" id="assistant-line" aria-live="polite">
+        <span class="assistant-line__main" id="assistant-line-main">Ready when you are.</span>
+        <span class="assistant-line__sub" id="assistant-line-sub">Tap the core to speak</span>
+      </div>
+
+      <section class="transcript" id="transcript" aria-label="Conversation" aria-live="polite">
+        <ol class="transcript__list" id="message-list"></ol>
+      </section>
     </section>
 
-    <button id="drawer-scrim" class="drawer-scrim" type="button" aria-label="Close features panel" hidden></button>
-    <aside id="feature-drawer" class="feature-drawer" aria-label="ULTRON feature panel" hidden>
-      <div class="drawer-header">
-        <div><p class="drawer-eyebrow">ULTRON SYSTEM</p><h2>Settings & Capabilities</h2><p class="drawer-subtitle">One core. Multi-device intelligence.</p></div>
-        <button id="drawer-close" class="drawer-close" type="button" aria-label="Close features panel">×</button>
+    <footer class="interaction-dock">
+      <div class="mode-switch" role="group" aria-label="Interaction mode">
+        <button class="mode-switch__option is-active" id="voice-mode" type="button" aria-pressed="true">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3m-4 0h8"/></svg>
+          <span>VOICE</span>
+        </button>
+        <button class="mode-switch__option" id="text-mode" type="button" aria-pressed="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4zM8 9h8M8 12h5"/></svg>
+          <span>TEXT</span>
+        </button>
       </div>
-      <nav class="drawer-nav" aria-label="ULTRON features">
-        <button type="button" data-drawer-view="capabilities"><span class="nav-icon">◈</span><span><strong>Capability Center</strong><small>All 7 feature categories & live status</small></span><span class="nav-chevron">›</span></button>
-        <button type="button" data-drawer-view="activity"><span class="nav-icon">⚡</span><span><strong>Live Activity & Planner</strong><small>Real-time execution & tool traces</small></span><span class="nav-chevron">›</span></button>
-        <button type="button" data-drawer-view="autonomy"><span class="nav-icon">⚙</span><span><strong>Autonomy Center</strong><small>Autonomous workflows & kill switch</small></span><span class="nav-chevron">›</span></button>
-        <button type="button" data-drawer-view="permissions"><span class="nav-icon">🛡</span><span><strong>Permission Center</strong><small>Approval gates & audit history</small></span><span class="nav-chevron">›</span></button>
-        <button type="button" data-drawer-view="memory"><span class="nav-icon">🧠</span><span><strong>Memory Center</strong><small>Conversations & recall vault</small></span><span class="nav-chevron">›</span></button>
-        <button type="button" data-drawer-view="spatial"><span class="nav-icon">⬡</span><span><strong>Spatial World Model</strong><small>Diorama 3D room & object modeling</small></span><span class="nav-chevron">›</span></button>
-        <button type="button" data-drawer-view="eyes"><span class="nav-icon">◎</span><span><strong>Eyes / Camera</strong><small>See and analyze your view</small></span><span class="nav-chevron">›</span></button>
-        <button type="button" data-drawer-action="voice"><span class="nav-icon">∿</span><span><strong>Voice mode</strong><small>Listen and respond aloud</small></span><span class="nav-chevron">›</span></button>
-        <button type="button" data-drawer-view="voice-quality"><span class="nav-icon">♫</span><span><strong>Voice quality & pronunciation</strong><small>Hindi + English · male voice</small></span><span class="nav-chevron">›</span></button>
-        <button type="button" data-drawer-action="text"><span class="nav-icon">▤</span><span><strong>Text mode</strong><small>Chat with voice mute control</small></span><span class="nav-chevron">›</span></button>
-        <button type="button" data-drawer-action="research"><span class="nav-icon">⌕</span><span><strong>Research</strong><small>Find and compare sources</small></span><span class="nav-chevron">›</span></button>
-        <button type="button" data-drawer-action="files"><span class="nav-icon">▧</span><span><strong>Analyze a file</strong><small>Read a local document</small></span><span class="nav-chevron">›</span></button>
-        <button type="button" data-drawer-view="tasks"><span class="nav-icon">◷</span><span><strong>Tasks</strong><small>Queue and task status</small></span><span class="nav-chevron">›</span></button>
-        <button type="button" data-drawer-view="apps"><span class="nav-icon">⌘</span><span><strong>Connect apps</strong><small>Integrations and access scopes</small></span><span class="nav-chevron">›</span></button>
-        <button type="button" data-drawer-view="devices"><span class="nav-icon">▣</span><span><strong>PC / mobile devices</strong><small>Pairing and permissions</small></span><span class="nav-chevron">›</span></button>
-        <button type="button" data-drawer-view="mobile-control"><span class="nav-icon">📱</span><span><strong>Android Mobile Control</strong><small>Mobile MCP · Screen Mirror & Touch</small></span><span class="nav-chevron">›</span></button>
-        <button type="button" data-drawer-view="control" class="system-control-nav"><span class="nav-icon">⏻</span><span><strong>Full system control</strong><small>Request a paired control session</small></span><span class="nav-chevron">›</span></button>
-        <button type="button" data-drawer-view="system"><span class="nav-icon">⦿</span><span><strong>System readiness</strong><small>Backend, model, and voice</small></span><span class="nav-chevron">›</span></button>
-      </nav>
-      <div id="drawer-content" class="drawer-content" aria-live="polite">
-        <div class="drawer-welcome"><span class="drawer-welcome-mark">◉</span><p class="drawer-eyebrow">LIVING CORE</p><p>Choose a capability. ULTRON will keep the core on screen and bring up tools only when needed.</p></div>
-      </div>
-      <p class="drawer-footnote">Device access is always visible, permission-based, and limited to paired connectors.</p>
-    </aside>
-    <input id="local-file-input" type="file" accept=".txt,.md,.csv,.json,.html,.htm,.pdf,.docx,text/plain,text/markdown,text/csv,application/json,text/html,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden>
 
-    <section id="task-panel" class="holo-panel" data-side="left" aria-live="polite" aria-atomic="true" hidden>
-      <div class="panel-top"><span class="panel-glyph" aria-hidden="true">⌘</span><span id="task-kind" class="panel-kind">COGNITIVE TASK</span><span id="task-status" class="panel-status">RUNNING</span></div>
-      <h2 id="task-title">Working on your request</h2>
-      <p id="task-description" class="panel-description">ULTRON is processing the request.</p>
-      <div id="task-detail" class="panel-detail" hidden></div>
-      <div class="panel-line"><span id="task-stage-label">PROCESSING</span><span class="pulse-bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span></div>
-    </section>
-
-    <section id="camera-panel" class="camera-panel" aria-label="ULTRON eyes camera" hidden>
-      <div class="camera-topline"><span class="camera-live-dot"></span><span id="camera-status">EYES OFFLINE</span><button id="camera-close" type="button" aria-label="Close camera view">×</button></div>
-      <div class="camera-preview"><video id="eye-video" autoplay muted playsinline></video><div id="camera-placeholder" class="camera-placeholder"><span>◎</span><b>CAMERA OFF</b><small>Enable Eyes to request camera permission</small></div><span id="camera-rec-badge" class="camera-rec-badge" hidden>● LIVE</span></div>
-      <div class="camera-buttons">
-        <button id="camera-toggle" type="button" class="camera-primary">ENABLE EYES</button>
-        <button id="camera-analyze" type="button" disabled>ANALYZE VIEW</button>
-        <button id="gesture-toggle" type="button" disabled aria-pressed="false">ENABLE HAND CONTROL</button>
-      </div>
-      <label class="live-observe-toggle"><input id="camera-live-observe" type="checkbox" disabled><span><strong>Live observation</strong><small>Analyze one frame every 12 seconds while enabled</small></span></label>
-      <p class="camera-privacy-note">Hand tracking runs locally in this browser after you enable it. The pinned MediaPipe runtime and model are fetched from their listed hosts; gesture camera frames are not uploaded. Separate Eyes analysis sends a selected frame only when you request analysis or enable Live observation. Video is not stored by this interface.</p>
-    </section>
-
-    <section class="interaction-dock" aria-label="Choose how to interact with ULTRON">
-      <button id="voice-mode" class="mode-card voice-card" type="button" aria-pressed="false">
-        <span class="mode-icon mic-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3"></rect><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3M8.5 21h7"></path></svg></span>
-        <span class="mode-text"><strong>VOICE MODE</strong><small id="voice-subtitle">Tap once to start listening</small></span>
-        <span class="mode-indicator" aria-hidden="true"></span>
+      <button class="core-trigger" id="core-trigger" type="button" aria-label="Start voice input">
+        <span class="core-trigger__halo" aria-hidden="true"></span>
+        <svg class="core-trigger__mic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3m-4 0h8"/></svg>
+        <span class="core-trigger__stop" aria-hidden="true"></span>
       </button>
-      <span class="mode-divider" aria-hidden="true">OR</span>
-      <button id="text-mode" class="mode-card text-card" type="button" aria-pressed="false">
-        <span class="mode-icon text-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H11l-4.5 4v-4A2.5 2.5 0 0 1 4 13.5z"></path><path d="M8 8h8M8 11.5h5"></path></svg></span>
-        <span class="mode-text"><strong>TEXT MODE</strong><small>Open the text console</small></span>
-        <span class="mode-indicator" aria-hidden="true"></span>
-      </button>
-      <button id="open-text-input" class="glass-icon-button open-input" type="button" aria-label="Open text input while staying in voice mode" title="Open text input">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4zM8 9h8M8 12h5"></path></svg><span class="open-input-label">OPEN TEXT INPUT</span>
-      </button>
-    </section>
 
-    <form id="message-form" class="message-shell" hidden>
-      <div class="composer-topline"><span class="composer-indicator"></span><span id="composer-label">TEXT INPUT</span><span class="composer-hint">ENTER TO SEND · SHIFT+ENTER FOR NEW LINE</span><button id="close-input" class="close-input" type="button" aria-label="Close text input" hidden>×</button></div>
-      <div class="composer-row">
-        <label class="visually-hidden" for="message-input">Message to ULTRON</label>
-        <textarea id="message-input" name="message" rows="1" maxlength="12000" placeholder="Transmit a command to ULTRON…" autocomplete="off" spellcheck="true"></textarea>
-        <button id="mute-toggle" class="mute-control" type="button" aria-pressed="false" hidden><span class="mute-symbol" aria-hidden="true">◖</span><span id="mute-label">MUTE VOICE</span></button>
-        <button id="send-message" class="send-control" type="submit" aria-label="Send message"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 18-8-6.5 18-3.4-7.1zM11.1 13.9 21 3"></path></svg></button>
+      <div class="dock-actions">
+        <button class="icon-button icon-button--dock" id="mute-toggle" type="button" aria-label="Mute voice output" title="Mute voice output">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4h4l5 4V6l-5 4zM17 9l4 6m0-6-4 6"/></svg>
+        </button>
+        <button class="icon-button icon-button--dock" id="attach-open" type="button" aria-label="Attach an image" title="Attach image">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m-4 4 4-4 4 4M5 14v5h14v-5"/></svg>
+        </button>
       </div>
-    </form>
 
-    <div id="voice-caption" class="voice-caption" role="status" aria-live="polite"><span class="caption-dot"></span><span id="voice-caption-text">YOUR CORE IS AWAKE · READY WHEN YOU ARE</span><span id="voice-wave" class="voice-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span></div>
-    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+      <form class="composer" id="composer" hidden>
+        <div class="composer__attachments" id="attachment-list" aria-live="polite"></div>
+        <label class="visually-hidden" for="message-input">Message ULTRON</label>
+        <textarea id="message-input" rows="1" maxlength="12000" placeholder="Message ULTRON..." autocomplete="off"></textarea>
+        <input id="image-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple hidden>
+        <button class="send-button" id="send-button" type="submit" aria-label="Send message">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 4 16 8-16 8 3-8zM7 12h13"/></svg>
+        </button>
+      </form>
+    </footer>
   </main>
 
-  <section id="auth-gate" class="auth-gate" hidden aria-labelledby="auth-title">
-    <div class="auth-card glass-card">
-      <div class="auth-emblem" aria-hidden="true">◉</div>
-      <p class="eyebrow">SECURE ACCESS</p>
-      <h1 id="auth-title">Connect to ULTRON</h1>
-      <p class="auth-intro">Sign in to use the AI core. Your credentials go only to the ULTRON CORE backend.</p>
-      <div class="auth-tabs" role="group" aria-label="Authentication method">
-        <button type="button" data-auth-tab="signin" class="auth-tab active" aria-pressed="true">ACCOUNT</button>
-        <button type="button" data-auth-tab="signup" class="auth-tab" aria-pressed="false">CREATE ACCOUNT</button>
-        <button type="button" data-auth-tab="access" class="auth-tab" aria-pressed="false">ACCESS CODE</button>
+  <div class="drawer-scrim" id="drawer-scrim" hidden></div>
+  <aside class="drawer" id="settings-drawer" aria-label="Settings" aria-hidden="true" inert>
+    <div class="drawer__header">
+      <div><span class="drawer__eyebrow">CONTROL LAYER</span><h2>Settings</h2></div>
+      <button class="icon-button" id="settings-close" type="button" aria-label="Close settings">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+
+    <button class="text-action drawer-new-chat" id="new-conversation" type="button">New conversation <span aria-hidden="true">↗</span></button>
+    <section class="drawer-section">
+      <div class="section-heading"><span>INTELLIGENCE</span><span class="section-heading__line"></span></div>
+      <label class="setting-field"><span>Personality</span>
+        <select id="persona-select"><option value="ultron">ULTRON</option><option value="naya">NAYA</option></select>
+      </label>
+      <label class="setting-field"><span>Model</span>
+        <select id="model-select"><option value="openrouter/free">ULTRON FREE ROUTER</option></select>
+      </label>
+      <label class="setting-field"><span>Voice input language</span>
+        <select id="locale-select">
+          <option value="en-IN">English (India)</option>
+          <option value="hi-IN">Hindi</option>
+          <option value="hinglish">Hinglish</option>
+        </select>
+      </label>
+      <div class="setting-row">
+        <div><span class="setting-row__title">Personal memory</span><span class="setting-row__hint">Use your saved memories in chat</span></div>
+        <button class="switch" id="memory-toggle" type="button" role="switch" aria-checked="true" aria-label="Toggle personal memory"><span></span></button>
       </div>
-      <form id="auth-form" class="auth-form">
-        <label id="auth-email-label" for="auth-email">EMAIL</label>
-        <input id="auth-email" name="email" type="email" autocomplete="username" maxlength="320" placeholder="you@example.com" required>
-        <label id="auth-password-label" for="auth-password">PASSWORD</label>
-        <input id="auth-password" name="password" type="password" autocomplete="current-password" minlength="8" maxlength="256" placeholder="Your password" required>
-        <p id="auth-message" class="auth-message" role="status" aria-live="polite"></p>
-        <button id="auth-submit" class="auth-submit" type="submit">SIGN IN SECURELY <span aria-hidden="true">↗</span></button>
+      <div class="setting-row">
+        <div><span class="setting-row__title">Spoken responses</span><span class="setting-row__hint">Browser speech output</span></div>
+        <button class="switch" id="speech-toggle" type="button" role="switch" aria-checked="true" aria-label="Toggle spoken responses"><span></span></button>
+      </div>
+    </section>
+
+    <section class="drawer-section">
+      <div class="section-heading"><span>SYSTEM STATUS</span><span class="section-heading__line"></span></div>
+      <dl class="status-grid" id="system-status">
+        <div><dt>API</dt><dd data-status="api">Checking</dd></div>
+        <div><dt>AI provider</dt><dd data-status="provider">Checking</dd></div>
+        <div><dt>Database</dt><dd data-status="database">Checking</dd></div>
+        <div><dt>Worker</dt><dd data-status="worker">Checking</dd></div>
+        <div><dt>Autonomy</dt><dd data-status="autonomy">Checking</dd></div>
+      </dl>
+      <p class="drawer-note" id="runtime-note">Live status is read from ULTRON APIs. Values are not simulated.</p>
+    </section>
+
+    <section class="drawer-section">
+      <div class="section-heading"><span>CONVERSATIONS</span><span class="section-heading__line"></span></div>
+      <div class="conversation-list" id="conversation-list"><p class="drawer-note">Load your recent threads...</p></div>
+    </section>
+
+    <section class="drawer-section">
+      <div class="section-heading"><span>MEMORY VAULT</span><span class="section-heading__line"></span></div>
+      <form class="memory-form" id="memory-form">
+        <label class="setting-field"><span>Memory type</span>
+          <select id="memory-kind">
+            <option value="preference">Preference</option>
+            <option value="project_fact">Project fact</option>
+            <option value="profile_note">Profile note</option>
+            <option value="document_reference">Document reference</option>
+          </select>
+        </label>
+        <label class="setting-field"><span>Title</span><input id="memory-title" type="text" maxlength="240" placeholder="A short memory title" required></label>
+        <label class="setting-field"><span>Content</span><textarea id="memory-content" rows="3" maxlength="20000" placeholder="Only save information you want ULTRON to remember" required></textarea></label>
+        <button class="drawer-submit" id="memory-save" type="submit">Save approved memory</button>
+        <p class="drawer-note" id="memory-feedback" role="status">Memory is account-scoped and only injected when the memory setting is enabled.</p>
       </form>
-      <p class="auth-note">Browser-native voice works for free on supported browsers. AI responses depend on the server-side provider being configured.</p>
+      <div class="memory-list" id="memory-items"><p class="drawer-note">Loading saved memory...</p></div>
+    </section>
+
+    <section class="drawer-section drawer-section--last">
+      <div class="section-heading"><span>SESSION</span><span class="section-heading__line"></span></div>
+      <div class="session-line"><span id="account-label">Owner session</span><span class="session-line__dot" aria-hidden="true"></span></div>
+      <button class="text-action" id="signout-button" type="button">Sign out <span aria-hidden="true">↗</span></button>
+    </section>
+    <div class="drawer__footer"><span>ULTRON AI</span><span>PRIVATE SYSTEM</span></div>
+  </aside>
+
+  <aside class="drawer drawer--activity" id="activity-drawer" aria-label="Activity" aria-hidden="true" inert>
+    <div class="drawer__header">
+      <div><span class="drawer__eyebrow">LIVE EXECUTION</span><h2>Activity</h2></div>
+      <button class="icon-button" id="activity-close" type="button" aria-label="Close activity">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+    <section class="drawer-section">
+      <div class="section-heading"><span>QUEUE A TASK</span><span class="section-heading__line"></span></div>
+      <form class="task-form" id="task-form">
+        <label class="setting-field"><span>Goal</span><textarea id="task-goal" rows="3" maxlength="2000" placeholder="What should the AI employee prepare?" required></textarea></label>
+        <div class="task-options">
+          <label class="setting-field"><span>Role</span>
+            <select id="task-role">
+              <option value="chief-of-staff">Chief of staff</option>
+              <option value="web-dev">Web developer</option>
+              <option value="gtm-engineer">GTM engineer</option>
+              <option value="seo-aeo">SEO / AEO</option>
+              <option value="social-media">Social media</option>
+              <option value="ad-manager">Ad manager</option>
+              <option value="sales">Sales</option>
+              <option value="customer-satisfaction">Customer support</option>
+            </select>
+          </label>
+          <label class="setting-field"><span>Mode</span>
+            <select id="task-mode">
+              <option value="plan">Plan</option>
+              <option value="draft">Draft</option>
+              <option value="review">Review</option>
+              <option value="report">Report</option>
+            </select>
+          </label>
+        </div>
+        <button class="drawer-submit" id="task-submit" type="submit">Queue task</button>
+        <p class="drawer-note" id="task-feedback" role="status">Tasks run only when the durable worker and owner permissions are configured.</p>
+      </form>
+    </section>
+
+    <section class="drawer-section">
+      <div class="section-heading"><span>PRIVATE DOCUMENTS</span><span class="section-heading__line"></span></div>
+      <input id="document-input" type="file" accept=".txt,.md,.markdown,.csv,.json,.html,.htm,.pdf,.docx" hidden>
+      <button class="drawer-submit drawer-submit--secondary" id="document-upload" type="button">Upload private document</button>
+      <p class="drawer-note" id="document-feedback" role="status">TXT, Markdown, CSV, JSON, HTML, PDF and DOCX · up to 5 MB</p>
+      <div class="document-list" id="document-list"><p class="drawer-note">Loading private files...</p></div>
+    </section>
+
+    <section class="drawer-section">
+      <div class="section-heading"><span>RECENT TASKS</span><span class="section-heading__line"></span></div>
+      <div class="activity-list" id="task-list"><p class="drawer-note">Loading real task records...</p></div>
+    </section>
+    <section class="drawer-section">
+      <div class="section-heading"><span>CAPABILITIES</span><span class="section-heading__line"></span></div>
+      <div class="activity-list" id="capability-list"><p class="drawer-note">Loading capability registry...</p></div>
+    </section>
+    <div class="drawer__footer"><span>LIVE API DATA</span><span id="activity-updated">—</span></div>
+  </aside>
+
+  <section class="auth-screen" id="auth-screen" hidden role="dialog" aria-modal="true" aria-labelledby="auth-title">
+    <div class="auth-screen__glow" aria-hidden="true"></div>
+    <div class="auth-card">
+      <div class="wordmark wordmark--auth"><span class="wordmark__sigil" aria-hidden="true"><span></span><span></span><span></span></span><span class="wordmark__name">ULTRON</span><span class="wordmark__edition">AI</span></div>
+      <span class="drawer__eyebrow">PRIVATE INTELLIGENCE SYSTEM</span>
+      <h1 id="auth-title">Owner access</h1>
+      <p class="auth-copy" id="auth-copy">Authenticate to connect to your ULTRON system.</p>
+      <form id="auth-form" class="auth-form">
+        <div id="email-field">
+          <label for="auth-email">Email</label>
+          <input id="auth-email" type="email" autocomplete="username" placeholder="you@example.com">
+        </div>
+        <div>
+          <label for="auth-password" id="password-label">Password</label>
+          <input id="auth-password" type="password" autocomplete="current-password" required>
+        </div>
+        <button class="auth-submit" id="auth-submit" type="submit">Sign in <span aria-hidden="true">↗</span></button>
+      </form>
+      <button class="auth-google" id="google-signin" type="button">Continue with Google</button>
+      <button class="auth-recovery" id="recovery-button" type="button">Forgot password?</button>
+      <button class="auth-mode" id="legacy-access-toggle" type="button">Use owner access code</button>
+      <p class="auth-message" id="auth-message" role="status" aria-live="polite"></p>
+      <p class="auth-footnote" id="auth-footnote">Single-owner access. Public registration is disabled.</p>
     </div>
   </section>
 
-  <footer class="bottomline"><span>ULTRON · AUTONOMOUS INTERFACE</span><span class="footer-separator">/</span><span id="field-mode">GPU PARTICLE FIELD · INITIALIZING</span><span class="bottomline-right">VOICE · TEXT · HOLOGRAPHIC TASKS</span></footer>
-  </body>
+  <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></div>
+  <script type="module" src="/app.js"></script>
+</body>
 </html>

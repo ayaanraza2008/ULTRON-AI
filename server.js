@@ -26,6 +26,8 @@ import { deviceWebSocketGateway } from "./integrations/device-websocket-gateway.
 import { deviceNetworkingManager } from "./integrations/device-networking.js";
 import { proactiveDaemon } from "./system/proactive-daemon.js";
 
+const LEGACY_SERVICE_WORKER_RETIREMENT_SCRIPT = "self.addEventListener(\"install\", event => event.waitUntil(self.skipWaiting()));\nself.addEventListener(\"activate\", event => {\n  event.waitUntil((async () => {\n    const openClients = await self.clients.matchAll({ type: \"window\", includeUncontrolled: true });\n    await self.registration.unregister();\n    const cacheKeys = await caches.keys();\n    await Promise.all(cacheKeys.filter(key => key.startsWith(\"ultron-core-shell-\")).map(key => caches.delete(key)));\n    await Promise.all(openClients.map(client => client.navigate(client.url).catch(() => null)));\n  })());\n});\n";
+
 const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
 const SESSION_COOKIE = "ultron_session";
 
@@ -470,10 +472,6 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
   });
   app.use("/api", apiRateLimiter);
 
-  const publicDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "public");
-  app.use(express.static(publicDir));
-  const voiceDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "voice");
-  app.use("/voice", express.static(voiceDir));
 
 
   // Authenticated OpenAI-compatible proxy for the Browser Use bridge.
@@ -1606,17 +1604,45 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
     const allowedLocales = ["en-IN", "hi-IN", "hinglish"];
     const locale = req.body?.voice_input_locale;
     if (!allowedLocales.includes(locale)) return res.status(400).json({ error: { code: "INVALID_PREFERENCE", message: "Choose English, Hindi, or Hinglish for voice input." } });
+    const voiceOutputName = req.body?.voice_output_name;
+    const voiceOutputLang = req.body?.voice_output_lang;
+    if (voiceOutputName !== undefined && (typeof voiceOutputName !== "string" || voiceOutputName.length > 120 || [...voiceOutputName].some(character => character.charCodeAt(0) < 32))) {
+      return res.status(400).json({ error: { code: "INVALID_PREFERENCE", message: "Voice output name is invalid." } });
+    }
+    if (voiceOutputLang !== undefined && (typeof voiceOutputLang !== "string" || voiceOutputLang.length > 40 || (voiceOutputLang !== "" && !/^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(voiceOutputLang)))) {
+      return res.status(400).json({ error: { code: "INVALID_PREFERENCE", message: "Voice output language is invalid." } });
+    }
     const language = locale === "hi-IN" ? "hi" : locale === "hinglish" ? "hinglish" : "en";
     const voiceEnabled = typeof req.body?.voice_enabled === "boolean" ? req.body.voice_enabled : true;
     const memoryEnabled = typeof req.body?.memory_enabled === "boolean" ? req.body.memory_enabled : true;
     try {
-      const rows = await supabaseRest(req, "user_preferences", "POST", "?on_conflict=user_id&select=language,voice_enabled,voice_input_locale,memory_enabled,history_retention_days,preferences", {
+      const payload = {
         user_id: req.supabaseUser.id,
         language,
         voice_enabled: voiceEnabled,
         voice_input_locale: locale,
         memory_enabled: memoryEnabled
-      }, "resolution=merge-duplicates,return=representation");
+      };
+      if (voiceOutputName !== undefined || voiceOutputLang !== undefined) {
+        const currentRows = await supabaseRest(req, "user_preferences", "GET",
+          "?select=preferences&user_id=eq." + encodeURIComponent(req.supabaseUser.id) + "&limit=1");
+        const existing = Array.isArray(currentRows) && currentRows[0]?.preferences &&
+          typeof currentRows[0].preferences === "object" && !Array.isArray(currentRows[0].preferences)
+          ? currentRows[0].preferences : {};
+        const preferences = { ...existing };
+        if (voiceOutputName !== undefined) {
+          const normalizedName = voiceOutputName.trim();
+          if (normalizedName) preferences.voice_output_name = normalizedName;
+          else delete preferences.voice_output_name;
+        }
+        if (voiceOutputLang !== undefined) {
+          const normalizedLang = voiceOutputLang.trim();
+          if (normalizedLang) preferences.voice_output_lang = normalizedLang;
+          else delete preferences.voice_output_lang;
+        }
+        payload.preferences = preferences;
+      }
+      const rows = await supabaseRest(req, "user_preferences", "POST", "?on_conflict=user_id&select=language,voice_enabled,voice_input_locale,memory_enabled,history_retention_days,preferences", payload, "resolution=merge-duplicates,return=representation");
       if (!Array.isArray(rows) || !rows[0]) return res.status(502).json({ error: { code: "PREFERENCES_WRITE_FAILED", message: "Supabase did not return the saved preferences." } });
       res.json({ preferences: rows[0] });
     } catch (error) { res.status(error.status || 502).json({ error: { code: "PREFERENCES_WRITE_FAILED", message: error.message } }); }
@@ -2205,6 +2231,31 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
   app.get("/api/world-intelligence/status", (_req, res) => {
     res.setHeader("Cache-Control", "no-store");
     res.json({ workspace: "world-intelligence", mounted: Boolean(worldIntelligenceUrl), serviceUrl: worldIntelligenceUrl, upstream: "bilawalsidhu/gods-eye-view", pinnedCommit: "7be5937fc3e3b10cdfa8d3f833536167268768ad", aiToolBridge: "allowlisted_actions_v1" });
+  });
+  // Retire older installed ULTRON PWAs: unregister the worker and clear only ULTRON-owned shell caches.
+  app.get("/service-worker.js", (_req, res) => {
+    res.setHeader("Content-Type", "application/javascript; charset=utf-8");
+    res.setHeader("Cache-Control", "no-store, max-age=0");
+    res.setHeader("Service-Worker-Allowed", "/");
+    return res.status(200).send(LEGACY_SERVICE_WORKER_RETIREMENT_SCRIPT);
+  });
+  // Serve the optional command-center shell after API routes so assets cannot shadow APIs.
+  const publicDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "public");
+  app.use(express.static(publicDir, {
+    dotfiles: "deny",
+    etag: true,
+    fallthrough: true,
+    index: false,
+    maxAge: env.NODE_ENV === "production" ? "5m" : 0,
+    setHeaders(response, filePath) {
+      if (path.extname(filePath).toLowerCase() === ".html") response.setHeader("Cache-Control", "no-store");
+    }
+  }));
+  app.get("/", (_req, res, next) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.sendFile(path.join(publicDir, "index.html"), error => {
+      if (error) next(error);
+    });
   });
   app.use((err, _req, res, _next) => {
     if (res.headersSent) return res.end();
