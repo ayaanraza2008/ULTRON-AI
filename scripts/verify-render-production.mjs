@@ -69,6 +69,12 @@ async function runAudit() {
   });
   console.log("Backend Remote Task:", bDevice.status, bDevice.bodyPreview);
 
+  const bNayaModes = await checkRoute("Backend NAYA Personality Modes", `${BACKEND_URL}/api/naya/personality/modes`);
+  console.log("Backend NAYA Modes:", bNayaModes.status, bNayaModes.bodyPreview);
+
+  const bNayaStatus = await checkRoute("Backend NAYA Status", `${BACKEND_URL}/api/naya/status`);
+  console.log("Backend NAYA Status:", bNayaStatus.status, bNayaStatus.bodyPreview);
+
   console.log("\n--- [B] Testing Frontend Interface Proxy (ultron-core-interface) ---");
   const fHealth = await checkRoute("Frontend /healthz", `${FRONTEND_URL}/healthz`);
   console.log("Frontend /healthz:", fHealth.status, fHealth.bodyPreview);
