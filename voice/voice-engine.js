@@ -16,7 +16,7 @@ import {
   AUDIO_CLASSES
 } from "./audio-processing-pipeline.js";
 
-export const SUPPORTED_WAKE_WORDS = ["ultron", "jarvis"];
+export const SUPPORTED_WAKE_WORDS = ["ultron", "jarvis", "naya"];
 
 export const VOICE_PROFILES = {
   ultron_onyx: {
@@ -59,6 +59,16 @@ export const VOICE_PROFILES = {
     rate: 0.95,
     lang: "hi-IN",
     style: "friendly_natural"
+  },
+  naya_empathic: {
+    id: "naya_empathic",
+    name: "NAYA Empathic (Perceptive & Warm)",
+    engine: "kokoro",
+    voiceId: "af_bella",
+    pitch: 1.0,
+    rate: 1.0,
+    lang: "en-IN",
+    style: "warm_perceptive_empathic"
   }
 };
 

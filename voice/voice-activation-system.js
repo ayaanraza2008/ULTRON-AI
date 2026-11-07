@@ -31,6 +31,11 @@ export const WAKE_PHRASES = Object.freeze([
   'ultron wake up',
   'wake up ultron',
   'ok ultron',
+  'naya',
+  'hey naya',
+  'hello naya',
+  'naya listen',
+  'ok naya',
 ]);
 
 export const VOICE_CONTROL_COMMANDS = Object.freeze({
@@ -202,11 +207,13 @@ export class UltronVoiceActivationSystem {
         this.onAudioInterruption();
       }
 
-      // Extract spoken query after the wake word if user said "Ultron, what time is it?"
+      // Extract spoken query after the wake word if user said "Ultron, what time is it?" or "Naya, summarize..."
       const strippedQuery = this.stripWakePhrase(rawTranscript);
+      const isNaya = /\bnaya\b/i.test(norm);
+      const detectedPersona = isNaya ? "naya" : "ultron";
 
-      this.triggerActivation('VOICE_WAKE_WORD', { transcript: rawTranscript, strippedQuery });
-      return { triggered: true, query: strippedQuery, hasEmbeddedCommand: Boolean(strippedQuery && strippedQuery.length > 2) };
+      this.triggerActivation('VOICE_WAKE_WORD', { transcript: rawTranscript, strippedQuery, persona: detectedPersona });
+      return { triggered: true, query: strippedQuery, persona: detectedPersona, hasEmbeddedCommand: Boolean(strippedQuery && strippedQuery.length > 2) };
     }
 
     return { triggered: false };

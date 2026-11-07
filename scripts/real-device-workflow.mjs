@@ -71,8 +71,12 @@ async function run() {
   console.log("\n[6] Real device state verification:");
   const devices = await adbBridge.listDevices();
   const targetId = devices.devices[0]?.id;
-  const fgApp = await adbBridge.getForegroundApp(targetId);
-  console.log(`Foreground app on real device (${targetId}):`, fgApp);
+  if (!targetId) {
+    console.log("No physical ADB device connected. Skipping live on-device foreground app inspection.");
+  } else {
+    const fgApp = await adbBridge.getForegroundApp(targetId);
+    console.log(`Foreground app on real device (${targetId}):`, fgApp);
+  }
 
   // Check if screenshot was captured
   const screenStep = executionOutcome.stepResults?.find(s => s.toolId === "mobile_screen_inspection");

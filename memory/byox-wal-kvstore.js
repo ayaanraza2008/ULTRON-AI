@@ -230,11 +230,21 @@ export class ByoxWalKvStore {
       dataObj[k] = v;
     }
 
-    const tmpPath = `${this.snapshotPath}.tmp.${Date.now()}`;
+    const tmpPath = `${this.snapshotPath}.tmp.${process.pid}.${crypto.randomUUID()}`;
     fs.writeFileSync(tmpPath, JSON.stringify(dataObj, null, 2), 'utf8');
 
     // Atomic swap
-    fs.renameSync(tmpPath, this.snapshotPath);
+    try {
+      fs.renameSync(tmpPath, this.snapshotPath);
+    } catch (renameErr) {
+      if (process.platform === 'win32' && (renameErr.code === 'EPERM' || renameErr.code === 'EBUSY' || renameErr.code === 'EEXIST')) {
+        fs.copyFileSync(tmpPath, this.snapshotPath);
+        try { fs.unlinkSync(tmpPath); } catch {}
+      } else {
+        try { fs.unlinkSync(tmpPath); } catch {}
+        throw renameErr;
+      }
+    }
 
     // Truncate WAL cleanly
     fs.writeFileSync(this.walPath, '', 'utf8');

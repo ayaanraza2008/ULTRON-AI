@@ -170,7 +170,16 @@ export class FilePersistenceAdapter extends BaseMultiDevicePersistenceAdapter {
       tmpPath = `${this.storagePath}.${process.pid}.${crypto.randomUUID()}.tmp`;
       const content = encryptPayloadAtRest(serialized, this.encryptionKey);
       fs.writeFileSync(tmpPath, content, { encoding: "utf8", mode: 0o600 });
-      fs.renameSync(tmpPath, this.storagePath);
+      try {
+        fs.renameSync(tmpPath, this.storagePath);
+      } catch (renameErr) {
+        if (process.platform === "win32" && (renameErr.code === "EPERM" || renameErr.code === "EBUSY")) {
+          fs.copyFileSync(tmpPath, this.storagePath);
+          try { fs.unlinkSync(tmpPath); } catch {}
+        } else {
+          throw renameErr;
+        }
+      }
       return true;
     } catch (err) {
       if (tmpPath) {

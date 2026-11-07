@@ -255,9 +255,19 @@ export class DeviceHub {
         devices
       }, null, 2);
 
-      const tmpPath = `${this.durableStoragePath}.${Date.now()}.tmp`;
+      const tmpPath = `${this.durableStoragePath}.${process.pid}.${crypto.randomUUID()}.tmp`;
       fs.writeFileSync(tmpPath, payload, { encoding: "utf8", mode: 0o600 });
-      fs.renameSync(tmpPath, this.durableStoragePath);
+      try {
+        fs.renameSync(tmpPath, this.durableStoragePath);
+      } catch (renameErr) {
+        if (process.platform === "win32" && (renameErr.code === "EPERM" || renameErr.code === "EBUSY" || renameErr.code === "EEXIST")) {
+          fs.copyFileSync(tmpPath, this.durableStoragePath);
+          try { fs.unlinkSync(tmpPath); } catch {}
+        } else {
+          try { fs.unlinkSync(tmpPath); } catch {}
+          throw renameErr;
+        }
+      }
       return true;
     } catch {
       return false;

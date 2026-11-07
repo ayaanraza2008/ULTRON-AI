@@ -196,8 +196,9 @@ export class MobileMcpClient extends EventEmitter {
 
     return new Promise((resolve, reject) => {
       const isWindows = process.platform === "win32";
-      this.process = spawn(cmd, args, {
-        shell: isWindows,
+      const executable = isWindows && cmd === "npx" ? "npx.cmd" : cmd;
+      this.process = spawn(executable, args, {
+        shell: false,
         env,
         stdio: ["pipe", "pipe", "pipe"],
         windowsHide: true
@@ -260,8 +261,9 @@ export class MobileMcpClient extends EventEmitter {
     }
 
     return new Promise((resolve, reject) => {
-      this.process = spawn(cmd, args, {
-        shell: isWindows,
+      const executable = isWindows && cmd === "npx" ? "npx.cmd" : cmd;
+      this.process = spawn(executable, args, {
+        shell: false,
         env,
         stdio: ["pipe", "pipe", "pipe"],
         windowsHide: true

@@ -15,6 +15,10 @@ test("Voice Engine: detects wake words (Ultron and Jarvis)", () => {
   assert.equal(jarvisWake.triggered, true);
   assert.equal(jarvisWake.wakeWord, "jarvis");
 
+  const nayaWake = engine.processWakeWord("Naya, please give me a summary");
+  assert.equal(nayaWake.triggered, true);
+  assert.equal(nayaWake.wakeWord, "naya");
+
   const noWake = engine.processWakeWord("What is the capital of France?");
   assert.equal(noWake.triggered, false);
 });

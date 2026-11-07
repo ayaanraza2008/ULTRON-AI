@@ -1,4 +1,5 @@
 import { ultronHEI } from "./intelligence/hei/index.js";
+import { nayaOrchestrator, nayaPersonalitySystem, NAYA_PERSONALITY_MODES } from "./intelligence/naya/index.js";
 import express from "express";
 import crypto from "node:crypto";
 import path from "node:path";
@@ -469,7 +470,11 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
   });
   app.use("/api", apiRateLimiter);
 
-  // API-only deployment: no public/ or voice source directories are exposed over HTTP.
+  const publicDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "public");
+  app.use(express.static(publicDir));
+  const voiceDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "voice");
+  app.use("/voice", express.static(voiceDir));
+
 
   // Authenticated OpenAI-compatible proxy for the Browser Use bridge.
   // Provider credentials stay server-side and only configured model targets are eligible.
@@ -1293,6 +1298,50 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
     } catch (error) { res.status(error.status || 502).json({ error: { code: "MEMORY_UPDATE_FAILED", message: error.message } }); }
   });
 
+  
+  // =========================================================================
+  // NAYA — AUTONOMOUS INTELLIGENCE & 20-MODE PERSONALITY ENDPOINTS
+  // =========================================================================
+  app.get("/api/naya/personality/modes", (_req, res) => {
+    res.json({
+      success: true,
+      modes: nayaPersonalitySystem.listModes(),
+      activeMode: nayaPersonalitySystem.getMode()
+    });
+  });
+
+  app.post("/api/naya/personality/select", requireSession, (req, res) => {
+    const mode = req.body?.mode;
+    const result = nayaPersonalitySystem.setMode(mode);
+    if (!result.success) {
+      return res.status(400).json({ error: { code: "INVALID_MODE", message: `Mode '${mode}' is not valid.` } });
+    }
+    res.json(result);
+  });
+
+  app.get("/api/naya/status", requireSession, (req, res) => {
+    const userId = req.supabaseUser?.id || "default_owner";
+    res.json(nayaOrchestrator.getStatus(userId));
+  });
+
+  app.post("/api/naya/execute", requireSession, async (req, res) => {
+    const goal = typeof req.body?.goal === "string" ? req.body.goal.trim() : "";
+    if (!goal) {
+      return res.status(400).json({ error: { code: "INVALID_GOAL", message: "Goal cannot be empty." } });
+    }
+    const userId = req.supabaseUser?.id || "default_owner";
+    try {
+      const outcome = await nayaOrchestrator.agent.executeGoal(goal, {
+        userId,
+        autonomyLevel: req.body?.autonomyLevel,
+        approvalTokens: req.body?.approvalTokens
+      });
+      res.json(outcome);
+    } catch (err) {
+      res.status(500).json({ error: { code: "EXECUTION_FAILED", message: err.message } });
+    }
+  });
+
   app.delete("/api/memory/:id", requireSupabaseUser, async (req, res) => {
     if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) return res.status(400).json({ error: { code: "INVALID_MEMORY_ID", message: "Memory item ID is invalid." } });
     try {
@@ -1650,13 +1699,24 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
       cleanMessages.push({ role: item.role, content: item.content });
     }
     const persona = req.body?.persona === "naya" ? "naya" : "ultron";
-    cleanMessages.unshift({
-      role: "system",
-      content: (persona === "naya"
-        ? "You are NAYA, ULTRON's second distinct AI personality. You are warm, perceptive, curious, calm, emotionally intelligent, and concise; do not claim to be ULTRON. Maintain your own identity and conversational style. "
-        : "You are ULTRON, the primary AI personality: confident, strategic, direct, capable, and composed. Do not claim to be NAYA. Maintain your own identity and conversational style. ")
-        + "Automatically detect the language and style of the latest user message and reply naturally in the same language/style: Hindi in Devanagari when the user writes Hindi, English when they write English, and natural Hinglish (Hindi-English mix in Roman script) when they write Hinglish. If they mix languages, mirror their mix. Do not force English. Use natural Indian Hindi phrasing, correct grammar, spelling, and punctuation. Keep technical terms in English when that is more natural. Never claim a language is detected with certainty if ambiguous."
-    });
+    if (persona === "naya") {
+      const latestUserMsg = [...cleanMessages].reverse().find(m => m.role === "user");
+      const nayaDirective = nayaPersonalitySystem.generateSystemPrompt({
+        mode: req.body?.personalityMode,
+        userText: latestUserMsg?.content,
+        customInstructions: req.body?.customInstructions
+      });
+      cleanMessages.unshift({
+        role: "system",
+        content: nayaDirective
+      });
+    } else {
+      cleanMessages.unshift({
+        role: "system",
+        content: "You are ULTRON, the primary AI personality: confident, strategic, direct, capable, and composed. Do not claim to be NAYA. Maintain your own identity and conversational style. "
+          + "Automatically detect the language and style of the latest user message and reply naturally in the same language/style: Hindi in Devanagari when the user writes Hindi, English when they write English, and natural Hinglish (Hindi-English mix in Roman script) when they write Hinglish. If they mix languages, mirror their mix. Do not force English. Use natural Indian Hindi phrasing, correct grammar, spelling, and punctuation. Keep technical terms in English when that is more natural. Never claim a language is detected with certainty if ambiguous."
+      });
+    }
 
     const latestUserMsg = [...cleanMessages].reverse().find(m => m.role === "user");
     let activeHeiAssessment = null;
@@ -2130,6 +2190,10 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
       return url.protocol === "https:" ? url.toString().replace(/\/$/, "") : null;
     } catch { return null; }
   })();
+  app.get(["/world-intelligence", "/world-intelligence/"], (_req, res) => {
+    if (!worldIntelligenceUrl) return res.status(503).send("World Intelligence service URL is not configured.");
+    res.redirect(302, worldIntelligenceUrl + "/?embed=1");
+  });
     app.get("/api/discovery/local", (_req, res) => {
     res.setHeader("Cache-Control", "no-store");
     res.json(deviceNetworkingManager.getLocalDiscoveryBeacon());
@@ -2141,15 +2205,6 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
   app.get("/api/world-intelligence/status", (_req, res) => {
     res.setHeader("Cache-Control", "no-store");
     res.json({ workspace: "world-intelligence", mounted: Boolean(worldIntelligenceUrl), serviceUrl: worldIntelligenceUrl, upstream: "bilawalsidhu/gods-eye-view", pinnedCommit: "7be5937fc3e3b10cdfa8d3f833536167268768ad", aiToolBridge: "allowlisted_actions_v1" });
-  });
-  app.get("/", (_req, res) => {
-    res.setHeader("Cache-Control", "no-store");
-    return res.status(404).json({
-      error: {
-        code: "FRONTEND_REMOVED",
-        message: "ULTRON is an API-only service. The web frontend and static assets have been removed."
-      }
-    });
   });
   app.use((err, _req, res, _next) => {
     if (res.headersSent) return res.end();

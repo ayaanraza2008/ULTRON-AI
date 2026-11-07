@@ -17,12 +17,22 @@ test("VoiceFullLoop: wake-word triggers and extracts remaining user instruction"
   assert.equal(resUltron.wakeWord, "ultron");
   assert.ok(resUltron.remainingPrompt.includes("summarize recent server alerts"));
 
+  const resNaya = engine.processWakeWord("Hey Naya how are you doing today");
+  assert.equal(resNaya.triggered, true);
+  assert.equal(resNaya.wakeWord, "naya");
+  assert.ok(resNaya.remainingPrompt.includes("how are you doing today"));
+
   const resNone = engine.processWakeWord("Hello assistant how are you");
   assert.equal(resNone.triggered, false);
 });
 
 test("VoiceFullLoop: trilingual voice prompt generation and persona switching", () => {
   const engine = new JarvisVoiceEngine();
+
+  // Switch to NAYA empathic persona
+  const profileNaya = engine.setProfile("naya_empathic");
+  assert.equal(profileNaya.success, true);
+  assert.equal(engine.getProfile().voiceId, "af_bella");
 
   // Switch to British refined JARVIS
   const profileRes = engine.setProfile("jarvis_prime");
