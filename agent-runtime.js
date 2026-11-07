@@ -17,7 +17,7 @@ import { checkHermesAgentService, getHermesAgentReadiness, resolveHermesAgentPro
 import { runGeoSleuthInvestigation } from "./integrations/geo-sleuth-agent.js";
 import { findOpenVikingContext, getOpenVikingReadiness, readOpenVikingContext } from "./integrations/openviking.js";
 import { checkDesktopCompanion, getDesktopCompanionReadiness } from "./integrations/desktop-companion.js";
-import { cognitiveLayerLabel, extractCorrectionLesson, rankCognitiveMemories } from "./cognitive-memory.js";
+import { cognitiveLayerLabel, extractCorrectionLesson, recallCognitiveMemoryGraph } from "./cognitive-memory.js";
 import { classifyTaskRoute } from "./task-router.js";
 import { getGoogleWorkspaceReadiness, runGoogleWorkspaceReadAction } from "./integrations/google-workspace.js";
 import { getChromeDevToolsReadiness, runChromeDevToolsAction } from "./integrations/chrome-devtools.js";
@@ -1871,8 +1871,8 @@ export function createAgentRouter({ env = process.env, fetchImpl = safePinnedFet
         if (userMemoryEnabled) {
           const now = encodeURIComponent(new Date().toISOString());
           const memoryRows = await supabaseRest(req, "memory_items", "GET",
-            "?select=kind,title,content,source,metadata,created_at,updated_at,expires_at&user_id=eq." + encodeURIComponent(req.supabaseUser.id) + "&is_active=eq.true&or=(expires_at.is.null,expires_at.gt." + now + ")&order=updated_at.desc&limit=32");
-          const memories = rankCognitiveMemories(Array.isArray(memoryRows) ? memoryRows : [], userText, { limit: 8 });
+            "?select=id,user_id,kind,title,content,source,metadata,created_at,updated_at,expires_at&user_id=eq." + encodeURIComponent(req.supabaseUser.id) + "&is_active=eq.true&or=(expires_at.is.null,expires_at.gt." + now + ")&order=updated_at.desc&limit=32");
+          const memories = recallCognitiveMemoryGraph(Array.isArray(memoryRows) ? memoryRows : [], userText, { ownerId: req.supabaseUser.id, limit: 8, maxDepth: 2 });
           cognitiveMemoryCount = memories.length;
           if (memories.length) messages.unshift({
             role: "system",
