@@ -29,6 +29,7 @@ const state = {
   audioPlayback: null,
   agoraClient: null,
   agoraMicTrack: null,
+  agoraRemoteAudioTrack: null,
   agoraAgentId: null,
   muted: false,
   speaking: false,
@@ -650,7 +651,16 @@ async function startFreyaCapture() {
       if (transcriptText) await sendMessage(transcriptText, state.attachments);
       else setStatus("standby", "No speech detected.", "Tap the core to try again");
     } catch (error) {
-      toast(apiErrorMessage(error, "Freya transcription failed. Try browser voice input."), "error");
+      toast(apiErrorMessage(error, "Freya transcription failed. Trying the next voice provider."), "error");
+      try {
+        const agoraReadiness = await api("/api/integrations/agora/status");
+        if (agoraReadiness?.configured && window.AgoraRTC) {
+          await startAgoraVoiceSession();
+          return;
+        }
+      } catch {
+        // Preserve browser speech as the final no-key/offline fallback.
+      }
       const fallback = createRecognition();
       if (fallback) {
         state.recognition = fallback;
@@ -680,6 +690,8 @@ async function startAgoraVoiceSession() {
       try {
         await client.subscribe(user, mediaType);
         if (mediaType === "audio" && user.audioTrack) {
+          user.audioTrack.setVolume(state.muted ? 0 : 100);
+          state.agoraRemoteAudioTrack = user.audioTrack;
           user.audioTrack.play();
           state.speaking = true;
           setStatus("speaking", "ULTRON voice connected.", "Agora conversational voice · Tap the core to stop");
@@ -691,6 +703,7 @@ async function startAgoraVoiceSession() {
     client.on("user-unpublished", (_user, mediaType) => {
       if (mediaType === "audio" && state.agoraClient === client) {
         state.speaking = false;
+        state.agoraRemoteAudioTrack = null;
         setStatus("listening", "Listening.", "Agora voice input is active");
       }
     });
@@ -718,6 +731,7 @@ async function stopAgoraVoiceSession() {
   const agentId = state.agoraAgentId;
   state.agoraClient = null;
   state.agoraMicTrack = null;
+  state.agoraRemoteAudioTrack = null;
   state.agoraAgentId = null;
   state.speaking = false;
   try { micTrack?.stop(); micTrack?.close(); } catch {}
@@ -1386,6 +1400,11 @@ $("#mute-toggle").addEventListener("click", () => {
   $("#mute-toggle").setAttribute("aria-label", state.muted ? "Unmute voice output" : "Mute voice output");
   $("#mute-toggle").title = state.muted ? "Unmute voice output" : "Mute voice output";
   if (state.muted) stopSpeech();
+  try { state.agoraRemoteAudioTrack?.setVolume(state.muted ? 0 : 100); } catch {}
+});
+window.addEventListener("pagehide", () => {
+  try { state.agoraMicTrack?.stop(); state.agoraMicTrack?.close(); } catch {}
+  try { void state.agoraClient?.leave(); } catch {}
 });
 $("#attach-open").addEventListener("click", () => $("#image-input").click());
 $("#image-input").addEventListener("change", event => void addAttachments(event.target.files));
