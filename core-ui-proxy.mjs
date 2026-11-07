@@ -30,7 +30,7 @@ function securityHeaders(res) {
   res.setHeader("Permissions-Policy", "camera=(self), geolocation=(), microphone=(self)");
   // Keep all active UI execution and API traffic same-origin. External vision
   // assets are not enabled until a real, version-pinned hand-tracking module ships.
-  res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; frame-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; worker-src 'self' blob:; manifest-src 'self'");
+  res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self' https://download.agora.io; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https: wss:; frame-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; worker-src 'self' blob:; manifest-src 'self'");
 }
 
 async function readRequestBody(req) {
