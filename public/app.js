@@ -24,6 +24,13 @@ const state = {
   persistenceAvailable: false,
   attachments: [],
   recognition: null,
+  mediaRecorder: null,
+  mediaStream: null,
+  audioPlayback: null,
+  agoraClient: null,
+  agoraMicTrack: null,
+  agoraRemoteAudioTrack: null,
+  agoraAgentId: null,
   muted: false,
   speaking: false,
   busy: false,
@@ -477,9 +484,52 @@ function refreshSpeechVoices() {
   select.disabled = !state.preferenceAvailable || state.speechVoices.length === 0;
 }
 
-function speak(text) {
+async function speak(text) {
+  const spokenText = String(text || "").slice(0, 5000);
+  if (!spokenText) return;
+  stopSpeech();
+  try {
+    const result = await api("/api/integrations/freya/synthesize", {
+      method: "POST",
+      body: { text: spokenText }
+    });
+    if (result?.audioBase64) {
+      const binary = atob(result.audioBase64);
+      const bytes = new Uint8Array(binary.length);
+      for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+      const mime = String(result.format || "audio/mpeg").split(";")[0];
+      const blob = new Blob([bytes], { type: mime });
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      state.audioPlayback = audio;
+      audio.onplay = () => {
+        state.speaking = true;
+        setStatus("speaking", "ULTRON is speaking.", "Freya voice · Tap the core to stop");
+      };
+      audio.onended = () => {
+        state.speaking = false;
+        state.audioPlayback = null;
+        URL.revokeObjectURL(url);
+        setStatus("standby", "Response complete.", "Ready when you are");
+      };
+      audio.onerror = () => {
+        state.speaking = false;
+        state.audioPlayback = null;
+        URL.revokeObjectURL(url);
+        speakWithBrowserFallback(spokenText);
+      };
+      await audio.play();
+      return;
+    }
+  } catch {
+    // Freya is optional until its server-side API key is configured.
+  }
+  speakWithBrowserFallback(spokenText);
+}
+
+function speakWithBrowserFallback(text) {
   if (!("speechSynthesis" in window) || !("SpeechSynthesisUtterance" in window)) {
-    toast("Spoken output is not supported by this browser.");
+    toast("No voice output provider is available. Configure Freya or enable browser speech.");
     return;
   }
   window.speechSynthesis.cancel();
@@ -500,7 +550,7 @@ function speak(text) {
   if (matching) utterance.voice = matching;
   utterance.onstart = () => {
     state.speaking = true;
-    setStatus("speaking", "ULTRON is speaking.", "Tap the core to stop playback");
+    setStatus("speaking", "ULTRON is speaking.", "Browser voice fallback · Tap the core to stop");
   };
   utterance.onend = () => {
     state.speaking = false;
@@ -515,6 +565,10 @@ function speak(text) {
 
 function stopSpeech() {
   if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+  if (state.audioPlayback) {
+    try { state.audioPlayback.pause(); state.audioPlayback.currentTime = 0; } catch {}
+    state.audioPlayback = null;
+  }
   state.speaking = false;
 }
 
@@ -553,14 +607,161 @@ function createRecognition() {
   return recognition;
 }
 
-function toggleVoiceInput() {
+async function startFreyaCapture() {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+  const mimeType = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find(type => MediaRecorder.isTypeSupported(type)) || "";
+  const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+  const chunks = [];
+  state.mediaStream = stream;
+  state.mediaRecorder = recorder;
+  recorder.ondataavailable = event => { if (event.data?.size) chunks.push(event.data); };
+  recorder.onerror = () => {
+    state.mediaRecorder = null;
+    stream.getTracks().forEach(track => track.stop());
+    state.mediaStream = null;
+    setStatus("error", "Voice capture failed.", "Check microphone permissions and try again");
+  };
+  recorder.onstop = async () => {
+    state.mediaRecorder = null;
+    stream.getTracks().forEach(track => track.stop());
+    state.mediaStream = null;
+    const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
+    if (!blob.size) {
+      setStatus("standby", "No speech detected.", "Tap the core to try again");
+      return;
+    }
+    if (blob.size > 8 * 1024 * 1024) {
+      toast("Recording is too long. Please speak in shorter segments.", "error");
+      setStatus("standby", "Recording too large.", "Try a shorter voice command");
+      return;
+    }
+    setStatus("thinking", "Transcribing voice.", "Freya speech recognition");
+    try {
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error("Audio could not be read."));
+        reader.readAsDataURL(blob);
+      });
+      const result = await api("/api/integrations/freya/transcribe", {
+        method: "POST",
+        body: { audioBase64: dataUrl.split(",")[1] || "", mimeType: blob.type || "audio/webm" }
+      });
+      const transcriptText = String(result.text || "").trim();
+      if (transcriptText) await sendMessage(transcriptText, state.attachments);
+      else setStatus("standby", "No speech detected.", "Tap the core to try again");
+    } catch (error) {
+      toast(apiErrorMessage(error, "Freya transcription failed. Trying the next voice provider."), "error");
+      try {
+        const agoraReadiness = await api("/api/integrations/agora/status");
+        if (agoraReadiness?.configured && window.AgoraRTC) {
+          await startAgoraVoiceSession();
+          return;
+        }
+      } catch {
+        // Preserve browser speech as the final no-key/offline fallback.
+      }
+      const fallback = createRecognition();
+      if (fallback) {
+        state.recognition = fallback;
+        try { fallback.start(); } catch { state.recognition = null; }
+      } else {
+        setStatus("error", "Voice transcription unavailable.", "Check Freya setup or switch to Text mode");
+      }
+    }
+  };
+  recorder.start(250);
+  setStatus("listening", "Listening.", "Freya voice input · Tap the core when finished");
+}
+
+async function startAgoraVoiceSession() {
+  const sdk = window.AgoraRTC;
+  if (!sdk?.createClient) throw new Error("Agora Web SDK could not be loaded.");
+  let payload = null;
+  let client = null;
+  let micTrack = null;
+  try {
+    payload = await api("/api/integrations/agora/start", { method: "POST", body: {} });
+    if (!payload?.appId || !payload?.channel || !payload?.rtcToken || !Number.isInteger(payload?.rtcUid) || !payload?.agentId) {
+      throw new Error("Agora returned an incomplete voice session.");
+    }
+    client = sdk.createClient({ mode: "rtc", codec: "vp8" });
+    client.on("user-published", async (user, mediaType) => {
+      try {
+        await client.subscribe(user, mediaType);
+        if (mediaType === "audio" && user.audioTrack) {
+          user.audioTrack.setVolume(state.muted ? 0 : 100);
+          state.agoraRemoteAudioTrack = user.audioTrack;
+          user.audioTrack.play();
+          state.speaking = true;
+          setStatus("speaking", "ULTRON voice connected.", "Agora conversational voice · Tap the core to stop");
+        }
+      } catch {
+        toast("Agora could not subscribe to the remote voice stream.", "error");
+      }
+    });
+    client.on("user-unpublished", (_user, mediaType) => {
+      if (mediaType === "audio" && state.agoraClient === client) {
+        state.speaking = false;
+        state.agoraRemoteAudioTrack = null;
+        setStatus("listening", "Listening.", "Agora voice input is active");
+      }
+    });
+    await client.join(payload.appId, payload.channel, payload.rtcToken, payload.rtcUid);
+    micTrack = await sdk.createMicrophoneAudioTrack({ AEC: true, ANS: true, AGC: true });
+    await client.publish([micTrack]);
+    state.agoraClient = client;
+    state.agoraMicTrack = micTrack;
+    state.agoraAgentId = payload.agentId;
+    state.speaking = false;
+    setStatus("listening", "Agora voice connected.", "Speak naturally · Tap the core to disconnect");
+  } catch (error) {
+    try { micTrack?.stop(); micTrack?.close(); } catch {}
+    try { await client?.leave(); } catch {}
+    if (payload?.agentId) {
+      await api("/api/integrations/agora/" + encodeURIComponent(payload.agentId) + "/stop", { method: "POST" }).catch(() => {});
+    }
+    throw error;
+  }
+}
+
+async function stopAgoraVoiceSession() {
+  const client = state.agoraClient;
+  const micTrack = state.agoraMicTrack;
+  const agentId = state.agoraAgentId;
+  state.agoraClient = null;
+  state.agoraMicTrack = null;
+  state.agoraRemoteAudioTrack = null;
+  state.agoraAgentId = null;
+  state.speaking = false;
+  try { micTrack?.stop(); micTrack?.close(); } catch {}
+  try { await client?.leave(); } catch {}
+  if (agentId) {
+    try {
+      await api("/api/integrations/agora/" + encodeURIComponent(agentId) + "/stop", { method: "POST" });
+    } catch {
+      toast("Agora left the browser channel; the server will stop the agent after its idle timeout.", "error");
+    }
+  }
+  setStatus("standby", "Voice session ended.", "Ready when you are");
+}
+
+async function toggleVoiceInput() {
   if (state.busy) {
     state.requestController?.abort();
     setStatus("thinking", "Stopping request.", "Cancelling the in-flight chat request");
     return;
   }
+  if (state.mediaRecorder?.state === "recording") {
+    state.mediaRecorder.stop();
+    return;
+  }
   if (state.recognition) {
     state.recognition.stop();
+    return;
+  }
+  if (state.agoraClient) {
+    await stopAgoraVoiceSession();
     return;
   }
   if (state.speaking) {
@@ -568,13 +769,31 @@ function toggleVoiceInput() {
     setStatus("standby", "Playback stopped.", "Ready when you are");
     return;
   }
+  stopSpeech();
+  try {
+    const readiness = await api("/api/integrations/freya/status");
+    if (readiness?.configured && navigator.mediaDevices?.getUserMedia && window.MediaRecorder) {
+      await startFreyaCapture();
+      return;
+    }
+  } catch {
+    // Keep the existing browser speech recognition as the no-key fallback.
+  }
+  try {
+    const agoraReadiness = await api("/api/integrations/agora/status");
+    if (agoraReadiness?.configured && window.AgoraRTC && navigator.mediaDevices?.getUserMedia) {
+      await startAgoraVoiceSession();
+      return;
+    }
+  } catch {
+    // Agora is optional; keep browser speech recognition as the final local fallback.
+  }
   const recognition = createRecognition();
   if (!recognition) {
-    toast("Speech recognition is unavailable in this browser. Switch to Text mode.");
+    toast("Voice input is unavailable. Configure Freya or switch to Text mode.");
     setMode("text");
     return;
   }
-  stopSpeech();
   state.recognition = recognition;
   try {
     recognition.start();
@@ -1181,6 +1400,11 @@ $("#mute-toggle").addEventListener("click", () => {
   $("#mute-toggle").setAttribute("aria-label", state.muted ? "Unmute voice output" : "Mute voice output");
   $("#mute-toggle").title = state.muted ? "Unmute voice output" : "Mute voice output";
   if (state.muted) stopSpeech();
+  try { state.agoraRemoteAudioTrack?.setVolume(state.muted ? 0 : 100); } catch {}
+});
+window.addEventListener("pagehide", () => {
+  try { state.agoraMicTrack?.stop(); state.agoraMicTrack?.close(); } catch {}
+  try { void state.agoraClient?.leave(); } catch {}
 });
 $("#attach-open").addEventListener("click", () => $("#image-input").click());
 $("#image-input").addEventListener("change", event => void addAttachments(event.target.files));
