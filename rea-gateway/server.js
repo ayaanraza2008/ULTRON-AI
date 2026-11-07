@@ -299,7 +299,11 @@ export async function runReaMcpSelfTest({ upstreamPort, analysisRoot } = {}) {
       "missing_rpc_envelope", "rpc_id_mismatch", "rpc_error", "response_failed",
       "response_too_large"
     ]);
-    return { ok: false, stage, reason: knownReasons.has(error?.probeCode) ? error.probeCode : "tool_check_failed" };
+    const diagnostic = safeDiagnosticCode(error?.probeCode);
+    const safeToolCode = diagnostic && /^tool_[a-z0-9_-]{1,64}$/.test(diagnostic);
+    return { ok: false, stage, reason: (diagnostic && (knownReasons.has(diagnostic) || safeToolCode))
+      ? diagnostic
+      : "tool_check_failed" };
   } finally {
     if (sessionId && initialized) {
       try {
