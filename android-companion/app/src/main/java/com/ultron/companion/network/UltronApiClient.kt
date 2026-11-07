@@ -111,11 +111,16 @@ class UltronApiClient(private val context: Context) {
         return executeJson(openConnection("/api/jarvis/devices/route-command", "POST"), body)
     }
 
-    fun processVoiceCommand(command: String, language: String = "hinglish"): JSONObject {
+    fun processVoiceCommand(
+        command: String,
+        language: String = "hinglish",
+        messages: JSONArray? = null
+    ): JSONObject {
         val body = JSONObject().apply {
             put("command", command)
             put("language", language)
             put("source", "android-companion")
+            if (messages != null) put("messages", messages)
         }
         return executeJson(openConnection("/api/jarvis/voice/process-command", "POST"), body)
     }

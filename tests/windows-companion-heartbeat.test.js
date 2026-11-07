@@ -27,3 +27,10 @@ test("Windows companion refreshes durable online presence with a bounded authent
     "failed heartbeats must not advance the successful-heartbeat timestamp"
   );
 });
+
+
+test("Windows companion sends a fresh heartbeat immediately after either pairing path", async () => {
+  const source = await readFile(new URL("../windows-companion/Program.cs", import.meta.url), "utf8");
+  assert.match(source, /SaveDeviceIdentity\(existingDeviceId, entered\);\s*_lastHeartbeatUtc = DateTime\.MinValue;/);
+  assert.match(source, /SaveDeviceIdentity\(deviceId, token\);\s*_lastHeartbeatUtc = DateTime\.MinValue;/);
+});

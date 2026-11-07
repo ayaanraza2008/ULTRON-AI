@@ -4,8 +4,17 @@ const $ = selector => document.querySelector(selector);
 const app = $("#app");
 const canvas = $("#energy-core");
 const engine = createParticleEngine(canvas);
+
+function preferredInteractionMode() {
+  try {
+    return window.localStorage.getItem("ultron-interaction-mode") === "text" ? "text" : "voice";
+  } catch {
+    return "voice";
+  }
+}
+
 const state = {
-  mode: "voice",
+  mode: preferredInteractionMode(),
   status: "standby",
   authenticated: false,
   session: null,
@@ -46,6 +55,7 @@ const settingsDrawer = $("#settings-drawer");
 const activityDrawer = $("#activity-drawer");
 const coreTrigger = $("#core-trigger");
 const coreInteraction = $("#core-wrap");
+const voiceOutputSelect = $("#voice-output-select");
 
 function apiErrorMessage(error, fallback = "The request could not be completed.") {
   const message = error?.payload?.error?.message || error?.payload?.message || error?.message;
@@ -107,6 +117,11 @@ function setConnection(online, label) {
 
 function setMode(mode) {
   state.mode = mode === "text" ? "text" : "voice";
+  try { window.localStorage.setItem("ultron-interaction-mode", state.mode); } catch {}
+  if (state.mode === "text") {
+    if (state.recognition) state.recognition.stop();
+    stopSpeech();
+  }
   app.dataset.mode = state.mode;
   $("#voice-mode").classList.toggle("is-active", state.mode === "voice");
   $("#text-mode").classList.toggle("is-active", state.mode === "text");
@@ -400,6 +415,9 @@ function setBusy(busy) {
 async function sendMessage(rawText, attachments = []) {
   const text = String(rawText || "").trim();
   if ((!text && attachments.length === 0) || state.busy) return;
+  // Spoken output belongs to the mode in which this message was submitted.
+  // Switching modes while a provider is responding must not make a text reply audible.
+  const responseMode = state.mode;
   state.requestController = new AbortController();
   setBusy(true);
   setStatus("thinking", "Processing your request.", "Connecting to the ULTRON intelligence runtime");
@@ -429,7 +447,7 @@ async function sendMessage(rawText, attachments = []) {
     await persistMessage("assistant", answer);
     const source = [result.provider, result.model || state.model].filter(Boolean).join(" · ");
     setStatus("standby", "Response received.", source || "ULTRON ready");
-    if (state.mode === "voice" && state.preferences.voice_enabled && !state.muted) speak(answer);
+    if (responseMode === "voice" && state.mode === "voice" && state.preferences.voice_enabled && !state.muted) speak(answer);
   } catch (error) {
     if (error?.name === "AbortError") {
       setStatus("standby", "Request stopped.", "You can send another message");
@@ -449,6 +467,37 @@ async function sendMessage(rawText, attachments = []) {
   }
 }
 
+function populateVoiceOutputOptions() {
+  if (!voiceOutputSelect) return;
+  const speech = window.speechSynthesis;
+  if (!speech || typeof speech.getVoices !== "function") {
+    voiceOutputSelect.disabled = true;
+    return;
+  }
+  const voices = speech.getVoices();
+  const savedVoiceUri = (() => {
+    try { return window.localStorage.getItem("ultron-output-voice-uri") || ""; } catch { return ""; }
+  })();
+  voiceOutputSelect.replaceChildren();
+  const defaultOption = document.createElement("option");
+  defaultOption.value = "";
+  defaultOption.textContent = "System default";
+  voiceOutputSelect.append(defaultOption);
+
+  for (const voice of voices.slice().sort((a, b) =>
+    a.lang.localeCompare(b.lang) || a.name.localeCompare(b.name)
+  )) {
+    const option = document.createElement("option");
+    option.value = voice.voiceURI;
+    option.textContent = voice.name + " · " + voice.lang;
+    voiceOutputSelect.append(option);
+  }
+
+  voiceOutputSelect.value = voices.some(voice => voice.voiceURI === savedVoiceUri)
+    ? savedVoiceUri
+    : "";
+}
+
 function speak(text) {
   if (!("speechSynthesis" in window) || !("SpeechSynthesisUtterance" in window)) {
     toast("Spoken output is not supported by this browser.");
@@ -460,9 +509,14 @@ function speak(text) {
   utterance.pitch = state.persona === "naya" ? 1.0 : 0.88;
   utterance.volume = 0.92;
   const voices = window.speechSynthesis.getVoices();
+  const preferredVoiceUri = voiceOutputSelect?.value || "";
+  const selectedVoice = preferredVoiceUri
+    ? voices.find(voice => voice.voiceURI === preferredVoiceUri)
+    : null;
   const locale = state.preferences.voice_input_locale === "hi-IN" ? "hi-IN" : "en-IN";
-  const matching = voices.find(voice => voice.lang.toLowerCase() === locale.toLowerCase())
+  const localeVoice = voices.find(voice => voice.lang.toLowerCase() === locale.toLowerCase())
     || voices.find(voice => voice.lang.toLowerCase().startsWith(locale.slice(0, 2).toLowerCase()));
+  const matching = selectedVoice || localeVoice;
   if (matching) utterance.voice = matching;
   utterance.onstart = () => {
     state.speaking = true;
@@ -1178,6 +1232,9 @@ $("#locale-select").addEventListener("change", event => {
   if (state.recognition) state.recognition.stop();
   void savePreferences();
 });
+voiceOutputSelect.addEventListener("change", () => {
+  try { window.localStorage.setItem("ultron-output-voice-uri", voiceOutputSelect.value); } catch {}
+});
 $("#memory-toggle").addEventListener("click", () => {
   state.preferences.memory_enabled = !state.preferences.memory_enabled;
   setSwitch($("#memory-toggle"), state.preferences.memory_enabled);
@@ -1195,6 +1252,12 @@ $("#task-form").addEventListener("submit", event => void queueEmployeeTask(event
 $("#document-upload").addEventListener("click", () => $("#document-input").click());
 $("#document-input").addEventListener("change", event => void uploadDocument(event.target.files));
 
-setMode("voice");
+setMode(state.mode);
+if ("speechSynthesis" in window) {
+  window.speechSynthesis.onvoiceschanged = populateVoiceOutputOptions;
+  populateVoiceOutputOptions();
+} else {
+  voiceOutputSelect.disabled = true;
+}
 setStatus("standby", "ULTRON is initializing.", "Establishing secure connection");
 void bootstrap();

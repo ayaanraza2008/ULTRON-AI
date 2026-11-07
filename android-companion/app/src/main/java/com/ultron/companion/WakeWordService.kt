@@ -9,7 +9,6 @@ import android.app.Service
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
-import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
@@ -37,11 +36,14 @@ class WakeWordService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
+            getSharedPreferences(WAKE_PREFERENCES, MODE_PRIVATE)
+                .edit().putBoolean(WAKE_ENABLED_KEY, false).apply()
             stopWakeWordService()
             return START_NOT_STICKY
         }
 
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            clearWakeWordOptIn()
             stopSelf()
             return START_NOT_STICKY
         }
@@ -56,7 +58,7 @@ class WakeWordService : Service() {
 
         if (!SpeechRecognizer.isOnDeviceRecognitionAvailable(this)) {
             updateListeningNotification("On-device speech recognition unavailable. Listening stopped.")
-            stopWakeWordService()
+            stopWakeWordService(clearOptIn = true)
             return START_NOT_STICKY
         }
 
@@ -67,7 +69,7 @@ class WakeWordService : Service() {
             scheduleRecognition(300)
         } catch (_: RuntimeException) {
             updateListeningNotification("Could not start local recognition. Listening stopped.")
-            stopWakeWordService()
+            stopWakeWordService(clearOptIn = true)
             return START_NOT_STICKY
         }
         // Request best-effort system restart if Android reclaims this process.
@@ -100,7 +102,7 @@ class WakeWordService : Service() {
             if (!running) return
             if (error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
                 updateListeningNotification("Microphone permission revoked. Listening stopped.")
-                stopWakeWordService()
+                stopWakeWordService(clearOptIn = true)
                 return
             }
             if (error == SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED ||
@@ -109,7 +111,7 @@ class WakeWordService : Service() {
                 languageIndex++
                 if (languageIndex >= languages.size) {
                     updateListeningNotification("No compatible offline English model found. Listening stopped.")
-                    stopWakeWordService()
+                    stopWakeWordService(clearOptIn = true)
                     return
                 }
                 updateListeningNotification("Trying installed offline language: " + languages[languageIndex])
@@ -151,16 +153,11 @@ class WakeWordService : Service() {
         if (now - lastWakeElapsed < WAKE_COOLDOWN_MS) return
         lastWakeElapsed = now
 
-        val openIntent = PendingIntent.getActivity(
-            this,
-            OPEN_REQUEST_CODE,
-            Intent(Intent.ACTION_VIEW, Uri.parse(ASSISTANT_URL)),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+        val openIntent = assistantPendingIntent(startVoiceCommand = true)
         val notification = Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setContentTitle("ULTRON detected")
-            .setContentText("Tap to open the ULTRON assistant.")
+            .setContentText("Tap to speak your command to ULTRON.")
             .setContentIntent(openIntent)
             .setAutoCancel(true)
             .setCategory(Notification.CATEGORY_REMINDER)
@@ -168,7 +165,24 @@ class WakeWordService : Service() {
             .build()
 
         getSystemService(NotificationManager::class.java).notify(WAKE_NOTIFICATION_ID, notification)
-        updateListeningNotification("“Ultron” detected. Tap the ULTRON alert to open the assistant.")
+
+        // Release the microphone before asking MainActivity to capture the user's
+        // actual command. Android speech recognizers should not compete for the mic.
+        stopWakeWordService()
+    }
+
+    private fun assistantPendingIntent(startVoiceCommand: Boolean): PendingIntent {
+        val requestCode = if (startVoiceCommand) OPEN_VOICE_REQUEST_CODE else OPEN_REQUEST_CODE
+        val launchIntent = Intent(this, MainActivity::class.java).apply {
+            if (startVoiceCommand) putExtra(MainActivity.EXTRA_START_VOICE_COMMAND, true)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        }
+        return PendingIntent.getActivity(
+            this,
+            requestCode,
+            launchIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
     }
 
     private fun buildListeningNotification(text: String): Notification {
@@ -178,12 +192,7 @@ class WakeWordService : Service() {
             Intent(this, WakeWordService::class.java).setAction(ACTION_STOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val openIntent = PendingIntent.getActivity(
-            this,
-            OPEN_REQUEST_CODE,
-            Intent(Intent.ACTION_VIEW, Uri.parse(ASSISTANT_URL)),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+        val openIntent = assistantPendingIntent(startVoiceCommand = false)
         return Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setContentTitle("ULTRON wake word")
@@ -209,7 +218,13 @@ class WakeWordService : Service() {
         )
     }
 
-    private fun stopWakeWordService() {
+    private fun clearWakeWordOptIn() {
+        getSharedPreferences(WAKE_PREFERENCES, MODE_PRIVATE)
+            .edit().putBoolean(WAKE_ENABLED_KEY, false).apply()
+    }
+
+    private fun stopWakeWordService(clearOptIn: Boolean = false) {
+        if (clearOptIn) clearWakeWordOptIn()
         running = false
         restartQueued = false
         handler.removeCallbacksAndMessages(null)
@@ -238,7 +253,9 @@ class WakeWordService : Service() {
         private const val WAKE_NOTIFICATION_ID = 3102
         private const val STOP_REQUEST_CODE = 3103
         private const val OPEN_REQUEST_CODE = 3104
+        private const val OPEN_VOICE_REQUEST_CODE = 3105
         private const val WAKE_COOLDOWN_MS = 8_000L
-        private const val ASSISTANT_URL = "https://ultron-core-interface.onrender.com/"
+        private const val WAKE_PREFERENCES = "ultron_wake_word_preferences"
+        private const val WAKE_ENABLED_KEY = "wake_word_enabled"
     }
 }
