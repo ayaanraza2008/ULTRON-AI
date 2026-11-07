@@ -463,7 +463,7 @@ export function createApp({ fetchImpl = safePinnedFetch, env = process.env, logg
     res.setHeader("Permissions-Policy", "camera=(), geolocation=(), microphone=(self \"https://ultron-world-intelligence.onrender.com\")");
     res.setHeader("Content-Security-Policy", worldIntelligence
       ? "default-src 'self' https: data: blob:; script-src 'self' 'unsafe-eval' blob: https://maps.googleapis.com https://maps.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' https: data: blob:; connect-src 'self' https: wss: blob:; worker-src 'self' blob:; child-src 'self' blob:; media-src 'self' https: blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'"
-      : "default-src 'self'; script-src 'self' https://download.agora.io; style-src 'self'; img-src 'self' data:; connect-src 'self' https: wss:; worker-src 'self' blob:; media-src 'self' https: blob:; frame-src 'self' https://ultron-world-intelligence.onrender.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self';
+      : "default-src 'self'; script-src 'self' https://download.agora.io; style-src 'self'; img-src 'self' data:; connect-src 'self' https: wss:; worker-src 'self' blob:; media-src 'self' https: blob:; frame-src 'self' https://ultron-world-intelligence.onrender.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");
     next();
   });
 
