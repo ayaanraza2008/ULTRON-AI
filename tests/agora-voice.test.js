@@ -14,11 +14,11 @@ const env = {
   AGORA_RTC_TOKEN: "valid-test-token"
 };
 
-async function withServer(handler, run) {
+async function withServer(handler, run, testEnv = env) {
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => { req.supabaseUser = { id: req.headers["x-user"] || "owner-1" }; next(); });
-  app.use("/api", createAgoraVoiceRouter({ env, requireSupabaseUser: (_req, _res, next) => next(), fetchImpl: handler }));
+  app.use("/api", createAgoraVoiceRouter({ env: testEnv, requireSupabaseUser: (_req, _res, next) => next(), fetchImpl: handler }));
   const server = createServer(app);
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
   try { await run("http://127.0.0.1:" + server.address().port); } finally { await new Promise(resolve => server.close(resolve)); }
@@ -40,8 +40,8 @@ test("Agora refuses to start when the required RTC token is missing", async () =
   await withServer(async () => { throw new Error("fetch must not be called"); }, async base => {
     const response = await fetch(base + "/api/integrations/agora/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ remoteRtcUid: "123" }) });
     assert.equal(response.status, 503);
-    assert.equal((await response.json()).error.code, "AGORA_RTC_TOKEN_REQUIRED");
-  });
+    assert.equal((await response.json()).error.code, "AGORA_NOT_CONFIGURED");
+  }, { ...env, AGORA_RTC_TOKEN: "" });
 });
 
 test("Agora starts a saved pipeline with server-side Basic auth", async () => {
