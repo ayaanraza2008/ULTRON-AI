@@ -27,6 +27,9 @@ const state = {
   mediaRecorder: null,
   mediaStream: null,
   audioPlayback: null,
+  agoraClient: null,
+  agoraMicTrack: null,
+  agoraAgentId: null,
   muted: false,
   speaking: false,
   busy: false,
@@ -661,6 +664,74 @@ async function startFreyaCapture() {
   setStatus("listening", "Listening.", "Freya voice input · Tap the core when finished");
 }
 
+async function startAgoraVoiceSession() {
+  const sdk = window.AgoraRTC;
+  if (!sdk?.createClient) throw new Error("Agora Web SDK could not be loaded.");
+  let payload = null;
+  let client = null;
+  let micTrack = null;
+  try {
+    payload = await api("/api/integrations/agora/start", { method: "POST", body: {} });
+    if (!payload?.appId || !payload?.channel || !payload?.rtcToken || !Number.isInteger(payload?.rtcUid) || !payload?.agentId) {
+      throw new Error("Agora returned an incomplete voice session.");
+    }
+    client = sdk.createClient({ mode: "rtc", codec: "vp8" });
+    client.on("user-published", async (user, mediaType) => {
+      try {
+        await client.subscribe(user, mediaType);
+        if (mediaType === "audio" && user.audioTrack) {
+          user.audioTrack.play();
+          state.speaking = true;
+          setStatus("speaking", "ULTRON voice connected.", "Agora conversational voice · Tap the core to stop");
+        }
+      } catch {
+        toast("Agora could not subscribe to the remote voice stream.", "error");
+      }
+    });
+    client.on("user-unpublished", (_user, mediaType) => {
+      if (mediaType === "audio" && state.agoraClient === client) {
+        state.speaking = false;
+        setStatus("listening", "Listening.", "Agora voice input is active");
+      }
+    });
+    await client.join(payload.appId, payload.channel, payload.rtcToken, payload.rtcUid);
+    micTrack = await sdk.createMicrophoneAudioTrack({ AEC: true, ANS: true, AGC: true });
+    await client.publish([micTrack]);
+    state.agoraClient = client;
+    state.agoraMicTrack = micTrack;
+    state.agoraAgentId = payload.agentId;
+    state.speaking = false;
+    setStatus("listening", "Agora voice connected.", "Speak naturally · Tap the core to disconnect");
+  } catch (error) {
+    try { micTrack?.stop(); micTrack?.close(); } catch {}
+    try { await client?.leave(); } catch {}
+    if (payload?.agentId) {
+      await api("/api/integrations/agora/" + encodeURIComponent(payload.agentId) + "/stop", { method: "POST" }).catch(() => {});
+    }
+    throw error;
+  }
+}
+
+async function stopAgoraVoiceSession() {
+  const client = state.agoraClient;
+  const micTrack = state.agoraMicTrack;
+  const agentId = state.agoraAgentId;
+  state.agoraClient = null;
+  state.agoraMicTrack = null;
+  state.agoraAgentId = null;
+  state.speaking = false;
+  try { micTrack?.stop(); micTrack?.close(); } catch {}
+  try { await client?.leave(); } catch {}
+  if (agentId) {
+    try {
+      await api("/api/integrations/agora/" + encodeURIComponent(agentId) + "/stop", { method: "POST" });
+    } catch {
+      toast("Agora left the browser channel; the server will stop the agent after its idle timeout.", "error");
+    }
+  }
+  setStatus("standby", "Voice session ended.", "Ready when you are");
+}
+
 async function toggleVoiceInput() {
   if (state.busy) {
     state.requestController?.abort();
@@ -673,6 +744,10 @@ async function toggleVoiceInput() {
   }
   if (state.recognition) {
     state.recognition.stop();
+    return;
+  }
+  if (state.agoraClient) {
+    await stopAgoraVoiceSession();
     return;
   }
   if (state.speaking) {
@@ -689,6 +764,15 @@ async function toggleVoiceInput() {
     }
   } catch {
     // Keep the existing browser speech recognition as the no-key fallback.
+  }
+  try {
+    const agoraReadiness = await api("/api/integrations/agora/status");
+    if (agoraReadiness?.configured && window.AgoraRTC && navigator.mediaDevices?.getUserMedia) {
+      await startAgoraVoiceSession();
+      return;
+    }
+  } catch {
+    // Agora is optional; keep browser speech recognition as the final local fallback.
   }
   const recognition = createRecognition();
   if (!recognition) {
