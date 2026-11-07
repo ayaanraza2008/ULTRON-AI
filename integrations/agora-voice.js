@@ -13,7 +13,7 @@ function config(env = process.env) {
   const channel = clean(env.AGORA_DEFAULT_CHANNEL, 128);
   const base = safeServiceBase(clean(env.AGORA_API_BASE_URL || DEFAULT_BASE, 500));
   return { appId, customerId, customerSecret, pipelineId, channel, base,
-    configured: Boolean(appId && customerId && customerSecret && pipelineId && channel && base) };
+    configured: Boolean(appId && customerId && customerSecret && pipelineId && channel && base && clean(env.AGORA_RTC_TOKEN, 4096)) };
 }
 
 function authHeader(cfg) {
@@ -31,7 +31,7 @@ export function agoraVoiceReadiness(env = process.env) {
     pipelineConfigured: Boolean(cfg.pipelineId),
     channelConfigured: Boolean(cfg.channel),
     capabilities: ["realtime_conversational_voice", "agent_session_start", "agent_session_stop"],
-    note: "Agora RTC join also needs a valid RTC token when App Certificate is enabled. This adapter does not expose Agora secrets or issue client RTC tokens."
+    note: "Agora requires a valid RTC token for the agent. Configure a current token server-side; tokens expire and must be rotated. This adapter does not expose Agora secrets or issue client RTC tokens."
   };
 }
 
@@ -73,8 +73,8 @@ export function createAgoraVoiceRouter({ env = process.env, fetchImpl = fetch, r
     const remoteUid = clean(req.body?.remoteRtcUid, 32);
     const token = clean(env.AGORA_RTC_TOKEN, 4096);
     if (!remoteUid || !/^[0-9]+$/.test(remoteUid)) return res.status(400).json({ error: { code: "AGORA_REMOTE_UID_REQUIRED", message: "Provide the signed-in client's numeric Agora RTC UID." } });
-    if (!token && clean(env.AGORA_APP_CERTIFICATE, 512)) {
-      return res.status(503).json({ error: { code: "AGORA_RTC_TOKEN_REQUIRED", message: "App Certificate is enabled. A valid short-lived RTC token must be supplied by a server-side token issuer before starting sessions." } });
+    if (!token) {
+      return res.status(503).json({ error: { code: "AGORA_RTC_TOKEN_REQUIRED", message: "Agora requires a valid, unexpired RTC token for the agent. Configure AGORA_RTC_TOKEN or a server-side token issuer before starting sessions." } });
     }
     const sessionName = "ultron-" + crypto.randomUUID();
     const agentUid = clean(env.AGORA_AGENT_RTC_UID || "0", 32);
